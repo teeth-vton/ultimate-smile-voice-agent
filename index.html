@@ -105,13 +105,12 @@
     </div>
 
     <script>
-        // 1. MUST USE A KEY STARTING WITH 'AIza' HERE!! If it starts with 'AQ.' it will crash with a 401 error.
-        const GEMINI_API_KEY = "AIzaSyCjLxZxm0ba4pKXkR60ldGg1TzDtRX9nuQ"; 
-        
-        // 2. YOUR SARVAM KEY
+        // PASTE YOUR KEYS HERE (You are correct, AQ. keys are the new standard!)
+        const GEMINI_API_KEY = "AQ.Ab8RN6KYQAbLDe5ZFVKXCWGahcU_CuWF2Rqo4-13JP_iA7JUhg"; 
         const SARVAM_API_KEY = "sk_1g2qtc7g_Lme6F0ta58Wv4SooxWVfUCfa"; 
         
         let isAgentRunning = false;
+        let isProcessingTurn = false; // NEW: Speech Lock to prevent 429 spam
         let chatHistory = [];
         let recognition;
         let audioPlayer;
@@ -121,8 +120,7 @@
             recognition = new SpeechRecognition();
             recognition.continuous = false;
             recognition.interimResults = false;
-            // Set microphone to listen for English first, but it will still catch Hindi accents
-            recognition.lang = 'en-IN'; 
+            recognition.lang = 'en-IN'; // Listen in English/Hinglish
         }
 
         window.onload = () => {
@@ -146,6 +144,7 @@
             }
 
             isAgentRunning = true;
+            isProcessingTurn = true; // Lock the mic during greeting
             container.style.display = 'flex';
             bubble.classList.add('usd-speaking');
             statusBox.innerText = "Speaking greeting...";
@@ -153,16 +152,17 @@
             audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
             audioPlayer.play().catch(() => {});
 
-            // Greeting is now in English to start
             const greeting = "Hello! How did you like our virtual try-on? What are your thoughts on it?";
             logMessage('bot', greeting);
             
             await speakWithFallback(greeting);
+            
+            isProcessingTurn = false; // Unlock mic
             startListeningLoop();
         }
 
         function startListeningLoop() {
-            if (!isAgentRunning || !recognition) return;
+            if (!isAgentRunning || !recognition || isProcessingTurn) return;
             const statusBox = document.getElementById('usd-status-box');
             const bubble = document.getElementById('usd-bubble');
             
@@ -178,7 +178,15 @@
             if (!recognition) return;
 
             recognition.onresult = async (event) => {
+                // Ignore partial results if processing is already locked
+                if (isProcessingTurn) return;
+                
                 const userText = event.results[0][0].transcript;
+                if (!userText.trim()) return;
+
+                isProcessingTurn = true; // LOCK the microphone so it doesn't spam Gemini
+                recognition.abort(); // Stop listening immediately
+
                 const statusBox = document.getElementById('usd-status-box');
                 const bubble = document.getElementById('usd-bubble');
                 
@@ -192,32 +200,35 @@
                     statusBox.innerText = "Speaking...";
                     
                     await speakWithFallback(botReply);
-                    startListeningLoop();
 
                 } catch (error) {
                     console.error(error);
-                    logMessage('error', `Gemini Error: ${error.message}`);
-                    statusBox.innerText = "Failed to process turn.";
-                    bubble.classList.remove('usd-speaking');
-                    isAgentRunning = false; 
+                    logMessage('error', `Error: ${error.message}`);
+                    statusBox.innerText = "Retrying in 2 seconds...";
+                    await new Promise(r => setTimeout(r, 2000)); // Pause to clear rate limit spam
                 }
+                
+                isProcessingTurn = false; // UNLOCK the microphone
+                startListeningLoop();
             };
 
             recognition.onerror = (event) => {
-                if (isAgentRunning && event.error === 'no-speech') {
+                if (isAgentRunning && event.error === 'no-speech' && !isProcessingTurn) {
                     startListeningLoop();
                 }
             };
 
             recognition.onend = () => {
-                if (isAgentRunning && document.getElementById('usd-status-box').innerText === "Listening... Speak now!") {
+                // Only restart if the agent is supposed to be running AND we aren't currently thinking/speaking
+                if (isAgentRunning && !isProcessingTurn) {
                     startListeningLoop();
                 }
             };
         }
 
         async function askGeminiBrain(userText) {
-            chatHistory.push({ role: "user", parts: [{ text: userText }] });
+            // Create a temporary history so we don't corrupt the main history if Gemini fails (Code 400 fix)
+            const tempHistory = [...chatHistory, { role: "user", parts: [{ text: userText }] }];
             
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
                 method: 'POST',
@@ -225,30 +236,32 @@
                 body: JSON.stringify({
                     systemInstruction: {
                         parts: [{ 
-                            text: "You are the official voice assistant for Ultimate Smile Design. Keep replies to 1 or 2 short sentences. DETECT THE USER'S LANGUAGE: If the user speaks English, reply in English. If they speak Hindi or Hinglish, reply in Hindi/Hinglish. Only answer dental or smile design questions. If off-topic, politely decline in the user's language." 
+                            text: "You are the official voice assistant for Ultimate Smile Design. Keep replies to 1 or 2 short sentences. DETECT THE USER'S LANGUAGE: If the user speaks English, reply in English. If they speak Hindi or Hinglish, reply in Hindi/Hinglish. Only answer dental or smile design questions." 
                         }]
                     },
-                    contents: chatHistory
+                    contents: tempHistory
                 })
             });
             
             if (!response.ok) {
-                throw new Error(`HTTP Error ${response.status} - Did you use an AIza key?`);
+                if (response.status === 429) throw new Error("Too many requests. Please wait a second.");
+                throw new Error(`Gemini Error ${response.status}`);
             }
 
             const data = await response.json();
             if (data.candidates && data.candidates[0].content.parts[0].text) {
                 const botReply = data.candidates[0].content.parts[0].text;
+                // If successful, permanently update the chat history
+                chatHistory = tempHistory;
                 chatHistory.push({ role: "model", parts: [{ text: botReply }] });
                 return botReply;
             } else {
-                throw new Error("Invalid format received.");
+                throw new Error("Invalid format received from AI.");
             }
         }
 
         async function speakWithFallback(text) {
             try {
-                // EXACT PAYLOAD REQUESTED BY SARVAM
                 const response = await fetch('https://api.sarvam.ai/text-to-speech', {
                     method: 'POST',
                     headers: {
@@ -257,8 +270,8 @@
                     },
                     body: JSON.stringify({
                         inputs: [text],
-                        target_language_code: "hi-IN", // hi-IN with bulbul:v3 natively speaks English perfectly as well!
-                        speaker: "anushka",
+                        target_language_code: "hi-IN", 
+                        speaker: "priya", // FIXED: Changed to 'priya' based on Sarvam's allowed list
                         model: "bulbul:v3"
                     })
                 });
@@ -281,7 +294,7 @@
                 }
 
             } catch(e) {
-                logMessage('error', `Sarvam Error Details: ${e.message}`);
+                logMessage('error', `Sarvam Engine Failed: ${e.message}`);
                 return new Promise((resolve) => {
                     useBrowserTTS(text, resolve);
                 });
@@ -289,7 +302,6 @@
         }
 
         function useBrowserTTS(text, callback) {
-            console.log("Routing audio stream via Native Browser Engine Fallback...");
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-IN'; 
             utterance.rate = 1.0;
