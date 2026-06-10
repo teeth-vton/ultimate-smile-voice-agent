@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ultimate Smile Design - Floating Agent</title>
     <style>
-        /* Floating Widget Container */
         #usd-voice-widget {
             position: fixed;
             bottom: 30px;
@@ -16,11 +15,9 @@
             align-items: flex-end;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
-
-        /* Status Text Box (Black & Gold) */
         #usd-status-box {
             background-color: #111111;
-            color: #D4AF37; /* Gold */
+            color: #D4AF37;
             padding: 8px 16px;
             border-radius: 20px;
             font-size: 14px;
@@ -29,8 +26,6 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
             display: none;
         }
-
-        /* The Gold Pulsing Bubble */
         #usd-bubble {
             width: 80px;
             height: 80px;
@@ -45,28 +40,23 @@
             border: 3px solid #111111;
             transition: transform 0.2s ease-in-out;
         }
-
         #usd-bubble:hover { transform: scale(1.05); }
         #usd-bubble:active { transform: scale(0.95); }
-
         #usd-bubble-icon {
             color: #111111;
             font-weight: bold;
             font-size: 24px;
             line-height: 1;
         }
-
         .usd-speaking {
             animation: usd-speaking-wave 0.5s infinite alternate !important;
             background: linear-gradient(135deg, #FFF8DC, #FFD700) !important;
         }
-
         @keyframes usd-pulse {
             0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); }
             70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(212, 175, 55, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
         }
-
         @keyframes usd-speaking-wave {
             0% { transform: scale(1); box-shadow: 0 0 15px #FFD700; }
             100% { transform: scale(1.15); box-shadow: 0 0 30px #FFD700; }
@@ -87,11 +77,11 @@
         const GEMINI_API_KEY = "AQ.Ab8RN6KNcdsuw8-13Ti_sUYYnM8A_VZJOOWCDj2h0CVF0MryrA"; 
         
         let webSocket;
-        let audioContext;       // For recording mic
-        let playbackContext;    // For playing bot voice
+        let audioContext;       
+        let playbackContext;    
         let mediaStream;
         let isConnected = false;
-        let nextPlayTime = 0;   // Audio queue tracker
+        let nextPlayTime = 0;   
 
         async function startVoiceAgent() {
             const statusBox = document.getElementById('usd-status-box');
@@ -106,7 +96,6 @@
                 mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 statusBox.innerText = "Connecting to AI...";
 
-                // Open a SINGLE audio playback context to prevent browser crashes
                 playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
                 nextPlayTime = playbackContext.currentTime;
 
@@ -120,7 +109,8 @@
                     
                     const setupMessage = {
                         setup: {
-                            model: "models/gemini-2.0-flash-exp",
+                            // UPDATED: Using the stable model instead of the retired '-exp' model
+                            model: "models/gemini-2.0-flash", 
                             generationConfig: {
                                 responseModalities: ["AUDIO"]
                             },
@@ -138,7 +128,6 @@
                 webSocket.onmessage = async (event) => {
                     const response = JSON.parse(event.data);
                     
-                    // Wait for the server to say setup is complete BEFORE sending the trigger
                     if (response.setupComplete) {
                         const initialTurn = { 
                             clientContent: { 
@@ -149,7 +138,6 @@
                         webSocket.send(JSON.stringify(initialTurn));
                     }
 
-                    // Play audio chunks as they arrive
                     if (response.serverContent?.modelTurn?.parts) {
                         for (const part of response.serverContent.modelTurn.parts) {
                             if (part.inlineData) {
@@ -213,26 +201,21 @@
         }
 
         function playAudioChunk(base64Data) {
-            // Decode base64
             const binaryString = atob(base64Data);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
             
-            // Convert to Float32
             const pcm16 = new Int16Array(bytes.buffer);
             const float32 = new Float32Array(pcm16.length);
             for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
 
-            // Load into audio buffer
             const audioBuffer = playbackContext.createBuffer(1, float32.length, 24000);
             audioBuffer.getChannelData(0).set(float32);
 
-            // Connect to source and play
             const source = playbackContext.createBufferSource();
             source.buffer = audioBuffer;
             source.connect(playbackContext.destination);
             
-            // Smooth playback queue (prevents skipping or browser crashes)
             const scheduleTime = Math.max(nextPlayTime, playbackContext.currentTime);
             source.start(scheduleTime);
             nextPlayTime = scheduleTime + audioBuffer.duration;
