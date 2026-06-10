@@ -73,8 +73,8 @@
     </div>
 
     <script>
-        // REPLACE THIS WITH A REAL API KEY FROM GOOGLE AI STUDIO (Starts with AIza)
-        const GEMINI_API_KEY = "AQ.Ab8RN6KNcdsuw8-13Ti_sUYYnM8A_VZJOOWCDj2h0CVF0MryrA"; 
+        // Your newly restricted Google AI Studio AQ. Auth Key
+        const GEMINI_API_KEY = "AQ.Ab8RN6KBVrNFbrrUh4N_A6MhqpwjbtB3IILUHM0ZWACu-LCM9A"; 
         
         let webSocket;
         let audioContext;       
@@ -109,7 +109,6 @@
                     
                     const setupMessage = {
                         setup: {
-                            // UPDATED: Using the stable model instead of the retired '-exp' model
                             model: "models/gemini-2.0-flash", 
                             generationConfig: {
                                 responseModalities: ["AUDIO"]
