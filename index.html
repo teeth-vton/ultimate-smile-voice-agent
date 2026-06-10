@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ultimate Smile Design - Live Agent</title>
     <style>
-        /* Floating Widget Container */
         #usd-voice-widget {
             position: fixed;
             bottom: 30px;
@@ -17,7 +16,6 @@
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
 
-        /* Live Chat Text Log Interface */
         #usd-chat-container {
             width: 300px;
             max-height: 250px;
@@ -54,7 +52,6 @@
             padding-top: 8px;
         }
 
-        /* The Gold Pulsing Bubble */
         #usd-bubble {
             width: 80px;
             height: 80px;
@@ -107,9 +104,9 @@
     </div>
 
     <script>
-        // MUST HAVE QUOTATION MARKS AROUND THE KEYS
-        const SARVAM_API_KEY = "sk_wb30zmo4_NunBvEprJaP7zKBmgZuJG0N7"; 
-        const GEMINI_API_KEY = "AQ.Ab8RN6KBVrNFbrrUh4N_A6MhqpwjbtB3IILUHM0ZWACu-LCM9A"; 
+        // PASTE YOUR BRAND NEW KEYS HERE. KEEP THE QUOTATION MARKS!
+        const SARVAM_API_KEY = "sk_1g2qtc7g_Lme6F0ta58Wv4SooxWVfUCfa"; 
+        const GEMINI_API_KEY = "AQ.Ab8RN6LuIK6nG_j3ThXvxlMosbhqn_f_jqACE-2dOi-7IKlCxA"; 
         
         let isAgentRunning = false;
         let chatHistory = [];
@@ -191,7 +188,7 @@
                     await speakWithSarvam(botReply);
                 } catch (error) {
                     console.error("Gemini Error:", error);
-                    statusBox.innerText = "Error processing. Retrying...";
+                    statusBox.innerText = "Check Gemini API Key.";
                 }
                 
                 startListeningLoop();
@@ -224,6 +221,10 @@
                 })
             });
             
+            if (!response.ok) {
+                throw new Error(`Gemini API Error: ${response.status}`);
+            }
+
             const data = await response.json();
             
             if (data.candidates && data.candidates[0].content.parts[0].text) {
@@ -243,11 +244,17 @@
                         'api-subscription-key': SARVAM_API_KEY,
                         'Content-Type': 'application/json'
                     },
+                    // FIXED: This is the exact payload structure Sarvam requires
                     body: JSON.stringify({
                         inputs: [text],
                         target_language_code: "hi-IN",
                         speaker: "meera",
-                        model: "bulbul:v3"
+                        pitch: 0,
+                        pace: 1.0,
+                        loudness: 1.5,
+                        speech_sample_rate: 16000,
+                        enable_preprocessing: true,
+                        model: "builtin/speech"
                     })
                 });
                 
