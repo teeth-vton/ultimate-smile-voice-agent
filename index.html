@@ -73,7 +73,7 @@
     </div>
 
     <script>
-        // Your newly restricted Google AI Studio AQ. Auth Key
+        // Your restricted Google AI Studio AQ. Auth Key
         const GEMINI_API_KEY = "AQ.Ab8RN6KBVrNFbrrUh4N_A6MhqpwjbtB3IILUHM0ZWACu-LCM9A"; 
         
         let webSocket;
@@ -109,7 +109,8 @@
                     
                     const setupMessage = {
                         setup: {
-                            model: "models/gemini-2.0-flash", 
+                            // CORRECTED: The exact dedicated Live API model
+                            model: "models/gemini-2.5-flash-live-preview", 
                             generationConfig: {
                                 responseModalities: ["AUDIO"]
                             },
