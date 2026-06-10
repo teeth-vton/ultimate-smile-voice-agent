@@ -122,16 +122,21 @@
                     bubble.classList.add('usd-speaking');
                     
                     // Setup Message using the correct 2.0 model
-                    const setupMessage = {
-                        setup: {
-                            model: "models/gemini-2.0-flash-exp",
-                            systemInstruction: {
-                                parts: [{
-                                    text: "You are the official voice assistant for Ultimate Smile Design. Instantly say: 'Namaste! Did you like our virtual try-on?'. Seamlessly mirror the user's language. Strictly answer only dental or smile design questions."
-                                }]
-                            }
-                        }
-                    };
+                  const setupMessage = {
+    setup: {
+        model: "models/gemini-2.0-flash-exp",
+        // THIS IS THE MISSING PIECE:
+        generationConfig: {
+            responseModalities: ["AUDIO"]
+        },
+        systemInstruction: {
+            parts: [{
+                text: "You are the official voice assistant for Ultimate Smile Design. Instantly say: 'Namaste! Did you like our virtual try-on?'. Seamlessly mirror the user's language. Strictly answer only dental or smile design questions."
+            }]
+        }
+    }
+};
+                    
                     webSocket.send(JSON.stringify(setupMessage));
                     
                     // Trigger the bot's first response by sending an empty "Client turn"
