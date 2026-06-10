@@ -73,7 +73,7 @@
     </div>
 
     <script>
-        // Your restricted Google AI Studio AQ. Auth Key
+        // Your newly restricted Google AI Studio AQ. Auth Key
         const GEMINI_API_KEY = "AQ.Ab8RN6KBVrNFbrrUh4N_A6MhqpwjbtB3IILUHM0ZWACu-LCM9A"; 
         
         let webSocket;
@@ -99,7 +99,8 @@
                 playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
                 nextPlayTime = playbackContext.currentTime;
 
-                const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
+                // FIXED: URL shifted to v1beta to allow AQ. keys to pass without OAuth walls
+                const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
                 webSocket = new WebSocket(wsUrl);
 
                 webSocket.onopen = () => {
@@ -109,14 +110,14 @@
                     
                     const setupMessage = {
                         setup: {
-                            // CORRECTED: The exact dedicated Live API model
-                            model: "models/gemini-2.5-flash-live-preview", 
+                            // FIXED: Pointing to active live audio streaming model
+                            model: "models/gemini-3.1-flash-live-preview", 
                             generationConfig: {
                                 responseModalities: ["AUDIO"]
                             },
                             systemInstruction: {
                                 parts: [{
-                                    text: "You are the official voice assistant for Ultimate Smile Design. Instantly say: 'Namaste! Did you like our virtual try-on?'. Seamlessly mirror the user's language. Strictly answer only dental or smile design questions."
+                                    text: "You are the official voice assistant for Ultimate Smile Design. Instantly say: 'Namaste! Did you like our virtual try-on?'. Seamlessly mirror the user's language (English, Hindi, or native tongue). Strictly answer only dental or smile design questions. If an off-topic question is asked, politely say: 'Sir/Mam, hum yaha sirf dental aur smile design se related answers dete hai.'"
                                 }]
                             }
                         }
