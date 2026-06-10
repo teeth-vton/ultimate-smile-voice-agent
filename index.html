@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Smile Design - Voice Agent Sandbox</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f3f4f6;
+            font-family: sans-serif;
+            margin: 0;
+        }
+        /* The Pulsing Circle requested in your layout prompt */
+        .agent-bubble {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, #0070f3, #00dfd8);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 0 0 rgba(0, 112, 243, 0.7);
+            animation: pulse 2s infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            transition: transform 0.2s ease-in-out;
+        }
+        .agent-bubble:active {
+            transform: scale(0.95);
+        }
+        .speaking {
+            animation: speaking-wave 0.5s infinite alternate;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 112, 243, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(0, 112, 243, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 112, 243, 0); }
+        }
+        @keyframes speaking-wave {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.15); }
+        }
+        #status { margin-top: 20px; font-size: 14px; color: #555; }
+    </style>
+</head>
+<body>
+
+    <div id="bubble" class="agent-bubble" onclick="startVoiceAgent()">CLICK ME</div>
+    <div id="status">Click the bubble to start conversation</div>
+
+    <script>
+        // REPLACE THIS WITH YOUR GEMINI API KEY FROM GOOGLE AI STUDIO FOR TESTING
+        const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"; 
+        let webSocket;
+        let audioContext;
+        let mediaStream;
+
+        async function startVoiceAgent() {
+            const statusDiv = document.getElementById('status');
+            const bubble = document.getElementById('bubble');
+            statusDiv.innerText = "Requesting microphone permission...";
+
+            try {
+                // Request Browser Mic Permission
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                statusDiv.innerText = "Connecting to Gemini Live API...";
+
+                // Establish the real-time WebSocket connection to the Gemini Multimodal Live API
+                const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
+                webSocket = new WebSocket(wsUrl);
+
+                webSocket.onopen = () => {
+                    statusDiv.innerText = "Connected! Starting session...";
+                    bubble.classList.add('speaking');
+                    
+                    // Send Session Setup Configuration immediately upon connection
+                    const setupMessage = {
+                        setup: {
+                            model: "models/gemini-2.5-flash-native-audio",
+                            generationConfig: {
+                                responseModalities: ["AUDIO"]
+                            },
+                            systemInstruction: "You are the official voice assistant for Ultimate Smile Design. Instantly say: 'Namaste! Did you like our virtual try-on? What are your thoughts on it?'. Seamlessly switch languages to mirror whatever language the user speaks (English, Hindi, etc). Strictly answer only dental or smile design questions. If off-topic, politely reply: 'Sir/Mam, hum yaha sirf dental aur smile design se related answers dete hai.'"
+                        }
+                    };
+                    webSocket.send(JSON.stringify(setupMessage));
+                    startAudioRecording();
+                };
+
+                webSocket.onmessage = async (event) => {
+                    const response = JSON.parse(event.data);
+                    
+                    // Check if server is returning audio bytes
+                    if (response.serverContent?.modelTurn?.parts) {
+                        for (const part of response.serverContent.modelTurn.parts) {
+                            if (part.inlineData) {
+                                playAudioChunk(part.inlineData.data);
+                            }
+                        }
+                    }
+                };
+
+                webSocket.onerror = (err) => console.error("WebSocket Error: ", err);
+                webSocket.onclose = () => {
+                    statusDiv.innerText = "Session closed.";
+                    bubble.classList.remove('speaking');
+                };
+
+            } catch (error) {
+                statusDiv.innerText = "Connection failed: " + error.message;
+            }
+        }
+
+        // Standard Web Audio node setup to capture microphone input at 16kHz PCM Little-Endian
+        async function startAudioRecording() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            const source = audioContext.createMediaStreamSource(mediaStream);
+            const processor = audioContext.createScriptProcessor(2048, 1, 1);
+
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+
+            processor.onaudioprocess = (e) => {
+                const inputData = e.inputBuffer.getChannelData(0);
+                // Convert 32-bit Float Audio to 16-bit Signed Integer PCM
+                const pcmBuffer = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    pcmBuffer[i] = Math.min(1, Math.max(-1, inputData[i])) * 0x7FFF;
+                }
+                
+                // Convert PCM buffer to Base64 data and stream it over the WebSocket
+                const base64Audio = btoa(String.fromCharCode(...new Uint8Array(pcmBuffer.buffer)));
+                
+                if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+                    const audioMessage = {
+                        realtimeInput: {
+                            mediaChunks: [{
+                                mimeType: "audio/pcm;rate=16000",
+                                data: base64Audio
+                            }]
+                        }
+                    };
+                    webSocket.send(JSON.stringify(audioMessage));
+                }
+            };
+        }
+
+        // Audio Player node to handle incoming base64 raw native audio from Gemini
+        function playAudioChunk(base64Data) {
+            const binaryString = atob(base64Data);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            // Gemini streams back 24kHz PCM Little-Endian audio
+            const pcm16 = new Int16Array(bytes.buffer);
+            const float32 = new Float32Array(pcm16.length);
+            for (let i = 0; i < pcm16.length; i++) {
+                float32[i] = pcm16[i] / 32768.0;
+            }
+
+            const playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+            const audioBuffer = playCtx.createBuffer(1, float32.length, 24000);
+            audioBuffer.getChannelData(0).set(float32);
+
+            const source = playCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(playCtx.destination);
+            source.start();
+        }
+    </script>
+</body>
+</html>
