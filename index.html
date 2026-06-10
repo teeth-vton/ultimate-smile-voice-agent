@@ -73,153 +73,133 @@
     </div>
 
     <script>
-        // Your newly restricted Google AI Studio AQ. Auth Key
+        // API Keys Configuration
+        const SARVAM_API_KEY = "sk_wb30zmo4_NunBvEprJaP7zKBmgZuJG0N7"; 
         const GEMINI_API_KEY = "AQ.Ab8RN6KBVrNFbrrUh4N_A6MhqpwjbtB3IILUHM0ZWACu-LCM9A"; 
         
-        let webSocket;
-        let audioContext;       
-        let playbackContext;    
-        let mediaStream;
-        let isConnected = false;
-        let nextPlayTime = 0;   
+        let isProcessing = false;
+        let chatHistory = [];
+        
+        // Initialize Browser Speech Recognition (The "Ears")
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'hi-IN'; // Optimized for Hindi/English code-mixing
 
         async function startVoiceAgent() {
+            if (isProcessing) return;
+            isProcessing = true;
+            
             const statusBox = document.getElementById('usd-status-box');
             const bubble = document.getElementById('usd-bubble');
             
-            if (isConnected) return; 
-
             statusBox.style.display = 'block';
-            statusBox.innerText = "Connecting microphone...";
+            bubble.classList.add('usd-speaking');
+            
+            // 1. Initial Greeting
+            statusBox.innerText = "Speaking...";
+            const greeting = "Namaste! Aapko hamara virtual try-on kaisa laga? What are your thoughts on it?";
+            
+            // Add greeting to history so Gemini remembers saying it
+            chatHistory.push({ role: "model", parts: [{ text: greeting }] });
+            
+            await speakWithSarvam(greeting);
+            
+            // 2. Start Listening automatically after greeting
+            startListening();
+        }
 
+        function startListening() {
+            const statusBox = document.getElementById('usd-status-box');
+            const bubble = document.getElementById('usd-bubble');
+            
+            bubble.classList.remove('usd-speaking');
+            statusBox.innerText = "Listening... Speak now!";
+            recognition.start();
+        }
+
+        recognition.onresult = async (event) => {
+            const userText = event.results[0][0].transcript;
+            const statusBox = document.getElementById('usd-status-box');
+            const bubble = document.getElementById('usd-bubble');
+            
+            statusBox.innerText = "Thinking...";
+            bubble.classList.add('usd-speaking'); 
+            
             try {
-                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                statusBox.innerText = "Connecting to AI...";
-
-                playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-                nextPlayTime = playbackContext.currentTime;
-
-                // FIXED: URL shifted to v1beta to allow AQ. keys to pass without OAuth walls
-                const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
-                webSocket = new WebSocket(wsUrl);
-
-                webSocket.onopen = () => {
-                    isConnected = true;
-                    statusBox.innerText = "Listening... Speak now!";
-                    bubble.classList.add('usd-speaking');
-                    
-                    const setupMessage = {
-                        setup: {
-                            // FIXED: Pointing to active live audio streaming model
-                            model: "models/gemini-3.1-flash-live-preview", 
-                            generationConfig: {
-                                responseModalities: ["AUDIO"]
-                            },
-                            systemInstruction: {
-                                parts: [{
-                                    text: "You are the official voice assistant for Ultimate Smile Design. Instantly say: 'Namaste! Did you like our virtual try-on?'. Seamlessly mirror the user's language (English, Hindi, or native tongue). Strictly answer only dental or smile design questions. If an off-topic question is asked, politely say: 'Sir/Mam, hum yaha sirf dental aur smile design se related answers dete hai.'"
-                                }]
-                            }
-                        }
-                    };
-                    webSocket.send(JSON.stringify(setupMessage));
-                    startAudioRecording();
-                };
-
-                webSocket.onmessage = async (event) => {
-                    const response = JSON.parse(event.data);
-                    
-                    if (response.setupComplete) {
-                        const initialTurn = { 
-                            clientContent: { 
-                                turns: [{ role: "user", parts: [{ text: "Hello" }] }],
-                                turnComplete: true
-                            } 
-                        };
-                        webSocket.send(JSON.stringify(initialTurn));
-                    }
-
-                    if (response.serverContent?.modelTurn?.parts) {
-                        for (const part of response.serverContent.modelTurn.parts) {
-                            if (part.inlineData) {
-                                playAudioChunk(part.inlineData.data);
-                            }
-                        }
-                    }
-                };
-
-                webSocket.onerror = (err) => {
-                    console.error("WebSocket Error: ", err);
-                    statusBox.innerText = "Connection Error. Check console.";
-                    resetUI();
-                };
-
-                webSocket.onclose = (event) => {
-                    console.log("Session Closed. Code:", event.code, "Reason:", event.reason);
-                    statusBox.innerText = "Session ended.";
-                    setTimeout(() => statusBox.style.display = 'none', 3000);
-                    resetUI();
-                };
-
-            } catch (error) {
-                statusBox.innerText = "Mic access denied or error.";
-                console.error(error);
-                resetUI();
-            }
-        }
-
-        function resetUI() {
-            isConnected = false;
-            document.getElementById('usd-bubble').classList.remove('usd-speaking');
-            if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
-            if (audioContext) audioContext.close();
-        }
-
-        async function startAudioRecording() {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            const source = audioContext.createMediaStreamSource(mediaStream);
-            const processor = audioContext.createScriptProcessor(2048, 1, 1);
-
-            source.connect(processor);
-            processor.connect(audioContext.destination);
-
-            processor.onaudioprocess = (e) => {
-                const inputData = e.inputBuffer.getChannelData(0);
-                const pcmBuffer = new Int16Array(inputData.length);
-                for (let i = 0; i < inputData.length; i++) {
-                    pcmBuffer[i] = Math.min(1, Math.max(-1, inputData[i])) * 0x7FFF;
-                }
-                const base64Audio = btoa(String.fromCharCode(...new Uint8Array(pcmBuffer.buffer)));
+                // 3. Send text to Gemini Brain
+                const botReply = await askGemini(userText);
                 
-                if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-                    webSocket.send(JSON.stringify({
-                        realtimeInput: {
-                            mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: base64Audio }]
-                        }
-                    }));
-                }
-            };
+                // 4. Send response text to Sarvam Voice
+                statusBox.innerText = "Speaking...";
+                await speakWithSarvam(botReply);
+                
+            } catch (error) {
+                console.error("Pipeline Error:", error);
+                statusBox.innerText = "Network Error.";
+            }
+            
+            // 5. Loop back to listening for the next turn
+            startListening();
+        };
+
+        recognition.onerror = (e) => {
+            document.getElementById('usd-status-box').innerText = "Mic paused. Click bubble to speak.";
+            document.getElementById('usd-bubble').classList.remove('usd-speaking');
+            isProcessing = false;
+        };
+        
+        recognition.onend = () => {
+             if(document.getElementById('usd-status-box').innerText === "Listening... Speak now!") {
+                 document.getElementById('usd-status-box').innerText = "Mic timed out. Click to restart.";
+                 isProcessing = false;
+             }
         }
 
-        function playAudioChunk(base64Data) {
-            const binaryString = atob(base64Data);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+        async function askGemini(userText) {
+            chatHistory.push({ role: "user", parts: [{ text: userText }] });
             
-            const pcm16 = new Int16Array(bytes.buffer);
-            const float32 = new Float32Array(pcm16.length);
-            for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
-
-            const audioBuffer = playbackContext.createBuffer(1, float32.length, 24000);
-            audioBuffer.getChannelData(0).set(float32);
-
-            const source = playbackContext.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(playbackContext.destination);
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemInstruction: {
+                        parts: [{ text: "You are the official voice assistant for Ultimate Smile Design. Reply in 1 or 2 short sentences. Smoothly mix Hindi and English (Hinglish). Answer ONLY dental or smile design questions. If off-topic, say EXACTLY: 'Sir/Mam, hum yaha sirf dental aur smile design se related answers dete hai.'" }]
+                    },
+                    contents: chatHistory
+                })
+            });
             
-            const scheduleTime = Math.max(nextPlayTime, playbackContext.currentTime);
-            source.start(scheduleTime);
-            nextPlayTime = scheduleTime + audioBuffer.duration;
+            const data = await response.json();
+            const botReply = data.candidates[0].content.parts[0].text;
+            chatHistory.push({ role: "model", parts: [{ text: botReply }] });
+            return botReply;
+        }
+
+        async function speakWithSarvam(text) {
+            const response = await fetch('https://api.sarvam.ai/text-to-speech', {
+                method: 'POST',
+                headers: {
+                    'api-subscription-key': SARVAM_API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    inputs: [text],
+                    target_language_code: "hi-IN", // Tells Sarvam to expect Hinglish/Hindi
+                    speaker: "meera",            // Authentic Indian female voice
+                    model: "bulbul:v3"           // Sarvam's fastest flagship voice model
+                })
+            });
+            
+            const data = await response.json();
+            if(data.audios && data.audios[0]) {
+                const audio = new Audio("data:audio/wav;base64," + data.audios[0]);
+                await new Promise(resolve => {
+                    audio.onended = resolve;
+                    audio.play();
+                });
+            }
         }
     </script>
 </body>
