@@ -27,14 +27,14 @@
             margin-bottom: 15px;
             border: 1px solid #D4AF37;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            display: none; /* Hidden until clicked */
+            display: none;
         }
 
         /* The Gold Pulsing Bubble */
         #usd-bubble {
             width: 80px;
             height: 80px;
-            background: linear-gradient(135deg, #FFD700, #B8860B); /* Light Gold to Dark Gold */
+            background: linear-gradient(135deg, #FFD700, #B8860B);
             border-radius: 50%;
             cursor: pointer;
             box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7);
@@ -46,26 +46,19 @@
             transition: transform 0.2s ease-in-out;
         }
 
-        #usd-bubble:hover {
-            transform: scale(1.05);
-        }
+        #usd-bubble:hover { transform: scale(1.05); }
+        #usd-bubble:active { transform: scale(0.95); }
 
-        #usd-bubble:active {
-            transform: scale(0.95);
-        }
-
-        /* Inner Icon / Text */
         #usd-bubble-icon {
-            color: #111111; /* Black text on gold */
+            color: #111111;
             font-weight: bold;
             font-size: 24px;
             line-height: 1;
         }
 
-        /* Animations */
         .usd-speaking {
             animation: usd-speaking-wave 0.5s infinite alternate !important;
-            background: linear-gradient(135deg, #FFF8DC, #FFD700) !important; /* Brighter gold when speaking */
+            background: linear-gradient(135deg, #FFF8DC, #FFD700) !important;
         }
 
         @keyframes usd-pulse {
@@ -82,7 +75,6 @@
 </head>
 <body>
 
-    <!-- Widget HTML -->
     <div id="usd-voice-widget">
         <div id="usd-status-box">Click to speak...</div>
         <div id="usd-bubble" onclick="startVoiceAgent()">
@@ -90,19 +82,21 @@
         </div>
     </div>
 
-    <!-- Logic -->
     <script>
-        const GEMINI_API_KEY = "AQ.Ab8RN6KDz4VGAynnOfzoSGIHdRXjwMFj8vrnqw_AxxZ93ztnuA"; // Insert key here
+        // REPLACE THIS WITH A REAL API KEY FROM GOOGLE AI STUDIO (Starts with AIza)
+        const GEMINI_API_KEY = "AQ.Ab8RN6KNcdsuw8-13Ti_sUYYnM8A_VZJOOWCDj2h0CVF0MryrA"; 
+        
         let webSocket;
-        let audioContext;
+        let audioContext;       // For recording mic
+        let playbackContext;    // For playing bot voice
         let mediaStream;
         let isConnected = false;
+        let nextPlayTime = 0;   // Audio queue tracker
 
         async function startVoiceAgent() {
             const statusBox = document.getElementById('usd-status-box');
             const bubble = document.getElementById('usd-bubble');
             
-            // Prevent multiple clicks
             if (isConnected) return; 
 
             statusBox.style.display = 'block';
@@ -112,7 +106,10 @@
                 mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 statusBox.innerText = "Connecting to AI...";
 
-                // Connecting to Gemini 2.0 Live endpoint
+                // Open a SINGLE audio playback context to prevent browser crashes
+                playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+                nextPlayTime = playbackContext.currentTime;
+
                 const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
                 webSocket = new WebSocket(wsUrl);
 
@@ -121,33 +118,38 @@
                     statusBox.innerText = "Listening... Speak now!";
                     bubble.classList.add('usd-speaking');
                     
-                    // Setup Message using the correct 2.0 model
-                  const setupMessage = {
-    setup: {
-        model: "models/gemini-2.0-flash-exp",
-        // THIS IS THE MISSING PIECE:
-        generationConfig: {
-            responseModalities: ["AUDIO"]
-        },
-        systemInstruction: {
-            parts: [{
-                text: "You are the official voice assistant for Ultimate Smile Design. Instantly say: 'Namaste! Did you like our virtual try-on?'. Seamlessly mirror the user's language. Strictly answer only dental or smile design questions."
-            }]
-        }
-    }
-};
-                    
+                    const setupMessage = {
+                        setup: {
+                            model: "models/gemini-2.0-flash-exp",
+                            generationConfig: {
+                                responseModalities: ["AUDIO"]
+                            },
+                            systemInstruction: {
+                                parts: [{
+                                    text: "You are the official voice assistant for Ultimate Smile Design. Instantly say: 'Namaste! Did you like our virtual try-on?'. Seamlessly mirror the user's language. Strictly answer only dental or smile design questions."
+                                }]
+                            }
+                        }
+                    };
                     webSocket.send(JSON.stringify(setupMessage));
-                    
-                    // Trigger the bot's first response by sending an empty "Client turn"
-                    const initialTurn = { clientContent: { turns: [{ role: "user", parts: [{ text: "Hello" }] }] } };
-                    webSocket.send(JSON.stringify(initialTurn));
-
                     startAudioRecording();
                 };
 
                 webSocket.onmessage = async (event) => {
                     const response = JSON.parse(event.data);
+                    
+                    // Wait for the server to say setup is complete BEFORE sending the trigger
+                    if (response.setupComplete) {
+                        const initialTurn = { 
+                            clientContent: { 
+                                turns: [{ role: "user", parts: [{ text: "Hello" }] }],
+                                turnComplete: true
+                            } 
+                        };
+                        webSocket.send(JSON.stringify(initialTurn));
+                    }
+
+                    // Play audio chunks as they arrive
                     if (response.serverContent?.modelTurn?.parts) {
                         for (const part of response.serverContent.modelTurn.parts) {
                             if (part.inlineData) {
@@ -211,22 +213,29 @@
         }
 
         function playAudioChunk(base64Data) {
+            // Decode base64
             const binaryString = atob(base64Data);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
             
+            // Convert to Float32
             const pcm16 = new Int16Array(bytes.buffer);
             const float32 = new Float32Array(pcm16.length);
             for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
 
-            const playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-            const audioBuffer = playCtx.createBuffer(1, float32.length, 24000);
+            // Load into audio buffer
+            const audioBuffer = playbackContext.createBuffer(1, float32.length, 24000);
             audioBuffer.getChannelData(0).set(float32);
 
-            const source = playCtx.createBufferSource();
+            // Connect to source and play
+            const source = playbackContext.createBufferSource();
             source.buffer = audioBuffer;
-            source.connect(playCtx.destination);
-            source.start();
+            source.connect(playbackContext.destination);
+            
+            // Smooth playback queue (prevents skipping or browser crashes)
+            const scheduleTime = Math.max(nextPlayTime, playbackContext.currentTime);
+            source.start(scheduleTime);
+            nextPlayTime = scheduleTime + audioBuffer.duration;
         }
     </script>
 </body>
