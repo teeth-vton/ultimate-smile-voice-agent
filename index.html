@@ -43,7 +43,7 @@
         .msg { margin-bottom: 8px; font-size: 13px; line-height: 1.4; }
         .msg-user { color: #ffffff; text-align: right; }
         .msg-bot { color: #D4AF37; text-align: left; }
-        .msg-error { color: #ff4444; text-align: center; font-weight: bold; } /* Added Red Error Text */
+        .msg-error { color: #ff4444; text-align: center; font-weight: bold; }
 
         #usd-status-box {
             color: #888;
@@ -105,9 +105,11 @@
     </div>
 
     <script>
-        // PASTE YOUR BRAND NEW KEYS HERE
-        const SARVAM_API_KEY = "sk_1g2qtc7g_Lme6F0ta58Wv4SooxWVfUCfa"; 
+        // 1. MUST USE AN 'AIza' KEY HERE FOR THIS TEST, NOT 'AQ.'
         const GEMINI_API_KEY = "AQ.Ab8RN6KYQAbLDe5ZFVKXCWGahcU_CuWF2Rqo4-13JP_iA7JUhg"; 
+        
+        // 2. YOUR SARVAM KEY
+        const SARVAM_API_KEY = "sk_1g2qtc7g_Lme6F0ta58Wv4SooxWVfUCfa"; 
         
         let isAgentRunning = false;
         let chatHistory = [];
@@ -146,7 +148,7 @@
             bubble.classList.add('usd-speaking');
             statusBox.innerText = "Speaking greeting...";
             
-            // Bypass Browser Security
+            // Bypass Browser Audio Security
             audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
             audioPlayer.play().catch(() => {});
 
@@ -157,7 +159,7 @@
                 await speakWithSarvam(greeting);
                 startListeningLoop();
             } catch (err) {
-                logMessage('error', 'Initial Audio Failed. Did you paste the API keys?');
+                logMessage('error', err.message);
                 statusBox.innerText = "Agent halted.";
                 bubble.classList.remove('usd-speaking');
                 isAgentRunning = false;
@@ -195,17 +197,14 @@
                     statusBox.innerText = "Speaking...";
                     
                     await speakWithSarvam(botReply);
-                    
-                    // ONLY loop if everything succeeds
                     startListeningLoop();
 
                 } catch (error) {
                     console.error("Pipeline Error:", error);
-                    // PRINT EXACT ERROR TO THE SCREEN AND STOP LOOPING
                     logMessage('error', `SYSTEM HALT: ${error.message}`);
                     statusBox.innerText = "Agent Stopped due to error.";
                     bubble.classList.remove('usd-speaking');
-                    isAgentRunning = false; // Prevents the mic from reopening
+                    isAgentRunning = false; 
                 }
             };
 
@@ -254,6 +253,7 @@
         }
 
         async function speakWithSarvam(text) {
+            // FIXED: Removed conflicting parameters. This is the exact Bulbul v3 payload.
             const response = await fetch('https://api.sarvam.ai/text-to-speech', {
                 method: 'POST',
                 headers: {
@@ -264,17 +264,13 @@
                     inputs: [text],
                     target_language_code: "hi-IN",
                     speaker: "meera",
-                    pitch: 0,
-                    pace: 1.0,
-                    loudness: 1.5,
-                    speech_sample_rate: 16000,
-                    enable_preprocessing: true,
-                    model: "builtin/speech"
+                    model: "bulbul:v3"
                 })
             });
             
             if (!response.ok) {
-                throw new Error(`Sarvam TTS rejected audio payload. Code: ${response.status}`);
+                const errorData = await response.text();
+                throw new Error(`Sarvam TTS rejected audio payload. Code: ${response.status}. Details: ${errorData}`);
             }
 
             const data = await response.json();
@@ -298,7 +294,7 @@
             
             if (sender === 'user') msgDiv.innerText = "You: " + text;
             else if (sender === 'bot') msgDiv.innerText = "Bot: " + text;
-            else msgDiv.innerText = text; // Error text
+            else msgDiv.innerText = text; 
             
             log.appendChild(msgDiv);
             log.scrollTop = log.scrollHeight;
