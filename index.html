@@ -45,6 +45,9 @@
         .msg-bot { color: #D4AF37; text-align: left; }
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
         .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; }
+        
+        /* The Live Text Visualizer */
+        #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; }
 
         #usd-status-box {
             color: #888;
@@ -103,6 +106,7 @@
     <div id="usd-voice-widget">
         <div id="usd-chat-container">
             <div id="usd-chat-log"></div>
+            <div id="usd-interim-text"></div>
             <div id="usd-status-box">Initializing...</div>
         </div>
         
@@ -112,17 +116,18 @@
     </div>
 
     <script>
-        // NO MORE API KEYS IN THE FRONTEND!
         let agentState = 'off'; 
         let chatHistory = [];
         let recognition;
         let audioPlayer;
+        let speechTimeout;
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
-            recognition.continuous = false; 
-            recognition.interimResults = false;
+            // ENABLED CONTINUOUS AND INTERIM RESULTS FOR LIVE VISUALIZATION
+            recognition.continuous = true; 
+            recognition.interimResults = true;
             recognition.lang = 'en-IN'; 
         }
 
@@ -153,7 +158,7 @@
                 const greeting = "Hello! How did you like our virtual try-on?";
                 logMessage('bot', greeting);
                 
-                await useBrowserTTS(greeting); // Initial greeting is native so we don't waste API calls
+                await useBrowserTTS(greeting); 
                 updateState('listening', "Listening... Speak now!");
                 
             } else if (agentState === 'speaking') {
@@ -163,7 +168,7 @@
                 updateState('listening', "Listening... Speak now!");
             } else {
                 updateState('off', "");
-                if(recognition) recognition.abort();
+                if(recognition) recognition.stop();
                 audioPlayer.pause();
                 window.speechSynthesis.cancel();
                 container.style.display = 'none';
@@ -174,9 +179,11 @@
             agentState = newState;
             const statusBox = document.getElementById('usd-status-box');
             const bubble = document.getElementById('usd-bubble');
+            const interimBox = document.getElementById('usd-interim-text');
             
             if (statusBox) statusBox.innerText = statusText;
             if (bubble) bubble.className = ''; 
+            if (interimBox) interimBox.innerText = ''; // Clear live text
             
             if (newState === 'listening') {
                 bubble.classList.add('usd-listening');
@@ -197,34 +204,48 @@
             recognition.onresult = async (event) => {
                 if (agentState !== 'listening') return;
                 
-                const userText = event.results[0][0].transcript.trim();
-                
-                if (userText.length < 2) {
-                    try { recognition.stop(); } catch(e){}
-                    setTimeout(() => { if (agentState === 'listening') updateState('listening', "Listening... Speak now!"); }, 500);
-                    return;
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
                 }
 
-                logMessage('user', userText);
-                updateState('thinking', "Thinking...");
-                
-                try {
-                    // Send to Vercel Database Server
-                    const botReply = await processTurnThroughBackend(userText);
-                    if (agentState === 'off') return; 
-                    
-                    logMessage('bot', botReply);
-                    
-                    if (agentState === 'speaking') {
-                        updateState('listening', "Listening... Speak now!");
-                    }
+                // Show the user's words as they speak
+                document.getElementById('usd-interim-text').innerText = interimTranscript;
 
-                } catch (error) {
-                    logMessage('error', `Connection Error: ${error.message}`);
-                    if (agentState !== 'off') {
-                        updateState('thinking', "Waiting 2s to reset...");
-                        await new Promise(r => setTimeout(r, 2000));
-                        if (agentState !== 'off') updateState('listening', "Listening... Try again.");
+                // When they finish the sentence
+                if (finalTranscript.trim()) {
+                    clearTimeout(speechTimeout); // Prevent multiple fires
+                    const userText = finalTranscript.trim();
+                    
+                    if (userText.length < 2) return; // Ignore coughs
+
+                    logMessage('user', userText);
+                    document.getElementById('usd-interim-text').innerText = "";
+                    updateState('thinking', "Thinking... (Connecting to Vercel)");
+                    
+                    try {
+                        const botReply = await processTurnThroughBackend(userText);
+                        if (agentState === 'off') return; 
+                        
+                        logMessage('bot', botReply);
+                        
+                        if (agentState === 'speaking') {
+                            updateState('listening', "Listening... Speak now!");
+                        }
+
+                    } catch (error) {
+                        logMessage('error', `Error: ${error.message}`);
+                        if (agentState !== 'off') {
+                            updateState('thinking', "Waiting 2s to reset...");
+                            await new Promise(r => setTimeout(r, 2000));
+                            if (agentState !== 'off') updateState('listening', "Listening... Try again.");
+                        }
                     }
                 }
             };
@@ -248,8 +269,10 @@
         }
 
         async function processTurnThroughBackend(userText) {
-            // ---> REPLACE THIS WITH YOUR LIVE VERCEL URL
+            // ---> YOUR LIVE VERCEL BACKEND URL
             const BACKEND_URL = "https://ultimate-smile-voice-agent-ps9x9g8a4-vton-s-projects.vercel.app/api/chat"; 
+            
+            console.log("Sending to Vercel:", userText);
             
             const response = await fetch(BACKEND_URL, {
                 method: 'POST',
@@ -257,17 +280,24 @@
                 body: JSON.stringify({ userText: userText, history: chatHistory })
             });
             
-            if (!response.ok) throw new Error("Vercel Server Unreachable.");
+            if (!response.ok) {
+                console.error("Vercel responded with Status:", response.status);
+                throw new Error("Vercel Server Unreachable (Check API code).");
+            }
+            
             const data = await response.json();
-            if (data.error) throw new Error(data.error);
+            
+            if (data.error) {
+                console.error("Vercel internal error:", data.error);
+                throw new Error(data.error);
+            }
 
-            // Update chat history
             chatHistory.push({ role: "user", parts: [{ text: userText }] });
             chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
 
-            // Play the Sarvam voice
             updateState('speaking', "Speaking...");
             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+            
             await new Promise((resolve) => {
                 audioPlayer.onended = resolve;
                 audioPlayer.onerror = resolve;
