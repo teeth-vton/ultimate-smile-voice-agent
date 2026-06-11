@@ -18,7 +18,7 @@
 
         #usd-chat-container {
             width: 320px;
-            max-height: 280px;
+            max-height: 340px; /* Increased height slightly to fit the new text box */
             background-color: #111111;
             border: 1px solid #D4AF37;
             border-radius: 15px;
@@ -46,7 +46,6 @@
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
         .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; }
         
-        /* The Live Text Visualizer */
         #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; }
 
         #usd-status-box {
@@ -56,6 +55,45 @@
             border-top: 1px solid #222;
             padding-top: 8px;
             font-weight: bold;
+        }
+
+        /* Office Text Input Container Styling */
+        #usd-input-container {
+            display: flex;
+            border-top: 1px solid #222;
+            padding-top: 8px;
+            margin-top: 5px;
+        }
+
+        #usd-text-input {
+            flex-grow: 1;
+            background: #222;
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 13px;
+            outline: none;
+        }
+
+        #usd-text-input:focus {
+            border-color: #D4AF37;
+        }
+
+        #usd-send-btn {
+            background: #D4AF37;
+            color: #111;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+            margin-left: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        #usd-send-btn:hover {
+            background: #FFF8DC;
         }
 
         #usd-bubble {
@@ -107,6 +145,13 @@
         <div id="usd-chat-container">
             <div id="usd-chat-log"></div>
             <div id="usd-interim-text"></div>
+            
+            <!-- NEW: Silent Text Input Box for Office Use -->
+            <div id="usd-input-container">
+                <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
+                <button id="usd-send-btn" onclick="submitTextMessage()">Send</button>
+            </div>
+
             <div id="usd-status-box">Initializing...</div>
         </div>
         
@@ -125,7 +170,6 @@
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
-            // ENABLED CONTINUOUS AND INTERIM RESULTS FOR LIVE VISUALIZATION
             recognition.continuous = true; 
             recognition.interimResults = true;
             recognition.lang = 'en-IN'; 
@@ -159,19 +203,52 @@
                 logMessage('bot', greeting);
                 
                 await useBrowserTTS(greeting); 
-                updateState('listening', "Listening... Speak now!");
+                updateState('listening', "Listening... Speak or type below!");
                 
             } else if (agentState === 'speaking') {
                 audioPlayer.pause();
                 window.speechSynthesis.cancel();
                 logMessage('system', 'You interrupted the bot.');
-                updateState('listening', "Listening... Speak now!");
+                updateState('listening', "Listening... Speak or type below!");
             } else {
                 updateState('off', "");
                 if(recognition) recognition.stop();
                 audioPlayer.pause();
                 window.speechSynthesis.cancel();
                 container.style.display = 'none';
+            }
+        }
+
+        // NEW: Handles submitting typed text
+        async function submitTextMessage() {
+            const inputEl = document.getElementById('usd-text-input');
+            const userText = inputEl.value.trim();
+            
+            if (!userText || agentState === 'thinking' || agentState === 'speaking') return;
+
+            inputEl.value = ''; // Clear box immediately
+            
+            try { recognition.stop(); } catch(e) {} // Stop listening so office noise doesn't interfere
+
+            logMessage('user', userText);
+            updateState('thinking', "Thinking... (Connecting to Vercel)");
+            
+            try {
+                const botReply = await processTurnThroughBackend(userText);
+                if (agentState === 'off') return; 
+                
+                logMessage('bot', botReply);
+                updateState('listening', "Listening... Speak or type below!");
+
+            } catch (error) {
+                logMessage('error', `Error: ${error.message}`);
+                updateState('listening', "Listening... Try again.");
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                submitTextMessage();
             }
         }
 
@@ -183,7 +260,7 @@
             
             if (statusBox) statusBox.innerText = statusText;
             if (bubble) bubble.className = ''; 
-            if (interimBox) interimBox.innerText = ''; // Clear live text
+            if (interimBox) interimBox.innerText = ''; 
             
             if (newState === 'listening') {
                 bubble.classList.add('usd-listening');
@@ -215,15 +292,13 @@
                     }
                 }
 
-                // Show the user's words as they speak
                 document.getElementById('usd-interim-text').innerText = interimTranscript;
 
-                // When they finish the sentence
                 if (finalTranscript.trim()) {
-                    clearTimeout(speechTimeout); // Prevent multiple fires
+                    clearTimeout(speechTimeout); 
                     const userText = finalTranscript.trim();
                     
-                    if (userText.length < 2) return; // Ignore coughs
+                    if (userText.length < 2) return; 
 
                     logMessage('user', userText);
                     document.getElementById('usd-interim-text').innerText = "";
@@ -234,10 +309,7 @@
                         if (agentState === 'off') return; 
                         
                         logMessage('bot', botReply);
-                        
-                        if (agentState === 'speaking') {
-                            updateState('listening', "Listening... Speak now!");
-                        }
+                        updateState('listening', "Listening... Speak or type below!");
 
                     } catch (error) {
                         logMessage('error', `Error: ${error.message}`);
@@ -269,10 +341,7 @@
         }
 
         async function processTurnThroughBackend(userText) {
-            // ---> YOUR LIVE VERCEL BACKEND URL
             const BACKEND_URL = "https://ultimate-smile-voice-agent-ps9x9g8a4-vton-s-projects.vercel.app/api/chat"; 
-            
-            console.log("Sending to Vercel:", userText);
             
             const response = await fetch(BACKEND_URL, {
                 method: 'POST',
@@ -280,17 +349,9 @@
                 body: JSON.stringify({ userText: userText, history: chatHistory })
             });
             
-            if (!response.ok) {
-                console.error("Vercel responded with Status:", response.status);
-                throw new Error("Vercel Server Unreachable (Check API code).");
-            }
-            
+            if (!response.ok) throw new Error("Vercel Server Unreachable.");
             const data = await response.json();
-            
-            if (data.error) {
-                console.error("Vercel internal error:", data.error);
-                throw new Error(data.error);
-            }
+            if (data.error) throw new Error(data.error);
 
             chatHistory.push({ role: "user", parts: [{ text: userText }] });
             chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
