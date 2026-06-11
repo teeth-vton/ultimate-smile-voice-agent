@@ -16,7 +16,6 @@
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
 
-        /* NEW: VTO Pop-up Tooltip */
         #usd-tooltip {
             background: #D4AF37;
             color: #111;
@@ -29,8 +28,9 @@
             animation: bounce 2s infinite;
             position: relative;
             cursor: pointer;
-            display: block; /* Visible until clicked */
+            display: block; 
         }
+        
         #usd-tooltip::after {
             content: '';
             position: absolute;
@@ -159,6 +159,37 @@
         @keyframes usd-speaking-wave {
             0% { transform: scale(1); box-shadow: 0 0 15px #FFD700; }
             100% { transform: scale(1.15); box-shadow: 0 0 30px #FFD700; }
+        }
+
+        /* ========================================= */
+        /* NEW: MOBILE RESPONSIVE RULES              */
+        /* ========================================= */
+        @media (max-width: 480px) {
+            #usd-voice-widget {
+                bottom: 15px;
+                right: 15px;
+            }
+            #usd-bubble {
+                width: 60px; /* Smaller bubble for mobile */
+                height: 60px;
+            }
+            #usd-bubble-icon {
+                font-size: 20px;
+            }
+            #usd-chat-container {
+                width: calc(100vw - 30px); /* Adjusts perfectly to screen width */
+                padding: 12px;
+                margin-bottom: 10px;
+                max-width: 320px;
+            }
+            #usd-tooltip {
+                font-size: 12px; /* Smaller text */
+                padding: 8px 12px;
+                margin-bottom: 10px;
+            }
+            #usd-tooltip::after {
+                right: 20px; /* Align arrow to smaller bubble */
+            }
         }
     </style>
 </head>
