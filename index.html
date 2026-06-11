@@ -105,7 +105,7 @@
     </div>
 
     <script>
-        // PASTE YOUR BRAND NEW API KEYS HERE
+        // PASTE YOUR KEYS HERE
         const GEMINI_API_KEY = "AIzaSyCjLxZxm0ba4pKXkR60ldGg1TzDtRX9nuQ"; 
         const SARVAM_API_KEY = "sk_1g2qtc7g_Lme6F0ta58Wv4SooxWVfUCfa"; 
         
@@ -114,12 +114,11 @@
         let chatHistory = [];
         let recognition;
         let audioPlayer;
-        let speechDebounceTimeout;
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
-            recognition.continuous = true; // Changed to true to collect continuous input fragments smoothly
+            recognition.continuous = false; 
             recognition.interimResults = false;
             recognition.lang = 'en-IN'; 
         }
@@ -137,8 +136,7 @@
             if (isAgentRunning) {
                 isAgentRunning = false;
                 isProcessingTurn = false;
-                clearTimeout(speechDebounceTimeout);
-                if(recognition) recognition.stop();
+                if(recognition) recognition.abort();
                 audioPlayer.pause();
                 window.speechSynthesis.cancel();
                 bubble.classList.remove('usd-speaking');
@@ -146,9 +144,19 @@
                 return;
             }
 
+            container.style.display = 'flex';
+            statusBox.innerText = "Requesting microphone...";
+            
+            // FIXED: Force the browser to get microphone permission BEFORE starting the bot
+            try {
+                await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (err) {
+                statusBox.innerText = "Microphone access denied.";
+                return;
+            }
+
             isAgentRunning = true;
             isProcessingTurn = true; 
-            container.style.display = 'flex';
             bubble.classList.add('usd-speaking');
             statusBox.innerText = "Speaking greeting...";
             
@@ -166,6 +174,7 @@
 
         function startListeningLoop() {
             if (!isAgentRunning || !recognition || isProcessingTurn) return;
+            
             const statusBox = document.getElementById('usd-status-box');
             const bubble = document.getElementById('usd-bubble');
             
@@ -180,56 +189,47 @@
         function setupRecognitionCallbacks() {
             if (!recognition) return;
 
-            recognition.onresult = (event) => {
+            recognition.onresult = async (event) => {
                 if (isProcessingTurn) return;
-
-                // Grab the final transcribed phrase text
-                let lastResultIndex = event.results.length - 1;
-                const userText = event.results[lastResultIndex][0].transcript;
+                isProcessingTurn = true; 
                 
-                if (!userText.trim()) return;
+                try { recognition.abort(); } catch(e){}
+
+                const userText = event.results[0][0].transcript;
+                if (!userText.trim()) {
+                    isProcessingTurn = false;
+                    startListeningLoop();
+                    return;
+                }
 
                 const statusBox = document.getElementById('usd-status-box');
-                statusBox.innerText = "Waiting for you to finish...";
-
-                // DEBOUNCE BLOCK: Resets timer if you keep talking within 1.2 seconds
-                clearTimeout(speechDebounceTimeout);
-                speechDebounceTimeout = setTimeout(async () => {
+                const bubble = document.getElementById('usd-bubble');
+                
+                logMessage('user', userText);
+                statusBox.innerText = "Thinking...";
+                bubble.classList.add('usd-speaking'); 
+                
+                try {
+                    const botReply = await askGeminiBrain(userText);
+                    logMessage('bot', botReply);
+                    statusBox.innerText = "Speaking...";
                     
-                    isProcessingTurn = true; 
-                    recognition.stop(); // Stop listening loop securely
+                    await speakWithFallback(botReply);
 
-                    const bubble = document.getElementById('usd-bubble');
-                    logMessage('user', userText);
-                    statusBox.innerText = "Thinking...";
-                    bubble.classList.add('usd-speaking'); 
-                    
-                    try {
-                        const botReply = await askGeminiBrain(userText);
-                        logMessage('bot', botReply);
-                        statusBox.innerText = "Speaking...";
-                        
-                        await speakWithFallback(botReply);
-                        
-                        isProcessingTurn = false;
-                        startListeningLoop();
-
-                    } catch (error) {
-                        console.error(error);
-                        logMessage('error', `${error.message}`);
-                        statusBox.innerText = "Rate limit hit. Cooling down...";
-                        
-                        // Automatic 3-second cooldown buffer for 429 errors
-                        await new Promise(r => setTimeout(r, 3000));
-                        isProcessingTurn = false;
-                        startListeningLoop();
-                    }
-                }, 1200); // 1.2 seconds of clean silence validation threshold
+                } catch (error) {
+                    console.error(error);
+                    logMessage('error', `${error.message}`);
+                    statusBox.innerText = "Waiting 2 seconds to reset...";
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+                
+                isProcessingTurn = false; 
+                startListeningLoop();
             };
 
             recognition.onerror = (event) => {
-                if (isAgentRunning && event.error !== 'no-speech' && !isProcessingTurn) {
-                    console.log("Mic error observed:", event.error);
+                if (isAgentRunning && event.error === 'no-speech' && !isProcessingTurn) {
+                    startListeningLoop();
                 }
             };
 
@@ -257,8 +257,8 @@
             });
             
             if (!response.ok) {
-                if (response.status === 429) throw new Error("Too many requests. Please pause for 3 seconds.");
-                throw new Error(`Gemini Server Error: ${response.status}`);
+                if (response.status === 429) throw new Error("Google Rate Limit hit. Please pause for 3 seconds.");
+                throw new Error(`Gemini Error Status: ${response.status}`);
             }
 
             const data = await response.json();
@@ -268,7 +268,7 @@
                 chatHistory.push({ role: "model", parts: [{ text: botReply }] });
                 return botReply;
             } else {
-                throw new Error("Invalid response received from engine.");
+                throw new Error("Invalid string format array.");
             }
         }
 
@@ -306,7 +306,6 @@
             try {
                 await speakWithSarvam(text);
             } catch(e) {
-                // If Sarvam hits any network/quota bump, system auto-switches to local device speech
                 return new Promise((resolve) => {
                     const utterance = new SpeechSynthesisUtterance(text);
                     utterance.lang = 'en-IN'; 
