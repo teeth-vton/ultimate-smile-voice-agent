@@ -227,26 +227,32 @@
             if (agentState === 'off') {
                 container.style.display = 'flex';
                 tooltip.style.display = 'none'; // Hide tooltip forever once opened
-                updateState('thinking', "Requesting microphone...");
                 
-                try {
-                    await navigator.mediaDevices.getUserMedia({ audio: true });
-                } catch (err) {
-                    updateState('off', "Microphone access denied.");
-                    return;
-                }
-
-                updateState('speaking', "Speaking greeting...");
-                
+                // Unlock audio engine instantly on click (required by browsers)
                 audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
                 audioPlayer.play().catch(() => {});
 
-                // NEW: Dynamic Greeting using the Name
+                // 1. Simulate Connection Delay for realism (3 seconds)
+                updateState('connecting', "Connecting to assistant... 🟡");
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // 2. Connected & Greet the user BEFORE asking for mic permission
+                updateState('speaking', "Connected 🟢 Speaking...");
                 const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
                 const greeting = `Namaste ${actualName}! How did you like our virtual try-on?`;
                 
                 logMessage('bot', greeting);
                 await useBrowserTTS(greeting); 
+                
+                // 3. NOW ask for Microphone permission
+                updateState('thinking', "Requesting microphone access...");
+                try {
+                    await navigator.mediaDevices.getUserMedia({ audio: true });
+                } catch (err) {
+                    updateState('off', "Microphone access denied. You can still type.");
+                    return;
+                }
+
                 updateState('listening', "Listening... Speak or type below!");
                 
             } else {
@@ -263,7 +269,8 @@
             const inputEl = document.getElementById('usd-text-input');
             const userText = inputEl.value.trim();
             
-            if (!userText || agentState === 'thinking') return;
+            // Block text submission if bot is still connecting or thinking
+            if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
 
             inputEl.value = ''; 
             try { recognition.stop(); } catch(e) {} 
@@ -305,9 +312,13 @@
                 bubble.classList.add('usd-speaking'); 
                 try { recognition.stop(); } catch(e) {}
             }
+            else if (newState === 'connecting') {
+                bubble.classList.add('usd-speaking'); 
+                try { recognition.stop(); } catch(e) {}
+            }
             else if (newState === 'speaking') {
                 bubble.classList.add('usd-speaking');
-                // CRITICAL FIX: Keep recognition running while speaking so user can interrupt!
+                // Keep recognition running while speaking so user can interrupt!
                 try { recognition.start(); } catch(e) {}
             }
         }
@@ -316,7 +327,7 @@
             if (!recognition) return;
 
             recognition.onresult = async (event) => {
-                if (agentState === 'thinking' || agentState === 'off') return;
+                if (agentState === 'thinking' || agentState === 'off' || agentState === 'connecting') return;
                 
                 let interimTranscript = '';
                 let finalTranscript = '';
