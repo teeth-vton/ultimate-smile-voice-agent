@@ -16,9 +16,39 @@
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
 
+        /* NEW: VTO Pop-up Tooltip */
+        #usd-tooltip {
+            background: #D4AF37;
+            color: #111;
+            padding: 10px 15px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            animation: bounce 2s infinite;
+            position: relative;
+            cursor: pointer;
+            display: block; /* Visible until clicked */
+        }
+        #usd-tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            right: 30px;
+            border-width: 8px 8px 0;
+            border-style: solid;
+            border-color: #D4AF37 transparent transparent transparent;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
         #usd-chat-container {
             width: 320px;
-            max-height: 340px; /* Increased height slightly to fit the new text box */
+            max-height: 340px;
             background-color: #111111;
             border: 1px solid #D4AF37;
             border-radius: 15px;
@@ -57,7 +87,6 @@
             font-weight: bold;
         }
 
-        /* Office Text Input Container Styling */
         #usd-input-container {
             display: flex;
             border-top: 1px solid #222;
@@ -76,9 +105,7 @@
             outline: none;
         }
 
-        #usd-text-input:focus {
-            border-color: #D4AF37;
-        }
+        #usd-text-input:focus { border-color: #D4AF37; }
 
         #usd-send-btn {
             background: #D4AF37;
@@ -92,9 +119,7 @@
             font-size: 13px;
         }
 
-        #usd-send-btn:hover {
-            background: #FFF8DC;
-        }
+        #usd-send-btn:hover { background: #FFF8DC; }
 
         #usd-bubble {
             width: 80px;
@@ -141,12 +166,21 @@
 
     <audio id="usd-html-player" preload="auto"></audio>
 
+    <!-- This is the bridge variable from your VTO script -->
+    <script>
+        window.usdUserName = "Guest"; // Your VTO will update this to "Rahul", "Priya", etc.
+    </script>
+
     <div id="usd-voice-widget">
+        <!-- NEW VTO Tooltip -->
+        <div id="usd-tooltip" onclick="handleBubbleClick()">
+            Namaste! Tap here to talk about your new smile!
+        </div>
+
         <div id="usd-chat-container">
             <div id="usd-chat-log"></div>
             <div id="usd-interim-text"></div>
             
-            <!-- NEW: Silent Text Input Box for Office Use -->
             <div id="usd-input-container">
                 <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
                 <button id="usd-send-btn" onclick="submitTextMessage()">Send</button>
@@ -172,19 +206,27 @@
             recognition = new SpeechRecognition();
             recognition.continuous = true; 
             recognition.interimResults = true;
-            recognition.lang = 'en-IN'; 
+            recognition.lang = 'en-IN'; // Works for Hindi, Hinglish, and English
         }
 
         window.onload = () => {
             audioPlayer = document.getElementById('usd-html-player');
             setupRecognitionCallbacks();
+            
+            // Dynamically update the tooltip with the user's name
+            const tooltip = document.getElementById('usd-tooltip');
+            if(window.usdUserName !== "Guest") {
+                tooltip.innerText = `Namaste ${window.usdUserName}! Tap here to talk about your new smile!`;
+            }
         };
 
         async function handleBubbleClick() {
             const container = document.getElementById('usd-chat-container');
+            const tooltip = document.getElementById('usd-tooltip');
             
             if (agentState === 'off') {
                 container.style.display = 'flex';
+                tooltip.style.display = 'none'; // Hide tooltip forever once opened
                 updateState('thinking', "Requesting microphone...");
                 
                 try {
@@ -199,18 +241,16 @@
                 audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
                 audioPlayer.play().catch(() => {});
 
-                const greeting = "Hello! How did you like our virtual try-on?";
-                logMessage('bot', greeting);
+                // NEW: Dynamic Greeting using the Name
+                const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
+                const greeting = `Namaste ${actualName}! How did you like our virtual try-on?`;
                 
+                logMessage('bot', greeting);
                 await useBrowserTTS(greeting); 
                 updateState('listening', "Listening... Speak or type below!");
                 
-            } else if (agentState === 'speaking') {
-                audioPlayer.pause();
-                window.speechSynthesis.cancel();
-                logMessage('system', 'You interrupted the bot.');
-                updateState('listening', "Listening... Speak or type below!");
             } else {
+                // Manual turn off
                 updateState('off', "");
                 if(recognition) recognition.stop();
                 audioPlayer.pause();
@@ -219,16 +259,15 @@
             }
         }
 
-        // NEW: Handles submitting typed text
         async function submitTextMessage() {
             const inputEl = document.getElementById('usd-text-input');
             const userText = inputEl.value.trim();
             
-            if (!userText || agentState === 'thinking' || agentState === 'speaking') return;
+            if (!userText || agentState === 'thinking') return;
 
-            inputEl.value = ''; // Clear box immediately
-            
-            try { recognition.stop(); } catch(e) {} // Stop listening so office noise doesn't interfere
+            inputEl.value = ''; 
+            try { recognition.stop(); } catch(e) {} 
+            audioPlayer.pause(); // Stop bot if it was talking
 
             logMessage('user', userText);
             updateState('thinking', "Thinking... (Connecting to Vercel)");
@@ -238,8 +277,6 @@
                 if (agentState === 'off') return; 
                 
                 logMessage('bot', botReply);
-                updateState('listening', "Listening... Speak or type below!");
-
             } catch (error) {
                 logMessage('error', `Error: ${error.message}`);
                 updateState('listening', "Listening... Try again.");
@@ -247,9 +284,7 @@
         }
 
         function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                submitTextMessage();
-            }
+            if (event.key === 'Enter') submitTextMessage();
         }
 
         function updateState(newState, statusText) {
@@ -272,6 +307,8 @@
             }
             else if (newState === 'speaking') {
                 bubble.classList.add('usd-speaking');
+                // CRITICAL FIX: Keep recognition running while speaking so user can interrupt!
+                try { recognition.start(); } catch(e) {}
             }
         }
 
@@ -279,7 +316,7 @@
             if (!recognition) return;
 
             recognition.onresult = async (event) => {
-                if (agentState !== 'listening') return;
+                if (agentState === 'thinking' || agentState === 'off') return;
                 
                 let interimTranscript = '';
                 let finalTranscript = '';
@@ -294,29 +331,35 @@
 
                 document.getElementById('usd-interim-text').innerText = interimTranscript;
 
+                // TRUE VOICE INTERRUPTION: If the bot is speaking and the user says something, shut the bot up!
+                if (interimTranscript.length > 3 && agentState === 'speaking') {
+                    audioPlayer.pause();
+                    window.speechSynthesis.cancel();
+                    logMessage('system', 'You interrupted the bot.');
+                    updateState('listening', "Interrupted! Listening...");
+                }
+
                 if (finalTranscript.trim()) {
                     clearTimeout(speechTimeout); 
                     const userText = finalTranscript.trim();
-                    
                     if (userText.length < 2) return; 
+
+                    // Stop current audio instantly
+                    audioPlayer.pause();
+                    window.speechSynthesis.cancel();
 
                     logMessage('user', userText);
                     document.getElementById('usd-interim-text').innerText = "";
-                    updateState('thinking', "Thinking... (Connecting to Vercel)");
+                    updateState('thinking', "Thinking...");
                     
                     try {
                         const botReply = await processTurnThroughBackend(userText);
                         if (agentState === 'off') return; 
-                        
                         logMessage('bot', botReply);
-                        updateState('listening', "Listening... Speak or type below!");
-
                     } catch (error) {
                         logMessage('error', `Error: ${error.message}`);
                         if (agentState !== 'off') {
-                            updateState('thinking', "Waiting 2s to reset...");
-                            await new Promise(r => setTimeout(r, 2000));
-                            if (agentState !== 'off') updateState('listening', "Listening... Try again.");
+                            updateState('listening', "Listening... Try again.");
                         }
                     }
                 }
@@ -326,7 +369,7 @@
                 if (agentState === 'listening' && event.error === 'no-speech') {
                     try { recognition.stop(); } catch(e){}
                     setTimeout(() => {
-                        if (agentState === 'listening') {
+                        if (agentState === 'listening' || agentState === 'speaking') {
                             try { recognition.start(); } catch(e) {}
                         }
                     }, 200);
@@ -334,7 +377,7 @@
             };
 
             recognition.onend = () => {
-                if (agentState === 'listening') {
+                if (agentState === 'listening' || agentState === 'speaking') {
                     try { recognition.start(); } catch(e){}
                 }
             };
@@ -356,11 +399,14 @@
             chatHistory.push({ role: "user", parts: [{ text: userText }] });
             chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
 
-            updateState('speaking', "Speaking...");
+            updateState('speaking', "Speaking... (Interrupt me anytime!)");
             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
             
             await new Promise((resolve) => {
-                audioPlayer.onended = resolve;
+                audioPlayer.onended = () => {
+                    if(agentState === 'speaking') updateState('listening', "Listening... Speak or type below!");
+                    resolve();
+                };
                 audioPlayer.onerror = resolve;
                 audioPlayer.play().catch(() => resolve());
             });
