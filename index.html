@@ -236,15 +236,19 @@
                 updateState('connecting', "Connecting to assistant... 🟡");
                 await new Promise(resolve => setTimeout(resolve, 3000));
 
-                // 2. Connected & Greet the user BEFORE asking for mic permission
-                updateState('speaking', "Connected 🟢 Speaking...");
+                // 2. Show Connected and pause for 1.5 seconds BEFORE she speaks
+                updateState('connecting', "Connected 🟢");
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // 3. NOW she speaks the greeting
+                updateState('speaking', "Speaking...");
                 const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
                 const greeting = `Namaste ${actualName}! How did you like our virtual try-on?`;
                 
                 logMessage('bot', greeting);
                 await useBrowserTTS(greeting); 
                 
-                // 3. NOW ask for Microphone permission
+                // 4. NOW ask for Microphone permission
                 updateState('thinking', "Requesting microphone access...");
                 try {
                     await navigator.mediaDevices.getUserMedia({ audio: true });
