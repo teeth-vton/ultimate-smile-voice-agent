@@ -264,7 +264,7 @@
                 audioPlayer.play().catch(() => {});
 
                 // 1. Simulate Connection Delay for realism (3 seconds)
-                updateState('connecting', "Connecting to assistant... 🟡");
+                updateState('connecting', "Calling assistant... 🟡");
                 await new Promise(resolve => setTimeout(resolve, 3000));
 
                 // 2. Show Connected and pause for 1.5 seconds BEFORE she speaks
@@ -272,7 +272,7 @@
                 await new Promise(resolve => setTimeout(resolve, 1500));
 
                 // 3. NOW she speaks the greeting
-                updateState('speaking', "Speaking...");
+                updateState('speaking', "Assistant is speaking...");
                 const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
                 const greeting = `Namaste ${actualName}! How did you like our virtual try-on?`;
                 
@@ -280,7 +280,7 @@
                 await useBrowserTTS(greeting); 
                 
                 // 4. NOW ask for Microphone permission
-                updateState('thinking', "Requesting microphone access...");
+                updateState('thinking', "Please allow microphone access...");
                 try {
                     await navigator.mediaDevices.getUserMedia({ audio: true });
                 } catch (err) {
@@ -288,7 +288,7 @@
                     return;
                 }
 
-                updateState('listening', "Listening... Speak or type below!");
+                updateState('listening', "Listening...");
                 
             } else {
                 // Manual turn off
@@ -312,7 +312,7 @@
             audioPlayer.pause(); // Stop bot if it was talking
 
             logMessage('user', userText);
-            updateState('thinking', "Thinking... (Connecting to Vercel)");
+            updateState('thinking', "Assistant is replying...");
             
             try {
                 const botReply = await processTurnThroughBackend(userText);
@@ -321,7 +321,7 @@
                 logMessage('bot', botReply);
             } catch (error) {
                 logMessage('error', `Error: ${error.message}`);
-                updateState('listening', "Listening... Try again.");
+                updateState('listening', "Listening...");
             }
         }
 
@@ -381,7 +381,7 @@
                 if (interimTranscript.length > 3 && agentState === 'speaking') {
                     audioPlayer.pause();
                     window.speechSynthesis.cancel();
-                    logMessage('system', 'You interrupted the bot.');
+                    logMessage('system', 'You interrupted the assistant.');
                     updateState('listening', "Interrupted! Listening...");
                 }
 
@@ -396,7 +396,7 @@
 
                     logMessage('user', userText);
                     document.getElementById('usd-interim-text').innerText = "";
-                    updateState('thinking', "Thinking...");
+                    updateState('thinking', "Assistant is replying...");
                     
                     try {
                         const botReply = await processTurnThroughBackend(userText);
@@ -405,7 +405,7 @@
                     } catch (error) {
                         logMessage('error', `Error: ${error.message}`);
                         if (agentState !== 'off') {
-                            updateState('listening', "Listening... Try again.");
+                            updateState('listening', "Listening...");
                         }
                     }
                 }
@@ -445,12 +445,12 @@
             chatHistory.push({ role: "user", parts: [{ text: userText }] });
             chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
 
-            updateState('speaking', "Speaking... (Interrupt me anytime!)");
+            updateState('speaking', "Assistant is speaking...");
             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
             
             await new Promise((resolve) => {
                 audioPlayer.onended = () => {
-                    if(agentState === 'speaking') updateState('listening', "Listening... Speak or type below!");
+                    if(agentState === 'speaking') updateState('listening', "Listening...");
                     resolve();
                 };
                 audioPlayer.onerror = resolve;
@@ -477,7 +477,7 @@
             msgDiv.className = `msg msg-${sender}`;
             
             if (sender === 'user') msgDiv.innerText = "You: " + text;
-            else if (sender === 'bot') msgDiv.innerText = "Bot: " + text;
+            else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
             else msgDiv.innerText = text; 
             
             log.appendChild(msgDiv);
