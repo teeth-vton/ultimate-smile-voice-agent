@@ -112,10 +112,7 @@
     </div>
 
     <script>
-        // PASTE YOUR KEYS HERE
-        const GEMINI_API_KEY = "AIzaSyCjLxZxm0ba4pKXkR60ldGg1TzDtRX9nuQ"; 
-        const SARVAM_API_KEY = "sk_1g2qtc7g_Lme6F0ta58Wv4SooxWVfUCfa"; 
-        
+        // NO MORE API KEYS IN THE FRONTEND!
         let agentState = 'off'; 
         let chatHistory = [];
         let recognition;
@@ -153,10 +150,10 @@
                 audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
                 audioPlayer.play().catch(() => {});
 
-                const greeting = "Hello! How did you like our virtual try-on? What are your thoughts on it?";
+                const greeting = "Hello! How did you like our virtual try-on?";
                 logMessage('bot', greeting);
                 
-                await speakWithFallback(greeting);
+                await useBrowserTTS(greeting); // Initial greeting is native so we don't waste API calls
                 updateState('listening', "Listening... Speak now!");
                 
             } else if (agentState === 'speaking') {
@@ -164,7 +161,6 @@
                 window.speechSynthesis.cancel();
                 logMessage('system', 'You interrupted the bot.');
                 updateState('listening', "Listening... Speak now!");
-                
             } else {
                 updateState('off', "");
                 if(recognition) recognition.abort();
@@ -213,20 +209,18 @@
                 updateState('thinking', "Thinking...");
                 
                 try {
-                    const botReply = await askGeminiWithRetry(userText);
+                    // Send to Vercel Database Server
+                    const botReply = await processTurnThroughBackend(userText);
                     if (agentState === 'off') return; 
                     
                     logMessage('bot', botReply);
-                    updateState('speaking', "Speaking...");
-                    
-                    await speakWithFallback(botReply);
                     
                     if (agentState === 'speaking') {
                         updateState('listening', "Listening... Speak now!");
                     }
 
                 } catch (error) {
-                    logMessage('error', `Error: ${error.message}`);
+                    logMessage('error', `Connection Error: ${error.message}`);
                     if (agentState !== 'off') {
                         updateState('thinking', "Waiting 2s to reset...");
                         await new Promise(r => setTimeout(r, 2000));
@@ -253,90 +247,45 @@
             };
         }
 
-        async function askGeminiWithRetry(userText, retriesLeft = 2) {
-            const tempHistory = [...chatHistory, { role: "user", parts: [{ text: userText }] }];
+        async function processTurnThroughBackend(userText) {
+            // ---> REPLACE THIS WITH YOUR LIVE VERCEL URL
+            const BACKEND_URL = "https://ultimate-smile-voice-agent-ps9x9g8a4-vton-s-projects.vercel.app/api/chat"; 
             
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        systemInstruction: {
-                            parts: [{ 
-                                text: "You are the official voice assistant for Ultimate Smile Design. Keep replies to 1 short sentence max. DETECT THE USER'S LANGUAGE: If the user speaks English, reply in English. If they speak Hindi or Hinglish, reply in Hindi/Hinglish. Only answer dental or smile design questions." 
-                            }]
-                        },
-                        contents: tempHistory
-                    })
-                });
-                
-                if (response.status === 429) {
-                    if (retriesLeft > 0) {
-                        document.getElementById('usd-status-box').innerText = "Google Rate Limit. Pausing 3s...";
-                        await new Promise(r => setTimeout(r, 3000));
-                        return askGeminiWithRetry(userText, retriesLeft - 1); 
-                    } else {
-                        throw new Error("Too many requests. Please wait a minute.");
-                    }
-                }
-                
-                if (!response.ok) throw new Error(`API Error ${response.status}`);
-
-                const data = await response.json();
-                if (data.candidates && data.candidates[0].content.parts[0].text) {
-                    const botReply = data.candidates[0].content.parts[0].text;
-                    chatHistory = tempHistory; 
-                    chatHistory.push({ role: "model", parts: [{ text: botReply }] });
-                    return botReply;
-                } else {
-                    throw new Error("Invalid format received.");
-                }
-            } catch (err) {
-                throw err;
-            }
-        }
-
-        async function speakWithSarvam(text) {
-            const response = await fetch('https://api.sarvam.ai/text-to-speech', {
+            const response = await fetch(BACKEND_URL, {
                 method: 'POST',
-                headers: {
-                    'api-subscription-key': SARVAM_API_KEY,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    inputs: [text],
-                    target_language_code: "hi-IN", 
-                    speaker: "priya", 
-                    model: "bulbul:v3"
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userText: userText, history: chatHistory })
             });
             
-            if (!response.ok) throw new Error(`Sarvam Error ${response.status}`);
-
+            if (!response.ok) throw new Error("Vercel Server Unreachable.");
             const data = await response.json();
-            if (data.audios && data.audios[0]) {
-                audioPlayer.src = "data:audio/wav;base64," + data.audios[0];
-                return new Promise((resolve) => {
-                    audioPlayer.onended = resolve;
-                    audioPlayer.onerror = resolve;
-                    audioPlayer.play().catch(() => resolve());
-                });
-            }
+            if (data.error) throw new Error(data.error);
+
+            // Update chat history
+            chatHistory.push({ role: "user", parts: [{ text: userText }] });
+            chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
+
+            // Play the Sarvam voice
+            updateState('speaking', "Speaking...");
+            audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+            await new Promise((resolve) => {
+                audioPlayer.onended = resolve;
+                audioPlayer.onerror = resolve;
+                audioPlayer.play().catch(() => resolve());
+            });
+
+            return data.replyText;
         }
 
-        async function speakWithFallback(text) {
-            try {
-                await speakWithSarvam(text);
-            } catch(e) {
-                return new Promise((resolve) => {
-                    const utterance = new SpeechSynthesisUtterance(text);
-                    utterance.lang = 'en-IN'; 
-                    utterance.rate = 1.0;
-                    utterance.onend = resolve;
-                    utterance.onerror = resolve;
-                    window.speechSynthesis.speak(utterance);
-                });
-            }
+        function useBrowserTTS(text) {
+            return new Promise((resolve) => {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-IN'; 
+                utterance.rate = 1.0;
+                utterance.onend = resolve;
+                utterance.onerror = resolve;
+                window.speechSynthesis.speak(utterance);
+            });
         }
 
         function logMessage(sender, text) {
