@@ -238,6 +238,25 @@
         .usd-star:hover, .usd-star.active { color: #FFD700; }
         #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
 
+        /* NEW: END CONFIRMATION OVERLAY */
+        #usd-end-confirm-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(17, 17, 17, 0.95);
+            border-radius: 15px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 101;
+            text-align: center;
+            padding: 20px;
+        }
+        .usd-confirm-title { color: #fff; font-size: 16px; margin-bottom: 20px; font-weight: bold; }
+        .usd-confirm-btns { display: flex; gap: 15px; }
+        .usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+
         @media (max-width: 480px) {
             #usd-voice-widget { bottom: 15px; right: 15px; }
             #usd-bubble { width: 60px; height: 60px; }
@@ -273,6 +292,15 @@
                 <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
             </div>
 
+            <!-- NEW END CONFIRMATION OVERLAY -->
+            <div id="usd-end-confirm-overlay">
+                <div class="usd-confirm-title">Want to end the call?</div>
+                <div class="usd-confirm-btns">
+                    <button class="usd-btn-yes" onclick="confirmEndChat(true)">Yes</button>
+                    <button class="usd-btn-no" onclick="confirmEndChat(false)">No</button>
+                </div>
+            </div>
+
             <!-- NEW HEADER -->
             <div id="usd-chat-header">
                 <div id="usd-header-left">
@@ -289,8 +317,8 @@
                     <div id="usd-visualizer">
                         <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
                     </div>
-                    <!-- Close button -->
-                    <button id="usd-close-btn" onclick="closeChat()">✕</button>
+                    <!-- Close button UPDATED TO TRIGGER CONFIRMATION -->
+                    <button id="usd-close-btn" onclick="closeChatBtnClicked()">✕</button>
                 </div>
             </div>
 
@@ -339,6 +367,28 @@
             }
         };
 
+        // NEW: Fetch Sarvam Audio directly for Initial Greeting
+        async function playSarvamGreeting(text) {
+            const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat"; 
+            try {
+                const response = await fetch(BACKEND_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'tts', text: text })
+                });
+                const data = await response.json();
+                audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+                await new Promise((resolve) => {
+                    audioPlayer.onended = resolve;
+                    audioPlayer.onerror = resolve;
+                    audioPlayer.play().catch(() => resolve());
+                });
+            } catch(e) {
+                // Failsafe so the app doesn't break
+                await useBrowserTTS(text);
+            }
+        }
+
         // OPEN CHAT FUNCTION
         async function openChat() {
             const container = document.getElementById('usd-chat-container');
@@ -351,6 +401,7 @@
                 tooltip.style.display = 'none'; 
                 document.getElementById('usd-rating-overlay').style.display = 'none';
                 document.getElementById('usd-rating-thanks').style.display = 'none';
+                document.getElementById('usd-end-confirm-overlay').style.display = 'none';
                 
                 audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
                 audioPlayer.play().catch(() => {});
@@ -367,7 +418,8 @@
                 const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
                 
                 logMessage('bot', greeting);
-                await useBrowserTTS(greeting); 
+                // NEW: Use Sarvam API for greeting instead of robotic browser voice
+                await playSarvamGreeting(greeting); 
                 
                 updateState('thinking', "Please allow microphone access...");
                 try {
@@ -378,6 +430,24 @@
                 }
 
                 updateState('listening', "Listening...");
+            }
+        }
+
+        // NEW: End Chat Confirmation Logic
+        function closeChatBtnClicked() {
+            document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
+        }
+
+        async function confirmEndChat(isYes) {
+            document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+            if (isYes) {
+                // Seamlessly trigger the AI's native goodbye sequence!
+                updateState('thinking', "Ending call...");
+                try {
+                    await processTurnThroughBackend("bye");
+                } catch(e) {
+                    closeChat();
+                }
             }
         }
 
