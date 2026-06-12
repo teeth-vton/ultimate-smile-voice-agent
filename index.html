@@ -197,13 +197,11 @@
 
     <audio id="usd-html-player" preload="auto"></audio>
 
-    <!-- This is the bridge variable from your VTO script -->
     <script>
         window.usdUserName = "Guest"; // Your VTO will update this to "Rahul", "Priya", etc.
     </script>
 
     <div id="usd-voice-widget">
-        <!-- NEW VTO Tooltip -->
         <div id="usd-tooltip" onclick="handleBubbleClick()">
             Namaste! Tap here to talk about your new smile!
         </div>
@@ -231,6 +229,7 @@
         let recognition;
         let audioPlayer;
         let speechTimeout;
+        let userSpeechBuffer = ''; // NEW: Holds the mobile sentences together
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
@@ -308,6 +307,11 @@
             if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
 
             inputEl.value = ''; 
+            
+            // Clear mobile buffers to prevent double sending
+            clearTimeout(speechTimeout);
+            userSpeechBuffer = '';
+
             try { recognition.stop(); } catch(e) {} 
             audioPlayer.pause(); // Stop bot if it was talking
 
@@ -375,39 +379,50 @@
                     }
                 }
 
-                document.getElementById('usd-interim-text').innerText = interimTranscript;
+                // Show what the user is currently saying PLUS what we already buffered
+                document.getElementById('usd-interim-text').innerText = userSpeechBuffer + " " + interimTranscript;
 
                 // TRUE VOICE INTERRUPTION: If the bot is speaking and the user says something, shut the bot up!
                 if (interimTranscript.length > 3 && agentState === 'speaking') {
                     audioPlayer.pause();
                     window.speechSynthesis.cancel();
+                    userSpeechBuffer = ''; // Reset buffer on interrupt
                     logMessage('system', 'You interrupted the assistant.');
                     updateState('listening', "Interrupted! Listening...");
                 }
 
+                // THE MOBILE FIX: Wait 1.5 seconds to see if they are done talking before sending
                 if (finalTranscript.trim()) {
+                    userSpeechBuffer += (userSpeechBuffer ? " " : "") + finalTranscript.trim();
+                    document.getElementById('usd-interim-text').innerText = userSpeechBuffer;
+
                     clearTimeout(speechTimeout); 
-                    const userText = finalTranscript.trim();
-                    if (userText.length < 2) return; 
-
-                    // Stop current audio instantly
-                    audioPlayer.pause();
-                    window.speechSynthesis.cancel();
-
-                    logMessage('user', userText);
-                    document.getElementById('usd-interim-text').innerText = "";
-                    updateState('thinking', "Assistant is replying...");
                     
-                    try {
-                        const botReply = await processTurnThroughBackend(userText);
-                        if (agentState === 'off') return; 
-                        logMessage('bot', botReply);
-                    } catch (error) {
-                        logMessage('error', `Error: ${error.message}`);
-                        if (agentState !== 'off') {
-                            updateState('listening', "Listening...");
+                    speechTimeout = setTimeout(async () => {
+                        const userText = userSpeechBuffer.trim();
+                        userSpeechBuffer = ''; // Reset for the next message
+                        
+                        if (userText.length < 2) return; 
+
+                        // Stop current audio instantly
+                        audioPlayer.pause();
+                        window.speechSynthesis.cancel();
+
+                        logMessage('user', userText);
+                        document.getElementById('usd-interim-text').innerText = "";
+                        updateState('thinking', "Assistant is replying...");
+                        
+                        try {
+                            const botReply = await processTurnThroughBackend(userText);
+                            if (agentState === 'off') return; 
+                            logMessage('bot', botReply);
+                        } catch (error) {
+                            logMessage('error', `Error: ${error.message}`);
+                            if (agentState !== 'off') {
+                                updateState('listening', "Listening...");
+                            }
                         }
-                    }
+                    }, 1500); // Wait 1.5 seconds of silence
                 }
             };
 
@@ -423,6 +438,7 @@
             };
 
             recognition.onend = () => {
+                // Automatically restart if it drops (keeps it alive on mobile)
                 if (agentState === 'listening' || agentState === 'speaking') {
                     try { recognition.start(); } catch(e){}
                 }
