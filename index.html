@@ -57,6 +57,7 @@
             box-shadow: 0 8px 24px rgba(0,0,0,0.6);
             display: none;
             flex-direction: column;
+            position: relative; /* For rating overlay */
         }
 
         #usd-chat-log {
@@ -162,34 +163,34 @@
         }
 
         /* ========================================= */
-        /* NEW: MOBILE RESPONSIVE RULES              */
+        /* NEW: RATING MODAL UI                      */
         /* ========================================= */
+        #usd-rating-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(17, 17, 17, 0.95);
+            border-radius: 15px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
+        }
+        #usd-rating-title { color: #fff; font-size: 16px; margin-bottom: 15px; font-weight: bold; }
+        .usd-stars { display: flex; gap: 10px; cursor: pointer; }
+        .usd-star { font-size: 30px; color: #444; transition: color 0.2s; }
+        .usd-star:hover, .usd-star.active { color: #FFD700; }
+        #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
+
         @media (max-width: 480px) {
-            #usd-voice-widget {
-                bottom: 15px;
-                right: 15px;
-            }
-            #usd-bubble {
-                width: 60px; /* Smaller bubble for mobile */
-                height: 60px;
-            }
-            #usd-bubble-icon {
-                font-size: 20px;
-            }
-            #usd-chat-container {
-                width: calc(100vw - 30px); /* Adjusts perfectly to screen width */
-                padding: 12px;
-                margin-bottom: 10px;
-                max-width: 320px;
-            }
-            #usd-tooltip {
-                font-size: 12px; /* Smaller text */
-                padding: 8px 12px;
-                margin-bottom: 10px;
-            }
-            #usd-tooltip::after {
-                right: 20px; /* Align arrow to smaller bubble */
-            }
+            #usd-voice-widget { bottom: 15px; right: 15px; }
+            #usd-bubble { width: 60px; height: 60px; }
+            #usd-bubble-icon { font-size: 20px; }
+            #usd-chat-container { width: calc(100vw - 30px); padding: 12px; margin-bottom: 10px; max-width: 320px; }
+            #usd-tooltip { font-size: 12px; padding: 8px 12px; margin-bottom: 10px; }
+            #usd-tooltip::after { right: 20px; }
         }
     </style>
 </head>
@@ -198,7 +199,7 @@
     <audio id="usd-html-player" preload="auto"></audio>
 
     <script>
-        window.usdUserName = "Guest"; // Your VTO will update this to "Rahul", "Priya", etc.
+        window.usdUserName = "Guest"; 
     </script>
 
     <div id="usd-voice-widget">
@@ -207,6 +208,19 @@
         </div>
 
         <div id="usd-chat-container">
+            <!-- NEW RATING OVERLAY -->
+            <div id="usd-rating-overlay">
+                <div id="usd-rating-title">Rate your experience with USD Agent</div>
+                <div class="usd-stars">
+                    <span class="usd-star" onclick="submitRating(1)">★</span>
+                    <span class="usd-star" onclick="submitRating(2)">★</span>
+                    <span class="usd-star" onclick="submitRating(3)">★</span>
+                    <span class="usd-star" onclick="submitRating(4)">★</span>
+                    <span class="usd-star" onclick="submitRating(5)">★</span>
+                </div>
+                <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
+            </div>
+
             <div id="usd-chat-log"></div>
             <div id="usd-interim-text"></div>
             
@@ -236,7 +250,6 @@
             recognition = new SpeechRecognition();
             recognition.continuous = true; 
             recognition.interimResults = true;
-            // FIXED: Set to hi-IN to perfectly capture Hindi pronunciation and text
             recognition.lang = 'hi-IN'; 
         }
 
@@ -257,6 +270,8 @@
             if (agentState === 'off') {
                 container.style.display = 'flex';
                 tooltip.style.display = 'none'; 
+                document.getElementById('usd-rating-overlay').style.display = 'none';
+                document.getElementById('usd-rating-thanks').style.display = 'none';
                 
                 audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
                 audioPlayer.play().catch(() => {});
@@ -268,8 +283,10 @@
                 await new Promise(resolve => setTimeout(resolve, 1500));
 
                 updateState('speaking', "Assistant is speaking...");
+                
+                // FIXED GREETING AS REQUESTED
                 const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
-                const greeting = `Namaste ${actualName}! How did you like our virtual try-on?`;
+                const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
                 
                 logMessage('bot', greeting);
                 await useBrowserTTS(greeting); 
@@ -293,6 +310,31 @@
             }
         }
 
+        // --- NEW RATING FUNCTION ---
+        async function submitRating(stars) {
+            // Highlight stars visually
+            const starElements = document.querySelectorAll('.usd-star');
+            starElements.forEach((s, index) => {
+                s.style.color = index < stars ? '#FFD700' : '#444';
+            });
+            
+            document.getElementById('usd-rating-thanks').style.display = 'block';
+
+            // Send to backend route
+            try {
+                await fetch("https://sd-voice-backend.vercel.app/api/rate", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rating: stars, history: chatHistory })
+                });
+            } catch(e) { console.error("Failed to send rating"); }
+
+            // Auto-close after 3 seconds
+            setTimeout(() => {
+                handleBubbleClick(); // turns it off
+            }, 3000);
+        }
+
         async function submitTextMessage() {
             const inputEl = document.getElementById('usd-text-input');
             const userText = inputEl.value.trim();
@@ -300,7 +342,6 @@
             if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
 
             inputEl.value = ''; 
-            
             clearTimeout(speechTimeout);
             userSpeechBuffer = '';
 
@@ -314,7 +355,6 @@
                 const botReply = await processTurnThroughBackend(userText);
                 if (agentState === 'off') return; 
                 
-                logMessage('bot', botReply);
             } catch (error) {
                 logMessage('error', `Error: ${error.message}`);
                 updateState('listening', "Listening...");
@@ -323,7 +363,6 @@
 
         function handleKeyPress(event) {
             if (event.key === 'Enter') {
-                // FIXED: Prevents the mobile keyboard from accidentally refreshing the page!
                 event.preventDefault(); 
                 submitTextMessage();
             }
@@ -343,11 +382,7 @@
                 bubble.classList.add('usd-listening');
                 try { recognition.start(); } catch(e) {}
             } 
-            else if (newState === 'thinking') {
-                bubble.classList.add('usd-speaking'); 
-                try { recognition.stop(); } catch(e) {}
-            }
-            else if (newState === 'connecting') {
+            else if (newState === 'thinking' || newState === 'connecting') {
                 bubble.classList.add('usd-speaking'); 
                 try { recognition.stop(); } catch(e) {}
             }
@@ -387,31 +422,24 @@
                 if (finalTranscript.trim()) {
                     userSpeechBuffer += (userSpeechBuffer ? " " : "") + finalTranscript.trim();
                     document.getElementById('usd-interim-text').innerText = userSpeechBuffer;
-
                     clearTimeout(speechTimeout); 
                     
                     speechTimeout = setTimeout(async () => {
                         const userText = userSpeechBuffer.trim();
                         userSpeechBuffer = ''; 
-                        
                         if (userText.length < 2) return; 
 
                         audioPlayer.pause();
                         window.speechSynthesis.cancel();
-
                         logMessage('user', userText);
                         document.getElementById('usd-interim-text').innerText = "";
                         updateState('thinking', "Assistant is replying...");
                         
                         try {
-                            const botReply = await processTurnThroughBackend(userText);
-                            if (agentState === 'off') return; 
-                            logMessage('bot', botReply);
+                            await processTurnThroughBackend(userText);
                         } catch (error) {
                             logMessage('error', `Error: ${error.message}`);
-                            if (agentState !== 'off') {
-                                updateState('listening', "Listening...");
-                            }
+                            if (agentState !== 'off') updateState('listening', "Listening...");
                         }
                     }, 1500); 
                 }
@@ -451,19 +479,34 @@
             chatHistory.push({ role: "user", parts: [{ text: userText }] });
             chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
 
+            // DETECT END OF CHAT TRIGGER
+            let finalBotReply = data.replyText;
+            let isEnding = false;
+            if (finalBotReply.includes('[END_CHAT]')) {
+                isEnding = true;
+                finalBotReply = finalBotReply.replace('[END_CHAT]', '').trim();
+            }
+
+            logMessage('bot', finalBotReply);
             updateState('speaking', "Assistant is speaking...");
             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
             
             await new Promise((resolve) => {
                 audioPlayer.onended = () => {
-                    if(agentState === 'speaking') updateState('listening', "Listening...");
+                    if (isEnding) {
+                        updateState('off', "Conversation ended.");
+                        try { recognition.stop(); } catch(e) {}
+                        document.getElementById('usd-rating-overlay').style.display = 'flex';
+                    } else if(agentState === 'speaking') {
+                        updateState('listening', "Listening...");
+                    }
                     resolve();
                 };
                 audioPlayer.onerror = resolve;
                 audioPlayer.play().catch(() => resolve());
             });
 
-            return data.replyText;
+            return finalBotReply;
         }
 
         function useBrowserTTS(text) {
