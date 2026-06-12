@@ -212,7 +212,7 @@
             
             <div id="usd-input-container">
                 <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
-                <button id="usd-send-btn" onclick="submitTextMessage()">Send</button>
+                <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
             </div>
 
             <div id="usd-status-box">Initializing...</div>
@@ -229,21 +229,21 @@
         let recognition;
         let audioPlayer;
         let speechTimeout;
-        let userSpeechBuffer = ''; // NEW: Holds the mobile sentences together
+        let userSpeechBuffer = ''; 
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
             recognition.continuous = true; 
             recognition.interimResults = true;
-            recognition.lang = 'en-IN'; // Works for Hindi, Hinglish, and English
+            // FIXED: Set to hi-IN to perfectly capture Hindi pronunciation and text
+            recognition.lang = 'hi-IN'; 
         }
 
         window.onload = () => {
             audioPlayer = document.getElementById('usd-html-player');
             setupRecognitionCallbacks();
             
-            // Dynamically update the tooltip with the user's name
             const tooltip = document.getElementById('usd-tooltip');
             if(window.usdUserName !== "Guest") {
                 tooltip.innerText = `Namaste ${window.usdUserName}! Tap here to talk about your new smile!`;
@@ -256,21 +256,17 @@
             
             if (agentState === 'off') {
                 container.style.display = 'flex';
-                tooltip.style.display = 'none'; // Hide tooltip forever once opened
+                tooltip.style.display = 'none'; 
                 
-                // Unlock audio engine instantly on click (required by browsers)
                 audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
                 audioPlayer.play().catch(() => {});
 
-                // 1. Simulate Connection Delay for realism (3 seconds)
                 updateState('connecting', "Calling assistant... 🟡");
                 await new Promise(resolve => setTimeout(resolve, 3000));
 
-                // 2. Show Connected and pause for 1.5 seconds BEFORE she speaks
                 updateState('connecting', "Connected 🟢");
                 await new Promise(resolve => setTimeout(resolve, 1500));
 
-                // 3. NOW she speaks the greeting
                 updateState('speaking', "Assistant is speaking...");
                 const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
                 const greeting = `Namaste ${actualName}! How did you like our virtual try-on?`;
@@ -278,7 +274,6 @@
                 logMessage('bot', greeting);
                 await useBrowserTTS(greeting); 
                 
-                // 4. NOW ask for Microphone permission
                 updateState('thinking', "Please allow microphone access...");
                 try {
                     await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -290,7 +285,6 @@
                 updateState('listening', "Listening...");
                 
             } else {
-                // Manual turn off
                 updateState('off', "");
                 if(recognition) recognition.stop();
                 audioPlayer.pause();
@@ -303,17 +297,15 @@
             const inputEl = document.getElementById('usd-text-input');
             const userText = inputEl.value.trim();
             
-            // Block text submission if bot is still connecting or thinking
             if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
 
             inputEl.value = ''; 
             
-            // Clear mobile buffers to prevent double sending
             clearTimeout(speechTimeout);
             userSpeechBuffer = '';
 
             try { recognition.stop(); } catch(e) {} 
-            audioPlayer.pause(); // Stop bot if it was talking
+            audioPlayer.pause(); 
 
             logMessage('user', userText);
             updateState('thinking', "Assistant is replying...");
@@ -330,7 +322,11 @@
         }
 
         function handleKeyPress(event) {
-            if (event.key === 'Enter') submitTextMessage();
+            if (event.key === 'Enter') {
+                // FIXED: Prevents the mobile keyboard from accidentally refreshing the page!
+                event.preventDefault(); 
+                submitTextMessage();
+            }
         }
 
         function updateState(newState, statusText) {
@@ -357,7 +353,6 @@
             }
             else if (newState === 'speaking') {
                 bubble.classList.add('usd-speaking');
-                // Keep recognition running while speaking so user can interrupt!
                 try { recognition.start(); } catch(e) {}
             }
         }
@@ -379,19 +374,16 @@
                     }
                 }
 
-                // Show what the user is currently saying PLUS what we already buffered
                 document.getElementById('usd-interim-text').innerText = userSpeechBuffer + " " + interimTranscript;
 
-                // TRUE VOICE INTERRUPTION: If the bot is speaking and the user says something, shut the bot up!
                 if (interimTranscript.length > 3 && agentState === 'speaking') {
                     audioPlayer.pause();
                     window.speechSynthesis.cancel();
-                    userSpeechBuffer = ''; // Reset buffer on interrupt
+                    userSpeechBuffer = ''; 
                     logMessage('system', 'You interrupted the assistant.');
                     updateState('listening', "Interrupted! Listening...");
                 }
 
-                // THE MOBILE FIX: Wait 1.5 seconds to see if they are done talking before sending
                 if (finalTranscript.trim()) {
                     userSpeechBuffer += (userSpeechBuffer ? " " : "") + finalTranscript.trim();
                     document.getElementById('usd-interim-text').innerText = userSpeechBuffer;
@@ -400,11 +392,10 @@
                     
                     speechTimeout = setTimeout(async () => {
                         const userText = userSpeechBuffer.trim();
-                        userSpeechBuffer = ''; // Reset for the next message
+                        userSpeechBuffer = ''; 
                         
                         if (userText.length < 2) return; 
 
-                        // Stop current audio instantly
                         audioPlayer.pause();
                         window.speechSynthesis.cancel();
 
@@ -422,7 +413,7 @@
                                 updateState('listening', "Listening...");
                             }
                         }
-                    }, 1500); // Wait 1.5 seconds of silence
+                    }, 1500); 
                 }
             };
 
@@ -438,7 +429,6 @@
             };
 
             recognition.onend = () => {
-                // Automatically restart if it drops (keeps it alive on mobile)
                 if (agentState === 'listening' || agentState === 'speaking') {
                     try { recognition.start(); } catch(e){}
                 }
