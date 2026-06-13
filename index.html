@@ -636,6 +636,7 @@
                 if (interimTranscript.trim() || finalTranscript.trim() || userSpeechBuffer.trim()) {
                     clearTimeout(speechTimeout); 
                     
+                    // FIXED: Dropped from 2500ms to 1200ms to make response lightning fast
                     speechTimeout = setTimeout(async () => {
                         if (interimTranscript.trim() && !finalTranscript.trim()) {
                             userSpeechBuffer += (userSpeechBuffer ? " " : "") + interimTranscript.trim();
@@ -686,7 +687,7 @@
                                 if (agentState !== 'off') updateState('listening', "Listening...");
                             }
                         }
-                    }, 2500); 
+                    }, 1200); // 1.2 Second fast-response timer
                 }
             };
 
