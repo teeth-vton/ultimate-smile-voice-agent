@@ -388,8 +388,8 @@
                     const stream = await navigator.mediaDevices.getUserMedia({ 
                         audio: {
                             echoCancellation: true,
-                            noiseSuppression: true,
-                            autoGainControl: true
+                            noiseSuppression: false, // FIXED: Whisper Needs RAW Audio
+                            autoGainControl: false   // FIXED: Prevents browser from muffling you
                         }
                     });
 
@@ -574,7 +574,8 @@
                 // EXTRA FEATURE: Start raw audio recording for Groq Whisper
                 if (window.mediaRecorder && window.mediaRecorder.state === 'inactive') {
                     window.audioChunks = [];
-                    window.mediaRecorder.start();
+                    // FIXED: Timeslice guarantees audio data is pushed immediately!
+                    window.mediaRecorder.start(250); 
                 }
             } else if (newState === 'thinking' || newState === 'connecting' || newState === 'speaking') {
                 try { recognition.stop(); } catch(e) {}
@@ -641,7 +642,7 @@
                     if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
                         window.mediaRecorder.stop();
                         window.audioChunks = [];
-                        setTimeout(() => { if (agentState === 'listening') window.mediaRecorder.start(); }, 50);
+                        setTimeout(() => { if (agentState === 'listening') window.mediaRecorder.start(250); }, 50);
                     }
                     return;
                 }
