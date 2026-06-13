@@ -374,7 +374,6 @@
                 
                 updateState('thinking', "Please allow microphone access...");
                 try {
-                    // FIXED: Laptop Microphone settings to boost weak internal mics
                     await navigator.mediaDevices.getUserMedia({ 
                         audio: {
                             echoCancellation: true,
@@ -522,9 +521,14 @@
                     }
                 }
 
+                // If final transcript generated, officially lock it into the buffer
+                if (finalTranscript.trim()) {
+                    userSpeechBuffer += (userSpeechBuffer ? " " : "") + finalTranscript.trim();
+                }
+
                 document.getElementById('usd-interim-text').innerText = userSpeechBuffer + " " + interimTranscript;
 
-                if (interimTranscript.length > 0 && agentState === 'listening') {
+                if ((interimTranscript.trim() || finalTranscript.trim()) && agentState === 'listening') {
                     updateState('listening', "User is speaking...");
                 }
 
@@ -532,20 +536,32 @@
                     audioPlayer.pause();
                     window.speechSynthesis.cancel();
                     userSpeechBuffer = ''; 
+                    interimTranscript = '';
+                    finalTranscript = '';
                     logMessage('system', 'You interrupted the assistant.');
                     updateState('listening', "Interrupted! Listening...");
+                    return;
                 }
 
-                if (finalTranscript.trim()) {
-                    userSpeechBuffer += (userSpeechBuffer ? " " : "") + finalTranscript.trim();
-                    document.getElementById('usd-interim-text').innerText = userSpeechBuffer;
+                // FIXED: Timer activates on ANY sound (interim or final) so it can NEVER get stuck!
+                if (interimTranscript.trim() || finalTranscript.trim() || userSpeechBuffer.trim()) {
                     clearTimeout(speechTimeout); 
                     
-                    // FIXED: Increased timeout to 2.5 seconds so it does not chop your sentences in half!
                     speechTimeout = setTimeout(async () => {
+                        // If it got stuck on an interim word, gracefully capture it before sending!
+                        if (interimTranscript.trim() && !finalTranscript.trim()) {
+                            userSpeechBuffer += (userSpeechBuffer ? " " : "") + interimTranscript.trim();
+                        }
+
                         const userText = userSpeechBuffer.trim();
                         userSpeechBuffer = ''; 
-                        if (userText.length < 2) return; 
+                        interimTranscript = '';
+                        
+                        if (userText.length < 2) {
+                            updateState('listening', "Listening...");
+                            document.getElementById('usd-interim-text').innerText = "";
+                            return; 
+                        }
 
                         audioPlayer.pause();
                         window.speechSynthesis.cancel();
@@ -559,7 +575,7 @@
                             logMessage('error', `Error: ${error.message}`);
                             if (agentState !== 'off') updateState('listening', "Listening...");
                         }
-                    }, 2500); 
+                    }, 2000); 
                 }
             };
 
