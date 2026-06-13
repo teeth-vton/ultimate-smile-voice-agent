@@ -306,7 +306,6 @@
         window.lastBotText = ''; 
         
         window.botEndTime = 0;
-        window.isHumanSpeaking = true; 
 
         window.mediaRecorder = null;
         window.audioChunks = [];
@@ -387,8 +386,8 @@
                     const stream = await navigator.mediaDevices.getUserMedia({ 
                         audio: {
                             echoCancellation: true,
-                            noiseSuppression: true, // RESTORED: Guarantees loud and clear signal
-                            autoGainControl: true   // RESTORED: Prevents quiet laptop mic issues
+                            noiseSuppression: true, 
+                            autoGainControl: true   
                         }
                     });
 
@@ -403,42 +402,11 @@
                         window.audioExt = 'wav';
                     }
 
+                    // FIXED: Removed the chunking timeslice so it records one solid file
                     window.mediaRecorder = new MediaRecorder(stream, options);
                     window.mediaRecorder.ondataavailable = event => {
                         if (event.data.size > 0) window.audioChunks.push(event.data);
                     };
-
-                    try {
-                        window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                        window.analyser = window.audioCtx.createAnalyser();
-                        window.analyser.fftSize = 1024;
-                        const source = window.audioCtx.createMediaStreamSource(stream);
-                        source.connect(window.analyser);
-                        window.freqData = new Uint8Array(window.analyser.frequencyBinCount);
-
-                        function checkFrequency() {
-                            if (agentState === 'listening') {
-                                window.analyser.getByteFrequencyData(window.freqData);
-                                const sampleRate = window.audioCtx.sampleRate;
-                                const binSize = sampleRate / window.analyser.fftSize;
-                                let humanEnergy = 0;
-                                
-                                const startBin = Math.floor(85 / binSize);
-                                const endBin = Math.ceil(255 / binSize);
-                                
-                                for (let i = startBin; i <= endBin; i++) {
-                                    humanEnergy += window.freqData[i];
-                                }
-                                
-                                window.isHumanSpeaking = (humanEnergy > 0);
-                            }
-                            requestAnimationFrame(checkFrequency);
-                        }
-                        checkFrequency();
-                    } catch (audioErr) {
-                        console.warn("Frequency analyzer not supported in this browser.");
-                        window.isHumanSpeaking = true; 
-                    }
 
                 } catch (err) {
                     updateState('listening', "Microphone denied. You can type.");
@@ -565,7 +533,7 @@
                 try { recognition.start(); } catch(e) {}
                 if (window.mediaRecorder && window.mediaRecorder.state === 'inactive') {
                     window.audioChunks = [];
-                    window.mediaRecorder.start(250); 
+                    window.mediaRecorder.start(); 
                 }
             } else if (newState === 'thinking' || newState === 'connecting' || newState === 'speaking') {
                 try { recognition.stop(); } catch(e) {}
@@ -590,8 +558,6 @@
                 }
 
                 if (Date.now() - window.botEndTime < 800) return;
-
-                if (!window.isHumanSpeaking) return;
 
                 if (agentState === 'speaking' && (interimTranscript.trim() || finalTranscript.trim())) {
                     let checkText = (interimTranscript + " " + finalTranscript).toLowerCase().replace(/[^a-zA-Z0-9\s\u0900-\u097F\u0A80-\u0AFF]/g, '').trim();
@@ -631,7 +597,7 @@
                     if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
                         window.mediaRecorder.stop();
                         window.audioChunks = [];
-                        setTimeout(() => { if (agentState === 'listening') window.mediaRecorder.start(250); }, 50);
+                        setTimeout(() => { if (agentState === 'listening') window.mediaRecorder.start(); }, 50);
                     }
                     return;
                 }
@@ -670,6 +636,8 @@
                                     }
                                 };
                             };
+                            // FIXED: Explicitly pull the remaining chunks before stopping
+                            try { window.mediaRecorder.requestData(); } catch(e){}
                             window.mediaRecorder.stop();
                         } else {
                             if (userText.length < 2) {
