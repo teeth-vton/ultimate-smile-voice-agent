@@ -94,9 +94,10 @@
             width: 3px;
             background: #D4AF37;
             border-radius: 3px;
-            height: 4px;
+            height: 4px; /* Flat state when not speaking */
             transition: height 0.2s ease;
         }
+        /* Animate ONLY when .active is added (when bot speaks) */
         #usd-visualizer.active .usd-bar {
             animation: usd-sound 0.4s ease-in-out infinite alternate;
         }
@@ -133,6 +134,7 @@
         .msg-bot { color: #D4AF37; text-align: left; }
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
         .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; }
+        
         #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
         #usd-input-container {
             display: flex;
@@ -202,6 +204,7 @@
         .usd-star { font-size: 30px; color: #444; transition: color 0.2s; }
         .usd-star:hover, .usd-star.active { color: #FFD700; }
         #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
+        /* NEW: END CONFIRMATION OVERLAY */
         #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -305,6 +308,10 @@
         window.botEndTime = 0;
         window.isHumanSpeaking = true; 
 
+        // EXTRA FEATURE: Variables for Groq Whisper Audio Recording
+        window.mediaRecorder = null;
+        window.audioChunks = [];
+
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
@@ -384,6 +391,12 @@
                             autoGainControl: true
                         }
                     });
+
+                    // EXTRA FEATURE: Initialize Whisper Audio Recorder
+                    window.mediaRecorder = new MediaRecorder(stream);
+                    window.mediaRecorder.ondataavailable = event => {
+                        if (event.data.size > 0) window.audioChunks.push(event.data);
+                    };
 
                     try {
                         window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -545,7 +558,12 @@
 
             if (newState === 'listening') {
                 try { recognition.start(); } catch(e) {}
-            } else if (newState === 'thinking' || newState === 'connecting') {
+                // EXTRA FEATURE: Start raw audio recording for Groq Whisper
+                if (window.mediaRecorder && window.mediaRecorder.state === 'inactive') {
+                    window.audioChunks = [];
+                    window.mediaRecorder.start();
+                }
+            } else if (newState === 'thinking' || newState === 'connecting' || newState === 'speaking') {
                 try { recognition.stop(); } catch(e) {}
             }
         }
@@ -606,6 +624,12 @@
                     finalTranscript = '';
                     logMessage('system', 'You interrupted the assistant.');
                     updateState('listening', "Interrupted! Listening...");
+                    // Restart recorder to trash echo
+                    if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
+                        window.mediaRecorder.stop();
+                        window.audioChunks = [];
+                        setTimeout(() => { if (agentState === 'listening') window.mediaRecorder.start(); }, 50);
+                    }
                     return;
                 }
 
@@ -621,23 +645,46 @@
                         userSpeechBuffer = ''; 
                         interimTranscript = '';
                         
-                        if (userText.length < 2) {
-                            updateState('listening', "Listening...");
-                            document.getElementById('usd-interim-text').innerText = "";
-                            return; 
-                        }
+                        // EXTRA FEATURE: Route audio to Groq Whisper if we recorded enough
+                        if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
+                            audioPlayer.pause();
+                            window.speechSynthesis.cancel();
+                            document.getElementById('usd-interim-text').innerText = "Processing audio...";
+                            updateState('thinking', "Assistant is replying...");
 
-                        audioPlayer.pause();
-                        window.speechSynthesis.cancel();
-                        logMessage('user', userText);
-                        document.getElementById('usd-interim-text').innerText = "";
-                        updateState('thinking', "Assistant is replying...");
-                        
-                        try {
-                            await processTurnThroughBackend(userText);
-                        } catch (error) {
-                            logMessage('error', `Error: ${error.message}`);
-                            if (agentState !== 'off') updateState('listening', "Listening...");
+                            window.mediaRecorder.onstop = async () => {
+                                const audioBlob = new Blob(window.audioChunks, { type: 'audio/webm' });
+                                const reader = new FileReader();
+                                reader.readAsDataURL(audioBlob);
+                                reader.onloadend = async () => {
+                                    const base64Audio = reader.result.split(',')[1];
+                                    try {
+                                        await processTurnThroughBackend(userText, base64Audio);
+                                    } catch (error) {
+                                        logMessage('error', `Error: ${error.message}`);
+                                        if (agentState !== 'off') updateState('listening', "Listening...");
+                                    }
+                                };
+                            };
+                            window.mediaRecorder.stop();
+                        } else {
+                            if (userText.length < 2) {
+                                updateState('listening', "Listening...");
+                                document.getElementById('usd-interim-text').innerText = "";
+                                return; 
+                            }
+                            audioPlayer.pause();
+                            window.speechSynthesis.cancel();
+                            logMessage('user', userText);
+                            document.getElementById('usd-interim-text').innerText = "";
+                            updateState('thinking', "Assistant is replying...");
+                            
+                            try {
+                                await processTurnThroughBackend(userText);
+                            } catch (error) {
+                                logMessage('error', `Error: ${error.message}`);
+                                if (agentState !== 'off') updateState('listening', "Listening...");
+                            }
                         }
                     }, 2500); 
                 }
@@ -661,20 +708,27 @@
             };
         }
 
-        async function processTurnThroughBackend(userText) {
+        async function processTurnThroughBackend(userText, audioBase64 = null) {
             const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat"; 
             
+            const payload = { userText: userText, history: chatHistory };
+            if (audioBase64) payload.audioBase64 = audioBase64; // EXTRA FEATURE: Push audio to backend
+
             const response = await fetch(BACKEND_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userText: userText, history: chatHistory })
+                body: JSON.stringify(payload)
             });
             
             if (!response.ok) throw new Error("Vercel Server Unreachable.");
             const data = await response.json();
             if (data.error) throw new Error(data.error);
 
-            chatHistory.push({ role: "user", parts: [{ text: userText }] });
+            // EXTRA FEATURE: Whisper provides the actual correct text over the browser's broken text
+            const finalInputText = data.transcribedText || userText;
+            if (audioBase64) logMessage('user', finalInputText); 
+
+            chatHistory.push({ role: "user", parts: [{ text: finalInputText }] });
             chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
 
             let finalBotReply = data.replyText;
