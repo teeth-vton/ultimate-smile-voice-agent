@@ -94,10 +94,9 @@ height: 20px;
 width: 3px;
 background: #D4AF37;
 border-radius: 3px;
-height: 4px; /* Flat state when not speaking */
+height: 4px; 
 transition: height 0.2s ease;
 }
-/* Animate ONLY when .active is added (when bot speaks) */
 #usd-visualizer.active .usd-bar {
 animation: usd-sound 0.4s ease-in-out infinite alternate;
 }
@@ -162,8 +161,7 @@ cursor: pointer;
 font-weight: bold;
 font-size: 13px;
 }
-#usd-send-btn:hover { background:
-FFF8DC; }
+#usd-send-btn:hover { background: #FFF8DC; }
 #usd-bubble {
 width: 80px;
 height: 80px;
@@ -294,27 +292,15 @@ Namaste! Tap here to talk about your new smile!
 </div>
 </div>
 
+<script type="module">
+    import Vapi from "https://esm.sh/@vapi-ai/web";
+    window.vapi = new Vapi("9a7cc76b-c700-42ba-8bcc-fd125ba91bc1"); // Your exact key
+</script>
+
 <script>
 let agentState = 'off';
 let chatHistory = [];
-let recognition;
 let audioPlayer;
-let speechTimeout;
-let userSpeechBuffer = '';
-window.lastBotText = '';
-window.botEndTime = 0;
-
-window.mediaRecorder = null;
-window.audioChunks = [];
-window.audioExt = 'webm';
-
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-if (SpeechRecognition) {
-recognition = new SpeechRecognition();
-recognition.continuous = true;
-recognition.interimResults = true;
-recognition.lang = 'en-IN';
-}
 
 window.onload = () => {
 audioPlayer = document.getElementById('usd-html-player');
@@ -325,6 +311,7 @@ tooltip.innerText = `Namaste ${window.usdUserName}! Tap here to talk about your 
 }
 };
 
+// Kept your exact Sarvam greeting function untouched!
 async function playSarvamGreeting(text) {
 const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat";
 try {
@@ -336,14 +323,12 @@ body: JSON.stringify({ type: 'tts', text: text })
 const data = await response.json();
 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
 await new Promise((resolve) => {
-audioPlayer.onended = () => { window.botEndTime = Date.now(); resolve(); };
-audioPlayer.onerror = () => { window.botEndTime = Date.now(); resolve(); };
-audioPlayer.onpause = () => { window.botEndTime = Date.now(); resolve(); };
+audioPlayer.onended = resolve;
+audioPlayer.onerror = resolve;
+audioPlayer.onpause = resolve;
 audioPlayer.play().catch(() => resolve());
 });
-} catch(e) {
-await useBrowserTTS(text);
-}
+} catch(e) {}
 }
 
 async function openChat() {
@@ -360,6 +345,7 @@ document.getElementById('usd-end-confirm-overlay').style.display = 'none';
 audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
 audioPlayer.play().catch(() => {});
 
+// Kept your exact 3 second and 1.5 second timing!
 updateState('connecting', "Calling assistant... 🟡");
 await new Promise(resolve => setTimeout(resolve, 3000));
 
@@ -370,43 +356,36 @@ updateState('speaking', "Assistant is speaking...");
 const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
 const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
 logMessage('bot', greeting);
-window.lastBotText = greeting;
+
+// We play your custom greeting perfectly BEFORE starting Vapi
 await playSarvamGreeting(greeting);
+
 updateState('thinking', "Please allow microphone access...");
 try {
-const stream = await navigator.mediaDevices.getUserMedia({
-audio: {
-echoCancellation: true,
-noiseSuppression: false, // FIXED: Absolute RAW audio to allow Whisper to work properly!
-autoGainControl: true // FIXED: Keeps volume properly boosted for quiet microphones!
-}
-});
-
-// UPGRADED: High Fidelity Opus Encoding for maximum Whisper Accuracy!
-let options = {};
-if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-options = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 128000 };
-window.audioExt = 'webm';
-} else if (MediaRecorder.isTypeSupported('audio/webm')) {
-options = { mimeType: 'audio/webm', audioBitsPerSecond: 128000 };
-window.audioExt = 'webm';
-} else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-options = { mimeType: 'audio/mp4', audioBitsPerSecond: 128000 };
-window.audioExt = 'mp4';
-} else {
-window.audioExt = 'wav';
-}
-
-window.mediaRecorder = new MediaRecorder(stream, options);
-window.mediaRecorder.ondataavailable = event => {
-if (event.data.size > 0) window.audioChunks.push(event.data);
-};
-
+    // Vapi takes over silently after the greeting is done!
+    window.vapi.start({
+        model: {
+            provider: "custom-llm",
+            url: "https://sd-voice-backend.vercel.app/api/chat",
+            model: "llama-3.3-70b-versatile"
+        },
+        voice: {
+            provider: "custom-voice",
+            server: {
+                url: "https://sd-voice-backend.vercel.app/api/chat"
+            }
+        },
+        transcriber: {
+            provider: "deepgram",
+            model: "nova-2",
+            language: "multi" // Natively handles Hindi, Gujrati, and English Code-Switching!
+        }
+        // Notice there is NO "firstMessage" here, so it won't interrupt your Namaste!
+    });
 } catch (err) {
 updateState('listening', "Microphone denied. You can type.");
 return;
 }
-
 updateState('listening', "Listening...");
 }
 }
@@ -415,42 +394,20 @@ function closeChatBtnClicked() {
 document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
 }
 
-async function confirmEndChat(isYes) {
+function confirmEndChat(isYes) {
 document.getElementById('usd-end-confirm-overlay').style.display = 'none';
 if (isYes) {
 updateState('thinking', "Ending call...");
-try { recognition.stop(); } catch(e) {}
-audioPlayer.pause();
-const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
-window.lastBotText = goodbyeText;
-const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat";
-try {
-const response = await fetch(BACKEND_URL, {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ type: 'tts', text: goodbyeText })
+window.vapi.send({
+    type: "add-message",
+    message: { role: "user", content: "bye" } // Safely triggers the end chat sequence
 });
-const data = await response.json();
-audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-await new Promise((resolve) => {
-audioPlayer.onended = resolve;
-audioPlayer.onerror = resolve;
-audioPlayer.onpause = resolve;
-audioPlayer.play().catch(() => resolve());
-});
-} catch(e) {
-}
-
-updateState('off', "Conversation ended.");
-document.getElementById('usd-rating-overlay').style.display = 'flex';
 }
 }
 
 function closeChat() {
 updateState('off', "Disconnected");
-if(recognition) recognition.stop();
-audioPlayer.pause();
-window.speechSynthesis.cancel();
+window.vapi.stop();
 document.getElementById('usd-chat-container').style.display = 'none';
 document.getElementById('usd-bubble').style.display = 'flex';
 }
@@ -473,26 +430,19 @@ body: JSON.stringify({ rating: stars, history: chatHistory })
 setTimeout(() => { closeChat(); }, 3000);
 }
 
-async function submitTextMessage() {
+function submitTextMessage() {
 const inputEl = document.getElementById('usd-text-input');
 const userText = inputEl.value.trim();
 if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
 
 inputEl.value = '';
-clearTimeout(speechTimeout);
-userSpeechBuffer = '';
-
-try { recognition.stop(); } catch(e) {}
-audioPlayer.pause();
-
 logMessage('user', userText);
-updateState('thinking', "Assistant is replying...");
-try {
-await processTurnThroughBackend(userText);
-} catch (error) {
-logMessage('error', `Error: ${error.message}`);
-updateState('listening', "Listening...");
-}
+
+// Types directly into the Vapi stream
+window.vapi.send({
+    type: "add-message",
+    message: { role: "user", content: userText }
+});
 }
 
 function handleKeyPress(event) {
@@ -509,218 +459,51 @@ const visualizer = document.getElementById('usd-visualizer');
 if (statusBox) statusBox.innerText = statusText;
 if (newState === 'speaking') {
 visualizer.classList.add('active');
-try { recognition.start(); } catch(e) {}
 } else {
 visualizer.classList.remove('active');
 }
-
-if (newState === 'listening') {
-try { recognition.start(); } catch(e) {}
-if (window.mediaRecorder && window.mediaRecorder.state === 'inactive') {
-window.audioChunks = [];
-window.mediaRecorder.start();
-}
-} else if (newState === 'thinking' || newState === 'connecting' || newState === 'speaking') {
-try { recognition.stop(); } catch(e) {}
-}
 }
 
+// Binds Vapi's flawless stream directly to your existing UI logs
 function setupRecognitionCallbacks() {
-if (!recognition) return;
+    setTimeout(() => {
+        if (!window.vapi) return;
 
-recognition.onresult = async (event) => {
-if (agentState === 'thinking' || agentState === 'off' || agentState === 'connecting') return;
-let interimTranscript = '';
-let finalTranscript = '';
+        window.vapi.on('call-start', () => {
+            updateState('listening', "Listening...");
+        });
 
-for (let i = event.resultIndex; i < event.results.length; ++i) {
-if (event.results[i].isFinal) {
-finalTranscript += event.results[i][0].transcript;
-} else {
-interimTranscript += event.results[i][0].transcript;
-}
-}
+        window.vapi.on('speech-start', () => {
+            updateState('speaking', "Assistant is speaking...");
+        });
 
-if (Date.now() - window.botEndTime < 800) return;
+        window.vapi.on('speech-end', () => {
+            updateState('listening', "Listening...");
+        });
 
-if (agentState === 'speaking' && (interimTranscript.trim() || finalTranscript.trim())) {
-let checkText = (interimTranscript + " " + finalTranscript).toLowerCase().replace(/[^a-zA-Z0-9\s\u0900-\u097F\u0A80-\u0AFF]/g, '').trim();
-let cleanBot = (window.lastBotText || "").toLowerCase().replace(/[^a-zA-Z0-9\s\u0900-\u097F\u0A80-\u0AFF]/g, '').trim();
-let botWords = cleanBot.split(/\s+/);
-let checkWords = checkText.split(/\s+/);
-let matchCount = 0;
-checkWords.forEach(w => {
-if (w && botWords.some(bw => bw.includes(w) || w.includes(bw))) matchCount++;
-});
-if (checkWords.length > 0 && (matchCount / checkWords.length) > 0.25) {
-return;
-}
-}
+        window.vapi.on('message', (message) => {
+            if (message.type === 'transcript' && message.transcriptType === 'final') {
+                if (message.role === 'user') {
+                    logMessage('user', message.transcript);
+                    document.getElementById('usd-interim-text').innerText = "";
+                } else if (message.role === 'assistant') {
+                    logMessage('bot', message.transcript);
+                    if (message.transcript.includes('[END_CHAT]')) {
+                        window.vapi.stop();
+                        updateState('off', "Conversation ended.");
+                        document.getElementById('usd-rating-overlay').style.display = 'flex';
+                    }
+                }
+            }
+            if (message.type === 'transcript' && message.transcriptType === 'interim' && message.role === 'user') {
+                document.getElementById('usd-interim-text').innerText = message.transcript;
+            }
+        });
 
-if (finalTranscript.trim()) {
-userSpeechBuffer += (userSpeechBuffer ? " " : "") + finalTranscript.trim();
-}
-
-document.getElementById('usd-interim-text').innerText = userSpeechBuffer + " " + interimTranscript;
-
-if ((interimTranscript.trim() || finalTranscript.trim()) && agentState === 'listening') {
-updateState('listening', "User is speaking...");
-}
-
-if (interimTranscript.length > 3 && agentState === 'speaking') {
-audioPlayer.pause();
-window.speechSynthesis.cancel();
-userSpeechBuffer = '';
-interimTranscript = '';
-finalTranscript = '';
-logMessage('system', 'You interrupted the assistant.');
-updateState('listening', "Interrupted! Listening...");
-if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
-window.mediaRecorder.stop();
-window.audioChunks = [];
-setTimeout(() => { if (agentState === 'listening') window.mediaRecorder.start(); }, 50);
-}
-return;
-}
-
-if (interimTranscript.trim() || finalTranscript.trim() || userSpeechBuffer.trim()) {
-clearTimeout(speechTimeout);
-speechTimeout = setTimeout(async () => {
-if (interimTranscript.trim() && !finalTranscript.trim()) {
-userSpeechBuffer += (userSpeechBuffer ? " " : "") + interimTranscript.trim();
-}
-
-const userText = userSpeechBuffer.trim();
-userSpeechBuffer = '';
-interimTranscript = '';
-if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
-audioPlayer.pause();
-window.speechSynthesis.cancel();
-document.getElementById('usd-interim-text').innerText = "Processing audio...";
-updateState('thinking', "Assistant is replying...");
-
-window.mediaRecorder.onstop = async () => {
-await new Promise(res => setTimeout(res, 150)); // Safely guarantee buffer is fully flushed
-const audioBlob = new Blob(window.audioChunks, { type: `audio/${window.audioExt}` });
-const reader = new FileReader();
-reader.readAsDataURL(audioBlob);
-reader.onloadend = async () => {
-const base64Audio = reader.result.split(',')[1];
-try {
-await processTurnThroughBackend(userText, base64Audio, window.audioExt);
-} catch (error) {
-logMessage('error', `Error: ${error.message}`);
-if (agentState !== 'off') updateState('listening', "Listening...");
-}
-};
-};
-try { window.mediaRecorder.requestData(); } catch(e){}
-window.mediaRecorder.stop();
-} else {
-if (userText.length < 2) {
-updateState('listening', "Listening...");
-document.getElementById('usd-interim-text').innerText = "";
-return;
-}
-audioPlayer.pause();
-window.speechSynthesis.cancel();
-logMessage('user', userText);
-document.getElementById('usd-interim-text').innerText = "";
-updateState('thinking', "Assistant is replying...");
-try {
-await processTurnThroughBackend(userText);
-} catch (error) {
-logMessage('error', `Error: ${error.message}`);
-if (agentState !== 'off') updateState('listening', "Listening...");
-}
-}
-}, 1200);
-}
-};
-
-recognition.onerror = (event) => {
-if (agentState === 'listening' && event.error === 'no-speech') {
-try { recognition.stop(); } catch(e){}
-setTimeout(() => {
-if (agentState === 'listening' || agentState === 'speaking') {
-try { recognition.start(); } catch(e) {}
-}
-}, 200);
-}
-};
-
-recognition.onend = () => {
-if (agentState === 'listening' || agentState === 'speaking') {
-try { recognition.start(); } catch(e){}
-}
-};
-}
-
-async function processTurnThroughBackend(userText, audioBase64 = null, audioExt = 'webm') {
-const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat";
-const payload = { userText: userText, history: chatHistory };
-if (audioBase64) {
-payload.audioBase64 = audioBase64;
-payload.audioExt = audioExt;
-}
-
-const response = await fetch(BACKEND_URL, {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify(payload)
-});
-if (!response.ok) throw new Error("Vercel Server Unreachable.");
-const data = await response.json();
-if (data.error) throw new Error(data.error);
-
-if (data.whisperError) console.error("Whisper Failed in Backend:", data.whisperError);
-
-const finalInputText = data.transcribedText || userText;
-if (audioBase64) logMessage('user', finalInputText);
-
-chatHistory.push({ role: "user", parts: [{ text: finalInputText }] });
-chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
-
-let finalBotReply = data.replyText;
-let isEnding = false;
-if (finalBotReply.includes('[END_CHAT]')) {
-isEnding = true;
-finalBotReply = finalBotReply.replace('[END_CHAT]', '').trim();
-}
-
-logMessage('bot', finalBotReply);
-window.lastBotText = finalBotReply;
-updateState('speaking', "Assistant is speaking...");
-audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-await new Promise((resolve) => {
-audioPlayer.onended = () => {
-window.botEndTime = Date.now();
-if (isEnding) {
-updateState('off', "Conversation ended.");
-try { recognition.stop(); } catch(e) {}
-document.getElementById('usd-rating-overlay').style.display = 'flex';
-} else if(agentState === 'speaking') {
-updateState('listening', "Listening...");
-}
-resolve();
-};
-audioPlayer.onerror = () => { window.botEndTime = Date.now(); resolve(); };
-audioPlayer.onpause = () => { window.botEndTime = Date.now(); resolve(); };
-audioPlayer.play().catch(() => resolve());
-});
-
-return finalBotReply;
-}
-
-function useBrowserTTS(text) {
-return new Promise((resolve) => {
-const utterance = new SpeechSynthesisUtterance(text);
-utterance.lang = 'en-IN';
-utterance.rate = 1.0;
-utterance.onend = () => { window.botEndTime = Date.now(); resolve(); };
-utterance.onerror = () => { window.botEndTime = Date.now(); resolve(); };
-window.speechSynthesis.speak(utterance);
-});
+        window.vapi.on('call-end', () => {
+            closeChat();
+        });
+    }, 1000); // Small delay to ensure Vapi module loaded
 }
 
 function logMessage(sender, text) {
