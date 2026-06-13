@@ -678,6 +678,8 @@
 
         let userSpeechBuffer = ''; 
 
+        window.lastBotText = ''; // New alignment variable tracking bot responses globally
+
 
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -761,7 +763,6 @@
 
 
         // OPEN CHAT FUNCTION
-
         async function openChat() {
 
             const container = document.getElementById('usd-chat-container');
@@ -818,6 +819,8 @@
 
                 logMessage('bot', greeting);
 
+                window.lastBotText = greeting; // Track the initial greeting text
+
                 // NEW: Use Sarvam API for greeting instead of robotic browser voice
 
                 await playSarvamGreeting(greeting); 
@@ -828,7 +831,21 @@
 
                 try {
 
-                    await navigator.mediaDevices.getUserMedia({ audio: true });
+                    // UPDATED: Activating absolute hardware Echo Cancellation constraints
+
+                    await navigator.mediaDevices.getUserMedia({ 
+
+                        audio: {
+
+                            echoCancellation: true,
+
+                            noiseSuppression: true,
+
+                            autoGainControl: true
+
+                        }
+
+                    });
 
                 } catch (err) {
 
@@ -931,7 +948,6 @@
                     headers: { 'Content-Type': 'application/json' },
 
                     body: JSON.stringify({ rating: stars, history: chatHistory })
-
                 });
 
             } catch(e) { console.error("Failed to send rating"); }
@@ -1077,6 +1093,46 @@
                     } else {
 
                         interimTranscript += event.results[i][0].transcript;
+
+                    }
+
+                }
+
+
+
+                // NEW: Software Overlap Guard Filter
+
+                // If assistant is speaking, confirm if the text coming through the microphone is just echo feedback
+
+                if (agentState === 'speaking' && (interimTranscript.trim() || finalTranscript.trim())) {
+
+                    let checkText = (interimTranscript + " " + finalTranscript).toLowerCase().replace(/[^a-zA-Z0-9\s\u0900-\u097F\u0A80-\u0AFF]/g, '').trim();
+
+                    let cleanBot = (window.lastBotText || "").toLowerCase().replace(/[^a-zA-Z0-9\s\u0900-\u097F\u0A80-\u0AFF]/g, '').trim();
+
+                    
+
+                    let botWords = cleanBot.split(/\s+/);
+
+                    let checkWords = checkText.split(/\s+/);
+
+                    let matchCount = 0;
+
+                    
+
+                    checkWords.forEach(w => {
+
+                        if (w && botWords.some(bw => bw.includes(w) || w.includes(bw))) matchCount++;
+
+                    });
+
+                    
+
+                    // If more than 25% of words overlap, it is verified speaker echo. Safely ignore it.
+
+                    if (checkWords.length > 0 && (matchCount / checkWords.length) > 0.25) {
+
+                        return; 
 
                     }
 
@@ -1249,6 +1305,8 @@
 
 
             logMessage('bot', finalBotReply);
+
+            window.lastBotText = finalBotReply; // Globally track latest reply text for precise software echo filtration
 
             updateState('speaking', "Assistant is speaking...");
 
