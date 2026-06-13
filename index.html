@@ -308,10 +308,9 @@
         window.botEndTime = 0;
         window.isHumanSpeaking = true; 
 
-        // EXTRA FEATURE: Variables for Groq Whisper Audio Recording
         window.mediaRecorder = null;
         window.audioChunks = [];
-        window.audioExt = 'webm'; // Default
+        window.audioExt = 'webm'; 
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
@@ -388,12 +387,11 @@
                     const stream = await navigator.mediaDevices.getUserMedia({ 
                         audio: {
                             echoCancellation: true,
-                            noiseSuppression: false, // FIXED: Whisper Needs RAW Audio
-                            autoGainControl: false   // FIXED: Prevents browser from muffling you
+                            noiseSuppression: true, // RESTORED: Guarantees loud and clear signal
+                            autoGainControl: true   // RESTORED: Prevents quiet laptop mic issues
                         }
                     });
 
-                    // SMART AUDIO DETECTION: Ensure Safari/iOS sends mp4 to prevent Whisper rejection!
                     let options = {};
                     if (MediaRecorder.isTypeSupported('audio/webm')) {
                         options = { mimeType: 'audio/webm' };
@@ -405,7 +403,6 @@
                         window.audioExt = 'wav';
                     }
 
-                    // EXTRA FEATURE: Initialize Whisper Audio Recorder safely
                     window.mediaRecorder = new MediaRecorder(stream, options);
                     window.mediaRecorder.ondataavailable = event => {
                         if (event.data.size > 0) window.audioChunks.push(event.data);
@@ -456,20 +453,17 @@
             document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
         }
 
-        // FIXED: 100% Bulletproof Exit & Rating Menu Logic
         async function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
                 updateState('thinking', "Ending call...");
                 
-                // Immediately shut off the microphone and audio
                 try { recognition.stop(); } catch(e) {}
                 audioPlayer.pause();
                 
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
                 window.lastBotText = goodbyeText;
                 
-                // Force a seamless goodbye audio without relying on Groq
                 const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat"; 
                 try {
                     const response = await fetch(BACKEND_URL, {
@@ -486,10 +480,8 @@
                         audioPlayer.play().catch(() => resolve());
                     });
                 } catch(e) {
-                    // Ignore errors, we still want the rating menu to pop up
                 }
 
-                // Deterministically guarantee the rating menu pops up!
                 updateState('off', "Conversation ended.");
                 document.getElementById('usd-rating-overlay').style.display = 'flex';
             }
@@ -571,10 +563,8 @@
 
             if (newState === 'listening') {
                 try { recognition.start(); } catch(e) {}
-                // EXTRA FEATURE: Start raw audio recording for Groq Whisper
                 if (window.mediaRecorder && window.mediaRecorder.state === 'inactive') {
                     window.audioChunks = [];
-                    // FIXED: Timeslice guarantees audio data is pushed immediately!
                     window.mediaRecorder.start(250); 
                 }
             } else if (newState === 'thinking' || newState === 'connecting' || newState === 'speaking') {
@@ -638,7 +628,6 @@
                     finalTranscript = '';
                     logMessage('system', 'You interrupted the assistant.');
                     updateState('listening', "Interrupted! Listening...");
-                    // Restart recorder to trash echo
                     if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
                         window.mediaRecorder.stop();
                         window.audioChunks = [];
@@ -650,7 +639,6 @@
                 if (interimTranscript.trim() || finalTranscript.trim() || userSpeechBuffer.trim()) {
                     clearTimeout(speechTimeout); 
                     
-                    // Dropped to 1200ms to make response lightning fast
                     speechTimeout = setTimeout(async () => {
                         if (interimTranscript.trim() && !finalTranscript.trim()) {
                             userSpeechBuffer += (userSpeechBuffer ? " " : "") + interimTranscript.trim();
@@ -660,7 +648,6 @@
                         userSpeechBuffer = ''; 
                         interimTranscript = '';
                         
-                        // EXTRA FEATURE: Route audio to Groq Whisper safely
                         if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
                             audioPlayer.pause();
                             window.speechSynthesis.cancel();
@@ -668,7 +655,6 @@
                             updateState('thinking', "Assistant is replying...");
 
                             window.mediaRecorder.onstop = async () => {
-                                // Add small delay to ensure chunks flush properly from browser memory
                                 await new Promise(res => setTimeout(res, 50)); 
                                 
                                 const audioBlob = new Blob(window.audioChunks, { type: `audio/${window.audioExt}` });
@@ -732,7 +718,7 @@
             const payload = { userText: userText, history: chatHistory };
             if (audioBase64) {
                 payload.audioBase64 = audioBase64; 
-                payload.audioExt = audioExt; // Pass the safe extension to the backend
+                payload.audioExt = audioExt; 
             }
 
             const response = await fetch(BACKEND_URL, {
@@ -745,10 +731,8 @@
             const data = await response.json();
             if (data.error) throw new Error(data.error);
 
-            // Log if Whisper failed so we can see it in the UI console
             if (data.whisperError) console.error("Whisper Failed in Backend:", data.whisperError);
 
-            // EXTRA FEATURE: Whisper provides the actual correct text over the browser's broken text
             const finalInputText = data.transcribedText || userText;
             if (audioBase64) logMessage('user', finalInputText); 
 
