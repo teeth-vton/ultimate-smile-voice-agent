@@ -386,23 +386,26 @@
                     const stream = await navigator.mediaDevices.getUserMedia({ 
                         audio: {
                             echoCancellation: true,
-                            noiseSuppression: true, 
-                            autoGainControl: true   
+                            noiseSuppression: false, // FIXED: Absolute RAW audio to allow Whisper to work properly!
+                            autoGainControl: true    // FIXED: Keeps volume properly boosted for quiet microphones!
                         }
                     });
 
+                    // UPGRADED: High Fidelity Opus Encoding for maximum Whisper Accuracy!
                     let options = {};
-                    if (MediaRecorder.isTypeSupported('audio/webm')) {
-                        options = { mimeType: 'audio/webm' };
+                    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                        options = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 128000 };
+                        window.audioExt = 'webm';
+                    } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+                        options = { mimeType: 'audio/webm', audioBitsPerSecond: 128000 };
                         window.audioExt = 'webm';
                     } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                        options = { mimeType: 'audio/mp4' };
+                        options = { mimeType: 'audio/mp4', audioBitsPerSecond: 128000 };
                         window.audioExt = 'mp4';
                     } else {
                         window.audioExt = 'wav';
                     }
 
-                    // FIXED: Removed the chunking timeslice so it records one solid file
                     window.mediaRecorder = new MediaRecorder(stream, options);
                     window.mediaRecorder.ondataavailable = event => {
                         if (event.data.size > 0) window.audioChunks.push(event.data);
@@ -621,7 +624,7 @@
                             updateState('thinking', "Assistant is replying...");
 
                             window.mediaRecorder.onstop = async () => {
-                                await new Promise(res => setTimeout(res, 50)); 
+                                await new Promise(res => setTimeout(res, 150)); // Safely guarantee buffer is fully flushed
                                 
                                 const audioBlob = new Blob(window.audioChunks, { type: `audio/${window.audioExt}` });
                                 const reader = new FileReader();
@@ -636,7 +639,6 @@
                                     }
                                 };
                             };
-                            // FIXED: Explicitly pull the remaining chunks before stopping
                             try { window.mediaRecorder.requestData(); } catch(e){}
                             window.mediaRecorder.stop();
                         } else {
