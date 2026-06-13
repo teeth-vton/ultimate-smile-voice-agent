@@ -94,10 +94,9 @@
             width: 3px;
             background: #D4AF37;
             border-radius: 3px;
-            height: 4px; /* Flat state when not speaking */
+            height: 4px;
             transition: height 0.2s ease;
         }
-        /* Animate ONLY when .active is added (when bot speaks) */
         #usd-visualizer.active .usd-bar {
             animation: usd-sound 0.4s ease-in-out infinite alternate;
         }
@@ -204,7 +203,6 @@
         .usd-star { font-size: 30px; color: #444; transition: color 0.2s; }
         .usd-star:hover, .usd-star.active { color: #FFD700; }
         #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
-        /* NEW: END CONFIRMATION OVERLAY */
         #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -237,10 +235,11 @@
 
     <script>
         window.usdUserName = "Guest"; 
+        window.agentState = 'off';
     </script>
 
     <div id="usd-voice-widget">
-        <div id="usd-tooltip" onclick="openChat()">
+        <div id="usd-tooltip" onclick="window.openChat()">
             Namaste! Tap here to talk about your new smile!
         </div>
 
@@ -248,11 +247,11 @@
             <div id="usd-rating-overlay">
                 <div id="usd-rating-title">Rate your experience with USD Agent</div>
                 <div class="usd-stars">
-                    <span class="usd-star" onclick="submitRating(1)">★</span>
-                    <span class="usd-star" onclick="submitRating(2)">★</span>
-                    <span class="usd-star" onclick="submitRating(3)">★</span>
-                    <span class="usd-star" onclick="submitRating(4)">★</span>
-                    <span class="usd-star" onclick="submitRating(5)">★</span>
+                    <span class="usd-star" onclick="window.submitRating(1)">★</span>
+                    <span class="usd-star" onclick="window.submitRating(2)">★</span>
+                    <span class="usd-star" onclick="window.submitRating(3)">★</span>
+                    <span class="usd-star" onclick="window.submitRating(4)">★</span>
+                    <span class="usd-star" onclick="window.submitRating(5)">★</span>
                 </div>
                 <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
             </div>
@@ -260,8 +259,8 @@
             <div id="usd-end-confirm-overlay">
                 <div class="usd-confirm-title">Want to end the call?</div>
                 <div class="usd-confirm-btns">
-                    <button class="usd-btn-yes" onclick="confirmEndChat(true)">Yes</button>
-                    <button class="usd-btn-no" onclick="confirmEndChat(false)">No</button>
+                    <button class="usd-btn-yes" onclick="window.confirmEndChat(true)">Yes</button>
+                    <button class="usd-btn-no" onclick="window.confirmEndChat(false)">No</button>
                 </div>
             </div>
 
@@ -274,7 +273,7 @@
                     <div id="usd-visualizer">
                         <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
                     </div>
-                    <button id="usd-close-btn" onclick="closeChatBtnClicked()">✕</button>
+                    <button id="usd-close-btn" onclick="window.closeChatBtnClicked()">✕</button>
                 </div>
             </div>
 
@@ -282,12 +281,12 @@
             <div id="usd-interim-text"></div>
             
             <div id="usd-input-container">
-                <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
-                <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
+                <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="window.handleKeyPress(event)">
+                <button type="button" id="usd-send-btn" onclick="window.submitTextMessage()">Send</button>
             </div>
         </div>
         
-        <div id="usd-bubble" onclick="openChat()">
+        <div id="usd-bubble" onclick="window.openChat()">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -296,230 +295,21 @@
         </div>
     </div>
 
-    <script>
-        let agentState = 'off'; 
-        let chatHistory = [];
-        let recognition;
-        let audioPlayer;
-        let speechTimeout;
-        let userSpeechBuffer = ''; 
-        window.lastBotText = ''; 
+    <script type="module">
+        import Vapi from "https://esm.sh/@vapi-ai/web";
         
-        window.botEndTime = 0;
-
-        window.mediaRecorder = null;
-        window.audioChunks = [];
-        window.audioExt = 'webm'; 
-
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (SpeechRecognition) {
-            recognition = new SpeechRecognition();
-            recognition.continuous = true; 
-            recognition.interimResults = true;
-            recognition.lang = 'en-IN'; 
-        }
+        // --- PASTE YOUR FREE VAPI PUBLIC KEY HERE ---
+        window.vapi = new Vapi("YOUR_VAPI_PUBLIC_KEY_HERE"); 
 
         window.onload = () => {
-            audioPlayer = document.getElementById('usd-html-player');
-            setupRecognitionCallbacks();
-            
             const tooltip = document.getElementById('usd-tooltip');
             if(window.usdUserName !== "Guest") {
                 tooltip.innerText = `Namaste ${window.usdUserName}! Tap here to talk about your new smile!`;
             }
         };
 
-        async function playSarvamGreeting(text) {
-            const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat"; 
-            try {
-                const response = await fetch(BACKEND_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type: 'tts', text: text })
-                });
-                const data = await response.json();
-                audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-                await new Promise((resolve) => {
-                    audioPlayer.onended = () => { window.botEndTime = Date.now(); resolve(); };
-                    audioPlayer.onerror = () => { window.botEndTime = Date.now(); resolve(); };
-                    audioPlayer.onpause = () => { window.botEndTime = Date.now(); resolve(); };
-                    audioPlayer.play().catch(() => resolve());
-                });
-            } catch(e) {
-                await useBrowserTTS(text);
-            }
-        }
-
-        async function openChat() {
-            const container = document.getElementById('usd-chat-container');
-            const tooltip = document.getElementById('usd-tooltip');
-            const bubble = document.getElementById('usd-bubble');
-            
-            if (agentState === 'off') {
-                bubble.style.display = 'none'; 
-                container.style.display = 'flex';
-                tooltip.style.display = 'none'; 
-                document.getElementById('usd-rating-overlay').style.display = 'none';
-                document.getElementById('usd-rating-thanks').style.display = 'none';
-                document.getElementById('usd-end-confirm-overlay').style.display = 'none';
-                
-                audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
-                audioPlayer.play().catch(() => {});
-
-                updateState('connecting', "Calling assistant... 🟡");
-                await new Promise(resolve => setTimeout(resolve, 3000));
-
-                updateState('connecting', "Connected 🟢");
-                await new Promise(resolve => setTimeout(resolve, 1500));
-
-                updateState('speaking', "Assistant is speaking...");
-                
-                const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
-                const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
-                
-                logMessage('bot', greeting);
-                window.lastBotText = greeting; 
-                await playSarvamGreeting(greeting); 
-                
-                updateState('thinking', "Please allow microphone access...");
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: {
-                            echoCancellation: true,
-                            noiseSuppression: false, // FIXED: Absolute RAW audio to allow Whisper to work properly!
-                            autoGainControl: true    // FIXED: Keeps volume properly boosted for quiet microphones!
-                        }
-                    });
-
-                    // UPGRADED: High Fidelity Opus Encoding for maximum Whisper Accuracy!
-                    let options = {};
-                    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-                        options = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 128000 };
-                        window.audioExt = 'webm';
-                    } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-                        options = { mimeType: 'audio/webm', audioBitsPerSecond: 128000 };
-                        window.audioExt = 'webm';
-                    } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                        options = { mimeType: 'audio/mp4', audioBitsPerSecond: 128000 };
-                        window.audioExt = 'mp4';
-                    } else {
-                        window.audioExt = 'wav';
-                    }
-
-                    window.mediaRecorder = new MediaRecorder(stream, options);
-                    window.mediaRecorder.ondataavailable = event => {
-                        if (event.data.size > 0) window.audioChunks.push(event.data);
-                    };
-
-                } catch (err) {
-                    updateState('listening', "Microphone denied. You can type.");
-                    return;
-                }
-
-                updateState('listening', "Listening...");
-            }
-        }
-
-        function closeChatBtnClicked() {
-            document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
-        }
-
-        async function confirmEndChat(isYes) {
-            document.getElementById('usd-end-confirm-overlay').style.display = 'none';
-            if (isYes) {
-                updateState('thinking', "Ending call...");
-                
-                try { recognition.stop(); } catch(e) {}
-                audioPlayer.pause();
-                
-                const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
-                window.lastBotText = goodbyeText;
-                
-                const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat"; 
-                try {
-                    const response = await fetch(BACKEND_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ type: 'tts', text: goodbyeText })
-                    });
-                    const data = await response.json();
-                    audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-                    await new Promise((resolve) => {
-                        audioPlayer.onended = resolve;
-                        audioPlayer.onerror = resolve;
-                        audioPlayer.onpause = resolve;
-                        audioPlayer.play().catch(() => resolve());
-                    });
-                } catch(e) {
-                }
-
-                updateState('off', "Conversation ended.");
-                document.getElementById('usd-rating-overlay').style.display = 'flex';
-            }
-        }
-
-        function closeChat() {
-            updateState('off', "Disconnected");
-            if(recognition) recognition.stop();
-            audioPlayer.pause();
-            window.speechSynthesis.cancel();
-            
-            document.getElementById('usd-chat-container').style.display = 'none';
-            document.getElementById('usd-bubble').style.display = 'flex'; 
-        }
-
-        async function submitRating(stars) {
-            const starElements = document.querySelectorAll('.usd-star');
-            starElements.forEach((s, index) => {
-                s.style.color = index < stars ? '#FFD700' : '#444';
-            });
-            
-            document.getElementById('usd-rating-thanks').style.display = 'block';
-
-            try {
-                await fetch("https://sd-voice-backend.vercel.app/api/rate", {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ rating: stars, history: chatHistory })
-                });
-            } catch(e) { console.error("Failed to send rating"); }
-
-            setTimeout(() => { closeChat(); }, 3000);
-        }
-
-        async function submitTextMessage() {
-            const inputEl = document.getElementById('usd-text-input');
-            const userText = inputEl.value.trim();
-            
-            if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
-
-            inputEl.value = ''; 
-            clearTimeout(speechTimeout);
-            userSpeechBuffer = '';
-
-            try { recognition.stop(); } catch(e) {} 
-            audioPlayer.pause(); 
-
-            logMessage('user', userText);
-            updateState('thinking', "Assistant is replying...");
-            
-            try {
-                await processTurnThroughBackend(userText);
-            } catch (error) {
-                logMessage('error', `Error: ${error.message}`);
-                updateState('listening', "Listening...");
-            }
-        }
-
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault(); 
-                submitTextMessage();
-            }
-        }
-
-        function updateState(newState, statusText) {
-            agentState = newState;
+        window.updateState = function(newState, statusText) {
+            window.agentState = newState;
             const statusBox = document.getElementById('usd-status-box');
             const visualizer = document.getElementById('usd-visualizer');
             
@@ -527,232 +317,12 @@
             
             if (newState === 'speaking') {
                 visualizer.classList.add('active');
-                try { recognition.start(); } catch(e) {}
             } else {
                 visualizer.classList.remove('active');
             }
-
-            if (newState === 'listening') {
-                try { recognition.start(); } catch(e) {}
-                if (window.mediaRecorder && window.mediaRecorder.state === 'inactive') {
-                    window.audioChunks = [];
-                    window.mediaRecorder.start(); 
-                }
-            } else if (newState === 'thinking' || newState === 'connecting' || newState === 'speaking') {
-                try { recognition.stop(); } catch(e) {}
-            }
         }
 
-        function setupRecognitionCallbacks() {
-            if (!recognition) return;
-
-            recognition.onresult = async (event) => {
-                if (agentState === 'thinking' || agentState === 'off' || agentState === 'connecting') return;
-                
-                let interimTranscript = '';
-                let finalTranscript = '';
-
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript;
-                    } else {
-                        interimTranscript += event.results[i][0].transcript;
-                    }
-                }
-
-                if (Date.now() - window.botEndTime < 800) return;
-
-                if (agentState === 'speaking' && (interimTranscript.trim() || finalTranscript.trim())) {
-                    let checkText = (interimTranscript + " " + finalTranscript).toLowerCase().replace(/[^a-zA-Z0-9\s\u0900-\u097F\u0A80-\u0AFF]/g, '').trim();
-                    let cleanBot = (window.lastBotText || "").toLowerCase().replace(/[^a-zA-Z0-9\s\u0900-\u097F\u0A80-\u0AFF]/g, '').trim();
-                    
-                    let botWords = cleanBot.split(/\s+/);
-                    let checkWords = checkText.split(/\s+/);
-                    let matchCount = 0;
-                    
-                    checkWords.forEach(w => {
-                        if (w && botWords.some(bw => bw.includes(w) || w.includes(bw))) matchCount++;
-                    });
-                    
-                    if (checkWords.length > 0 && (matchCount / checkWords.length) > 0.25) {
-                        return; 
-                    }
-                }
-
-                if (finalTranscript.trim()) {
-                    userSpeechBuffer += (userSpeechBuffer ? " " : "") + finalTranscript.trim();
-                }
-
-                document.getElementById('usd-interim-text').innerText = userSpeechBuffer + " " + interimTranscript;
-
-                if ((interimTranscript.trim() || finalTranscript.trim()) && agentState === 'listening') {
-                    updateState('listening', "User is speaking...");
-                }
-
-                if (interimTranscript.length > 3 && agentState === 'speaking') {
-                    audioPlayer.pause();
-                    window.speechSynthesis.cancel();
-                    userSpeechBuffer = ''; 
-                    interimTranscript = '';
-                    finalTranscript = '';
-                    logMessage('system', 'You interrupted the assistant.');
-                    updateState('listening', "Interrupted! Listening...");
-                    if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
-                        window.mediaRecorder.stop();
-                        window.audioChunks = [];
-                        setTimeout(() => { if (agentState === 'listening') window.mediaRecorder.start(); }, 50);
-                    }
-                    return;
-                }
-
-                if (interimTranscript.trim() || finalTranscript.trim() || userSpeechBuffer.trim()) {
-                    clearTimeout(speechTimeout); 
-                    
-                    speechTimeout = setTimeout(async () => {
-                        if (interimTranscript.trim() && !finalTranscript.trim()) {
-                            userSpeechBuffer += (userSpeechBuffer ? " " : "") + interimTranscript.trim();
-                        }
-
-                        const userText = userSpeechBuffer.trim();
-                        userSpeechBuffer = ''; 
-                        interimTranscript = '';
-                        
-                        if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
-                            audioPlayer.pause();
-                            window.speechSynthesis.cancel();
-                            document.getElementById('usd-interim-text').innerText = "Processing audio...";
-                            updateState('thinking', "Assistant is replying...");
-
-                            window.mediaRecorder.onstop = async () => {
-                                await new Promise(res => setTimeout(res, 150)); // Safely guarantee buffer is fully flushed
-                                
-                                const audioBlob = new Blob(window.audioChunks, { type: `audio/${window.audioExt}` });
-                                const reader = new FileReader();
-                                reader.readAsDataURL(audioBlob);
-                                reader.onloadend = async () => {
-                                    const base64Audio = reader.result.split(',')[1];
-                                    try {
-                                        await processTurnThroughBackend(userText, base64Audio, window.audioExt);
-                                    } catch (error) {
-                                        logMessage('error', `Error: ${error.message}`);
-                                        if (agentState !== 'off') updateState('listening', "Listening...");
-                                    }
-                                };
-                            };
-                            try { window.mediaRecorder.requestData(); } catch(e){}
-                            window.mediaRecorder.stop();
-                        } else {
-                            if (userText.length < 2) {
-                                updateState('listening', "Listening...");
-                                document.getElementById('usd-interim-text').innerText = "";
-                                return; 
-                            }
-                            audioPlayer.pause();
-                            window.speechSynthesis.cancel();
-                            logMessage('user', userText);
-                            document.getElementById('usd-interim-text').innerText = "";
-                            updateState('thinking', "Assistant is replying...");
-                            
-                            try {
-                                await processTurnThroughBackend(userText);
-                            } catch (error) {
-                                logMessage('error', `Error: ${error.message}`);
-                                if (agentState !== 'off') updateState('listening', "Listening...");
-                            }
-                        }
-                    }, 1200); 
-                }
-            };
-
-            recognition.onerror = (event) => {
-                if (agentState === 'listening' && event.error === 'no-speech') {
-                    try { recognition.stop(); } catch(e){}
-                    setTimeout(() => {
-                        if (agentState === 'listening' || agentState === 'speaking') {
-                            try { recognition.start(); } catch(e) {}
-                        }
-                    }, 200);
-                }
-            };
-
-            recognition.onend = () => {
-                if (agentState === 'listening' || agentState === 'speaking') {
-                    try { recognition.start(); } catch(e){}
-                }
-            };
-        }
-
-        async function processTurnThroughBackend(userText, audioBase64 = null, audioExt = 'webm') {
-            const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat"; 
-            
-            const payload = { userText: userText, history: chatHistory };
-            if (audioBase64) {
-                payload.audioBase64 = audioBase64; 
-                payload.audioExt = audioExt; 
-            }
-
-            const response = await fetch(BACKEND_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            
-            if (!response.ok) throw new Error("Vercel Server Unreachable.");
-            const data = await response.json();
-            if (data.error) throw new Error(data.error);
-
-            if (data.whisperError) console.error("Whisper Failed in Backend:", data.whisperError);
-
-            const finalInputText = data.transcribedText || userText;
-            if (audioBase64) logMessage('user', finalInputText); 
-
-            chatHistory.push({ role: "user", parts: [{ text: finalInputText }] });
-            chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
-
-            let finalBotReply = data.replyText;
-            let isEnding = false;
-            if (finalBotReply.includes('[END_CHAT]')) {
-                isEnding = true;
-                finalBotReply = finalBotReply.replace('[END_CHAT]', '').trim();
-            }
-
-            logMessage('bot', finalBotReply);
-            window.lastBotText = finalBotReply; 
-            updateState('speaking', "Assistant is speaking...");
-            audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-            
-            await new Promise((resolve) => {
-                audioPlayer.onended = () => {
-                    window.botEndTime = Date.now(); 
-                    if (isEnding) {
-                        updateState('off', "Conversation ended.");
-                        try { recognition.stop(); } catch(e) {}
-                        document.getElementById('usd-rating-overlay').style.display = 'flex';
-                    } else if(agentState === 'speaking') {
-                        updateState('listening', "Listening...");
-                    }
-                    resolve();
-                };
-                audioPlayer.onerror = () => { window.botEndTime = Date.now(); resolve(); };
-                audioPlayer.onpause = () => { window.botEndTime = Date.now(); resolve(); };
-                audioPlayer.play().catch(() => resolve());
-            });
-
-            return finalBotReply;
-        }
-
-        function useBrowserTTS(text) {
-            return new Promise((resolve) => {
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'en-IN'; 
-                utterance.rate = 1.0;
-                utterance.onend = () => { window.botEndTime = Date.now(); resolve(); };
-                utterance.onerror = () => { window.botEndTime = Date.now(); resolve(); };
-                window.speechSynthesis.speak(utterance);
-            });
-        }
-
-        function logMessage(sender, text) {
+        window.logMessage = function(sender, text) {
             const log = document.getElementById('usd-chat-log');
             const msgDiv = document.createElement('div');
             msgDiv.className = `msg msg-${sender}`;
@@ -763,6 +333,134 @@
             
             log.appendChild(msgDiv);
             log.scrollTop = log.scrollHeight;
+        }
+
+        // VAPI WEBRTC EVENT LISTENERS
+        window.vapi.on('call-start', () => {
+            window.updateState('listening', "Connected! Listening...");
+        });
+
+        window.vapi.on('speech-start', () => {
+            window.updateState('speaking', "Assistant is speaking...");
+        });
+
+        window.vapi.on('speech-end', () => {
+            window.updateState('listening', "Listening...");
+        });
+
+        window.vapi.on('message', (message) => {
+            if (message.type === 'transcript' && message.transcriptType === 'final') {
+                if (message.role === 'user') {
+                    window.logMessage('user', message.transcript);
+                    document.getElementById('usd-interim-text').innerText = "";
+                } else if (message.role === 'assistant') {
+                    window.logMessage('bot', message.transcript);
+                    if (message.transcript.includes('[END_CHAT]')) {
+                        window.vapi.stop();
+                        window.updateState('off', "Conversation ended.");
+                        document.getElementById('usd-rating-overlay').style.display = 'flex';
+                    }
+                }
+            }
+            if (message.type === 'transcript' && message.transcriptType === 'interim' && message.role === 'user') {
+                document.getElementById('usd-interim-text').innerText = message.transcript;
+            }
+        });
+
+        window.vapi.on('call-end', () => {
+            window.closeChat();
+        });
+
+        window.openChat = async function() {
+            const container = document.getElementById('usd-chat-container');
+            const tooltip = document.getElementById('usd-tooltip');
+            const bubble = document.getElementById('usd-bubble');
+            
+            if (window.agentState === 'off') {
+                bubble.style.display = 'none'; 
+                container.style.display = 'flex';
+                tooltip.style.display = 'none'; 
+                document.getElementById('usd-rating-overlay').style.display = 'none';
+                document.getElementById('usd-rating-thanks').style.display = 'none';
+                document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+
+                window.updateState('connecting', "Connecting to secure voice server... 🟡");
+                const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
+                
+                // Starts the WebRTC Stream directly to your custom backend!
+                window.vapi.start({
+                    model: {
+                        provider: "custom-llm",
+                        url: "https://sd-voice-backend.vercel.app/api/chat", // Points to your Vercel backend
+                        model: "llama-3.3-70b-versatile"
+                    },
+                    voice: {
+                        provider: "custom-voice",
+                        server: {
+                            url: "https://sd-voice-backend.vercel.app/api/chat" // Points to your Sarvam TTS wrapper
+                        }
+                    },
+                    transcriber: {
+                        provider: "deepgram",
+                        model: "nova-2",
+                        language: "hi" // The ultimate model for Indian Accents, Hindi, and Gujarati
+                    },
+                    firstMessage: `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`
+                });
+            }
+        }
+
+        window.closeChatBtnClicked = function() {
+            document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
+        }
+
+        window.confirmEndChat = function(isYes) {
+            document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+            if (isYes) {
+                window.updateState('thinking', "Ending call...");
+                window.vapi.send({
+                    type: "add-message",
+                    message: { role: "user", content: "bye" } // Triggers the AI to say END_CHAT
+                });
+            }
+        }
+
+        window.closeChat = function() {
+            window.updateState('off', "Disconnected");
+            window.vapi.stop();
+            document.getElementById('usd-chat-container').style.display = 'none';
+            document.getElementById('usd-bubble').style.display = 'flex'; 
+        }
+
+        window.submitTextMessage = function() {
+            const inputEl = document.getElementById('usd-text-input');
+            const userText = inputEl.value.trim();
+            if (!userText || window.agentState === 'thinking' || window.agentState === 'connecting') return;
+
+            inputEl.value = ''; 
+            window.logMessage('user', userText);
+            
+            // Pushes typed text directly into the WebRTC stream!
+            window.vapi.send({
+                type: "add-message",
+                message: { role: "user", content: userText }
+            });
+        }
+
+        window.handleKeyPress = function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); 
+                window.submitTextMessage();
+            }
+        }
+
+        window.submitRating = async function(stars) {
+            const starElements = document.querySelectorAll('.usd-star');
+            starElements.forEach((s, index) => {
+                s.style.color = index < stars ? '#FFD700' : '#444';
+            });
+            document.getElementById('usd-rating-thanks').style.display = 'block';
+            setTimeout(() => { window.closeChat(); }, 3000);
         }
     </script>
 </body>
