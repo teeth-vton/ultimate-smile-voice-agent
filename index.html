@@ -682,18 +682,12 @@
 
 
 
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
+     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
-
             recognition = new SpeechRecognition();
-
             recognition.continuous = true; 
-
             recognition.interimResults = true;
-
-            recognition.lang = 'hi-IN'; 
-
+            recognition.lang = 'en-IN'; // <--- THE MULTI-LINGUAL CHEAT CODE
         }
 
 
