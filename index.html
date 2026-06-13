@@ -235,6 +235,14 @@ padding: 20px;
 <script>
 window.usdUserName = "Guest";
 window.agentState = 'off';
+window.chatHistory = [];
+window.audioPlayer = null;
+window.botEndTime = 0;
+window.mediaRecorder = null;
+window.audioChunks = [];
+window.audioExt = 'webm';
+window.accumulatedText = ""; 
+window.silenceTimer = null;
 </script>
 
 <div id="usd-voice-widget">
@@ -294,16 +302,7 @@ Namaste! Tap here to talk about your new smile!
 </div>
 </div>
 
-<script type="module">
-    import Vapi from "https://esm.sh/@vapi-ai/web";
-    window.vapi = new Vapi("9a7cc76b-c700-42ba-8bcc-fd125ba91bc1"); 
-    setTimeout(window.setupVapiCallbacks, 500);
-</script>
-
 <script>
-window.chatHistory = [];
-window.audioPlayer = null;
-
 window.onload = () => {
     window.audioPlayer = document.getElementById('usd-html-player');
     const tooltip = document.getElementById('usd-tooltip');
@@ -340,9 +339,6 @@ window.openChat = async function() {
         bubble.style.display = 'none';
         container.style.display = 'flex';
         tooltip.style.display = 'none';
-        document.getElementById('usd-rating-overlay').style.display = 'none';
-        document.getElementById('usd-rating-thanks').style.display = 'none';
-        document.getElementById('usd-end-confirm-overlay').style.display = 'none';
         
         window.updateState('connecting', "Calling assistant... 🟡");
         await new Promise(resolve => setTimeout(resolve, 3000));
@@ -359,114 +355,108 @@ window.openChat = async function() {
 
         window.updateState('thinking', "Please allow microphone access...");
         
-        if (window.vapi) {
-            window.vapi.start({
-                model: {
-                    provider: "custom-llm",
-                    url: "https://sd-voice-backend.vercel.app/api/chat",
-                    model: "llama-3.3-70b-versatile"
-                },
-                voice: {
-                    provider: "custom-voice",
-                    server: { url: "https://sd-voice-backend.vercel.app/api/chat" }
-                },
-                transcriber: {
-                    provider: "groq",
-                    model: "whisper-large-v3"
-                }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true }
             });
+
+            let options = {};
+            if (MediaRecorder.isTypeSupported('audio/webm')) {
+                options = { mimeType: 'audio/webm' };
+                window.audioExt = 'webm';
+            } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                options = { mimeType: 'audio/mp4' };
+                window.audioExt = 'mp4';
+            } else {
+                window.audioExt = 'wav';
+            }
+
+            window.mediaRecorder = new MediaRecorder(stream, options);
+            
+            // CONTINUOUS LISTENING FEATURE
+            window.mediaRecorder.ondataavailable = async event => {
+                if (event.data.size > 0 && window.agentState === 'listening') {
+                    window.audioChunks.push(event.data);
+                    
+                    // Transcribe quietly in background every chunk
+                    const audioBlob = new Blob(window.audioChunks, { type: `audio/${window.audioExt}` });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(audioBlob);
+                    reader.onloadend = async () => {
+                        const base64Audio = reader.result.split(',')[1];
+                        try {
+                            const res = await fetch("https://sd-voice-backend.vercel.app/api/chat", {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ type: 'transcribe_only', audioBase64: base64Audio, audioExt: window.audioExt })
+                            });
+                            const data = await res.json();
+                            if (data.transcribedText) {
+                                window.accumulatedText = data.transcribedText;
+                                document.getElementById('usd-interim-text').innerText = window.accumulatedText + " (Press Send)";
+                                
+                                // Auto-Send after 4 seconds of pure silence
+                                clearTimeout(window.silenceTimer);
+                                window.silenceTimer = setTimeout(() => {
+                                    window.submitTextMessage();
+                                }, 4000);
+                            }
+                        } catch(e) {}
+                    };
+                }
+            };
+            
+            window.mediaRecorder.start(2000); // Take chunks every 2 seconds for smooth UI
+            window.updateState('listening', "Listening...");
+
+        } catch (err) {
+            window.updateState('listening', "Microphone denied. You can type.");
         }
     }
-}
-
-window.setupVapiCallbacks = function() {
-    if (!window.vapi) return;
-
-    window.vapi.on('call-start', () => {
-        window.updateState('listening', "Listening...");
-    });
-
-    window.vapi.on('speech-start', () => {
-        window.updateState('speaking', "Assistant is speaking...");
-    });
-
-    window.vapi.on('speech-end', () => {
-        window.updateState('listening', "Listening...");
-    });
-
-    // FIXED: Prints exact Vapi errors to the screen so we aren't guessing what failed!
-    window.vapi.on('error', (e) => {
-        console.error("VAPI ERROR:", e);
-        window.logMessage('error', "Connection issue: Reconnecting...");
-        window.updateState('off', "Call Ended.");
-    });
-
-    // FIXED: Call-end no longer brutally closes the chat window. It shows the rating screen!
-    window.vapi.on('call-end', () => {
-        window.updateState('off', "Call Ended.");
-        document.getElementById('usd-rating-overlay').style.display = 'flex';
-    });
-
-    window.vapi.on('message', (message) => {
-        if (message.type === 'transcript' && message.transcriptType === 'final') {
-            if (message.role === 'user') {
-                window.logMessage('user', message.transcript);
-                document.getElementById('usd-interim-text').innerText = "";
-                window.updateState('thinking', "Assistant is replying...");
-            } else if (message.role === 'assistant') {
-                window.logMessage('bot', message.transcript);
-                if (message.transcript.includes('[END_CHAT]')) {
-                    window.vapi.stop();
-                    window.updateState('off', "Conversation ended.");
-                    document.getElementById('usd-rating-overlay').style.display = 'flex';
-                }
-            }
-        }
-        if (message.type === 'transcript' && message.transcriptType === 'interim' && message.role === 'user') {
-            document.getElementById('usd-interim-text').innerText = message.transcript;
-        }
-    });
 }
 
 window.closeChatBtnClicked = function() {
     document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
 }
 
-window.confirmEndChat = function(isYes) {
+window.confirmEndChat = async function(isYes) {
     document.getElementById('usd-end-confirm-overlay').style.display = 'none';
     if (isYes) {
         window.updateState('thinking', "Ending call...");
-        if (window.vapi) {
-            window.vapi.send({
-                type: "add-message",
-                message: { role: "user", content: "bye" } 
-            });
-        }
+        if (window.mediaRecorder) window.mediaRecorder.stop();
+        window.audioPlayer.pause();
+        await processTurnThroughBackend("bye");
     }
 }
 
-// Full Force Close
 window.closeChat = function() {
     window.updateState('off', "Disconnected");
-    if (window.vapi) window.vapi.stop();
+    if (window.mediaRecorder) window.mediaRecorder.stop();
     if (window.audioPlayer) window.audioPlayer.pause();
     document.getElementById('usd-chat-container').style.display = 'none';
     document.getElementById('usd-bubble').style.display = 'flex';
 }
 
-window.submitTextMessage = function() {
+window.submitTextMessage = async function() {
     const inputEl = document.getElementById('usd-text-input');
-    const userText = inputEl.value.trim();
+    let userText = inputEl.value.trim() || window.accumulatedText;
+    
     if (!userText || window.agentState === 'thinking' || window.agentState === 'connecting') return;
 
     inputEl.value = '';
-    window.logMessage('user', userText);
+    window.accumulatedText = '';
+    window.audioChunks = []; // Clear mic history
+    document.getElementById('usd-interim-text').innerText = '';
+    clearTimeout(window.silenceTimer);
     
-    if (window.vapi) {
-        window.vapi.send({
-            type: "add-message",
-            message: { role: "user", content: userText }
-        });
+    window.logMessage('user', userText);
+    window.updateState('thinking', "Assistant is replying...");
+    
+    try {
+        await processTurnThroughBackend(userText);
+    } catch (error) {
+        window.logMessage('error', `Error: ${error.message}`);
+        window.updateState('listening', "Listening...");
     }
 }
 
@@ -516,6 +506,53 @@ window.logMessage = function(sender, text) {
     else msgDiv.innerText = text;
     log.appendChild(msgDiv);
     log.scrollTop = log.scrollHeight;
+}
+
+async function processTurnThroughBackend(userText) {
+    const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat";
+    const payload = { userText: userText, history: window.chatHistory };
+
+    const response = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) throw new Error("Vercel Server Unreachable.");
+    const data = await response.json();
+
+    window.chatHistory.push({ role: "user", parts: [{ text: userText }] });
+    window.chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
+
+    let finalBotReply = data.replyText;
+    let isEnding = false;
+    if (finalBotReply.includes('[END_CHAT]')) {
+        isEnding = true;
+        finalBotReply = finalBotReply.replace('[END_CHAT]', '').trim();
+    }
+
+    window.logMessage('bot', finalBotReply);
+    window.updateState('speaking', "Assistant is speaking...");
+    window.audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+    
+    await new Promise((resolve) => {
+        window.audioPlayer.onended = () => {
+            if (isEnding) {
+                window.updateState('off', "Conversation ended.");
+                if (window.mediaRecorder) window.mediaRecorder.stop();
+                document.getElementById('usd-rating-overlay').style.display = 'flex';
+            } else if(window.agentState === 'speaking') {
+                window.updateState('listening', "Listening...");
+                window.audioChunks = []; // clear buffer for next turn
+            }
+            resolve();
+        };
+        window.audioPlayer.onerror = resolve;
+        window.audioPlayer.onpause = resolve;
+        window.audioPlayer.play().catch(() => resolve());
+    });
+
+    return finalBotReply;
 }
 </script>
 </body>
