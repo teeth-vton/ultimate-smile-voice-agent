@@ -94,10 +94,9 @@
             width: 3px;
             background: #D4AF37;
             border-radius: 3px;
-            height: 4px; /* Flat state when not speaking */
+            height: 4px;
             transition: height 0.2s ease;
         }
-        /* Animate ONLY when .active is added (when bot speaks) */
         #usd-visualizer.active .usd-bar {
             animation: usd-sound 0.4s ease-in-out infinite alternate;
         }
@@ -134,7 +133,6 @@
         .msg-bot { color: #D4AF37; text-align: left; }
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
         .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; }
-        
         #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
         #usd-input-container {
             display: flex;
@@ -204,7 +202,6 @@
         .usd-star { font-size: 30px; color: #444; transition: color 0.2s; }
         .usd-star:hover, .usd-star.active { color: #FFD700; }
         #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
-        /* NEW: END CONFIRMATION OVERLAY */
         #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -305,7 +302,6 @@
         let userSpeechBuffer = ''; 
         window.lastBotText = ''; 
         
-        // NEW: Global variables for advanced echo tracking & frequency filtering
         window.botEndTime = 0;
         window.isHumanSpeaking = true; 
 
@@ -327,7 +323,6 @@
             }
         };
 
-        // NEW: Fetch Sarvam Audio directly for Initial Greeting
         async function playSarvamGreeting(text) {
             const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat"; 
             try {
@@ -349,14 +344,13 @@
             }
         }
 
-        // OPEN CHAT FUNCTION
         async function openChat() {
             const container = document.getElementById('usd-chat-container');
             const tooltip = document.getElementById('usd-tooltip');
             const bubble = document.getElementById('usd-bubble');
             
             if (agentState === 'off') {
-                bubble.style.display = 'none'; // Hides the big bubble
+                bubble.style.display = 'none'; 
                 container.style.display = 'flex';
                 tooltip.style.display = 'none'; 
                 document.getElementById('usd-rating-overlay').style.display = 'none';
@@ -378,7 +372,7 @@
                 const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
                 
                 logMessage('bot', greeting);
-                window.lastBotText = greeting; // Track the initial greeting text
+                window.lastBotText = greeting; 
                 await playSarvamGreeting(greeting); 
                 
                 updateState('thinking', "Please allow microphone access...");
@@ -391,7 +385,6 @@
                         }
                     });
 
-                    // NEW: Special Human Frequency Input Analyzer (85 Hz to 255 Hz)
                     try {
                         window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                         window.analyser = window.audioCtx.createAnalyser();
@@ -407,7 +400,6 @@
                                 const binSize = sampleRate / window.analyser.fftSize;
                                 let humanEnergy = 0;
                                 
-                                // Calculate bins corresponding to 85Hz - 255Hz
                                 const startBin = Math.floor(85 / binSize);
                                 const endBin = Math.ceil(255 / binSize);
                                 
@@ -415,7 +407,6 @@
                                     humanEnergy += window.freqData[i];
                                 }
                                 
-                                // Only flag as true if energy exists in the human vocal cord range
                                 window.isHumanSpeaking = (humanEnergy > 0);
                             }
                             requestAnimationFrame(checkFrequency);
@@ -435,20 +426,46 @@
             }
         }
 
-        // NEW: End Chat Confirmation Logic
         function closeChatBtnClicked() {
             document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
         }
 
+        // FIXED: 100% Bulletproof Exit & Rating Menu Logic
         async function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
                 updateState('thinking', "Ending call...");
+                
+                // Immediately shut off the microphone and audio
+                try { recognition.stop(); } catch(e) {}
+                audioPlayer.pause();
+                
+                const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
+                window.lastBotText = goodbyeText;
+                
+                // Force a seamless goodbye audio without relying on Groq
+                const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat"; 
                 try {
-                    await processTurnThroughBackend("bye");
+                    const response = await fetch(BACKEND_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: 'tts', text: goodbyeText })
+                    });
+                    const data = await response.json();
+                    audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+                    await new Promise((resolve) => {
+                        audioPlayer.onended = resolve;
+                        audioPlayer.onerror = resolve;
+                        audioPlayer.onpause = resolve;
+                        audioPlayer.play().catch(() => resolve());
+                    });
                 } catch(e) {
-                    closeChat();
+                    // Ignore errors, we still want the rating menu to pop up
                 }
+
+                // Deterministically guarantee the rating menu pops up!
+                updateState('off', "Conversation ended.");
+                document.getElementById('usd-rating-overlay').style.display = 'flex';
             }
         }
 
@@ -550,10 +567,8 @@
                     }
                 }
 
-                // NEW: 800ms Hardware Echo Latency Shield. Ignores everything for 0.8s after bot finishes.
                 if (Date.now() - window.botEndTime < 800) return;
 
-                // NEW: Human Frequency Filter. Rejects background noise lacking vocal fundamentals (85Hz-255Hz).
                 if (!window.isHumanSpeaking) return;
 
                 if (agentState === 'speaking' && (interimTranscript.trim() || finalTranscript.trim())) {
@@ -676,7 +691,7 @@
             
             await new Promise((resolve) => {
                 audioPlayer.onended = () => {
-                    window.botEndTime = Date.now(); // Global tracker for echo prevention
+                    window.botEndTime = Date.now(); 
                     if (isEnding) {
                         updateState('off', "Conversation ended.");
                         try { recognition.stop(); } catch(e) {}
