@@ -333,7 +333,7 @@
                 await new Promise((resolve) => {
                     audioPlayer.onended = resolve;
                     audioPlayer.onerror = resolve;
-                    audioPlayer.onpause = resolve; // Prevents getting stuck if interrupted early
+                    audioPlayer.onpause = resolve; 
                     audioPlayer.play().catch(() => resolve());
                 });
             } catch(e) {
@@ -374,11 +374,12 @@
                 
                 updateState('thinking', "Please allow microphone access...");
                 try {
+                    // FIXED: Laptop Microphone settings to boost weak internal mics
                     await navigator.mediaDevices.getUserMedia({ 
                         audio: {
                             echoCancellation: true,
-                            noiseSuppression: false, // Ensures maximum voice pickup
-                            autoGainControl: false   // Prevents volume dropping
+                            noiseSuppression: true,
+                            autoGainControl: true
                         }
                     });
                 } catch (err) {
@@ -540,6 +541,7 @@
                     document.getElementById('usd-interim-text').innerText = userSpeechBuffer;
                     clearTimeout(speechTimeout); 
                     
+                    // FIXED: Increased timeout to 2.5 seconds so it does not chop your sentences in half!
                     speechTimeout = setTimeout(async () => {
                         const userText = userSpeechBuffer.trim();
                         userSpeechBuffer = ''; 
@@ -557,7 +559,7 @@
                             logMessage('error', `Error: ${error.message}`);
                             if (agentState !== 'off') updateState('listening', "Listening...");
                         }
-                    }, 1500); 
+                    }, 2500); 
                 }
             };
 
@@ -619,7 +621,7 @@
                     resolve();
                 };
                 audioPlayer.onerror = resolve;
-                audioPlayer.onpause = () => { // Ensures promise releases if interrupted
+                audioPlayer.onpause = () => { 
                     resolve();
                 };
                 audioPlayer.play().catch(() => resolve());
