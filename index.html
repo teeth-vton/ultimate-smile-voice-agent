@@ -94,9 +94,10 @@ height: 20px;
 width: 3px;
 background: #D4AF37;
 border-radius: 3px;
-height: 4px; 
+height: 4px; /* Flat state when not speaking */
 transition: height 0.2s ease;
 }
+/* Animate ONLY when .active is added (when bot speaks) */
 #usd-visualizer.active .usd-bar {
 animation: usd-sound 0.4s ease-in-out infinite alternate;
 }
@@ -292,229 +293,220 @@ Namaste! Tap here to talk about your new smile!
 </div>
 </div>
 
-<script type="module">
-    import Vapi from "https://esm.sh/@vapi-ai/web";
-    window.vapi = new Vapi("9a7cc76b-c700-42ba-8bcc-fd125ba91bc1"); // Your exact key
-</script>
-
 <script>
 let agentState = 'off';
 let chatHistory = [];
 let audioPlayer;
 
+// Safely Load Vapi in the background to prevent "Initializing..." freeze
 window.onload = () => {
-audioPlayer = document.getElementById('usd-html-player');
-setupRecognitionCallbacks();
-const tooltip = document.getElementById('usd-tooltip');
-if(window.usdUserName !== "Guest") {
-tooltip.innerText = `Namaste ${window.usdUserName}! Tap here to talk about your new smile!`;
-}
+    audioPlayer = document.getElementById('usd-html-player');
+    const tooltip = document.getElementById('usd-tooltip');
+    if(window.usdUserName !== "Guest") {
+        tooltip.innerText = `Namaste ${window.usdUserName}! Tap here to talk about your new smile!`;
+    }
+
+    import('https://esm.sh/@vapi-ai/web').then(({ default: Vapi }) => {
+        window.vapi = new Vapi("9a7cc76b-c700-42ba-8bcc-fd125ba91bc1"); // Your exact key
+        setupVapiCallbacks();
+    }).catch(err => console.error("Failed to load Vapi", err));
 };
 
-// Kept your exact Sarvam greeting function untouched!
 async function playSarvamGreeting(text) {
-const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat";
-try {
-const response = await fetch(BACKEND_URL, {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ type: 'tts', text: text })
-});
-const data = await response.json();
-audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-await new Promise((resolve) => {
-audioPlayer.onended = resolve;
-audioPlayer.onerror = resolve;
-audioPlayer.onpause = resolve;
-audioPlayer.play().catch(() => resolve());
-});
-} catch(e) {}
+    const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat";
+    try {
+        const response = await fetch(BACKEND_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'tts', text: text })
+        });
+        const data = await response.json();
+        audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+        await new Promise((resolve) => {
+            audioPlayer.onended = resolve;
+            audioPlayer.onerror = resolve;
+            audioPlayer.onpause = resolve;
+            audioPlayer.play().catch(() => resolve());
+        });
+    } catch(e) {}
 }
 
 async function openChat() {
-const container = document.getElementById('usd-chat-container');
-const tooltip = document.getElementById('usd-tooltip');
-const bubble = document.getElementById('usd-bubble');
-if (agentState === 'off') {
-bubble.style.display = 'none';
-container.style.display = 'flex';
-tooltip.style.display = 'none';
-document.getElementById('usd-rating-overlay').style.display = 'none';
-document.getElementById('usd-rating-thanks').style.display = 'none';
-document.getElementById('usd-end-confirm-overlay').style.display = 'none';
-audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
-audioPlayer.play().catch(() => {});
+    const container = document.getElementById('usd-chat-container');
+    const tooltip = document.getElementById('usd-tooltip');
+    const bubble = document.getElementById('usd-bubble');
 
-// Kept your exact 3 second and 1.5 second timing!
-updateState('connecting', "Calling assistant... 🟡");
-await new Promise(resolve => setTimeout(resolve, 3000));
+    if (agentState === 'off') {
+        bubble.style.display = 'none';
+        container.style.display = 'flex';
+        tooltip.style.display = 'none';
+        document.getElementById('usd-rating-overlay').style.display = 'none';
+        document.getElementById('usd-rating-thanks').style.display = 'none';
+        document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+        
+        // Exact timing from your code
+        updateState('connecting', "Calling assistant... 🟡");
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
-updateState('connecting', "Connected 🟢");
-await new Promise(resolve => setTimeout(resolve, 1500));
+        updateState('connecting', "Connected 🟢");
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
-updateState('speaking', "Assistant is speaking...");
-const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
-const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
-logMessage('bot', greeting);
+        updateState('speaking', "Assistant is speaking...");
+        const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
+        const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
+        logMessage('bot', greeting);
+        
+        // Play the greeting BEFORE starting Vapi
+        await playSarvamGreeting(greeting);
 
-// We play your custom greeting perfectly BEFORE starting Vapi
-await playSarvamGreeting(greeting);
-
-updateState('thinking', "Please allow microphone access...");
-try {
-    // Vapi takes over silently after the greeting is done!
-    window.vapi.start({
-        model: {
-            provider: "custom-llm",
-            url: "https://sd-voice-backend.vercel.app/api/chat",
-            model: "llama-3.3-70b-versatile"
-        },
-        voice: {
-            provider: "custom-voice",
-            server: {
-                url: "https://sd-voice-backend.vercel.app/api/chat"
-            }
-        },
-        transcriber: {
-            provider: "deepgram",
-            model: "nova-2",
-            language: "multi" // Natively handles Hindi, Gujrati, and English Code-Switching!
+        updateState('thinking', "Please allow microphone access...");
+        
+        if (window.vapi) {
+            window.vapi.start({
+                model: {
+                    provider: "custom-llm",
+                    url: "https://sd-voice-backend.vercel.app/api/chat",
+                    model: "llama-3.3-70b-versatile"
+                },
+                voice: {
+                    provider: "custom-voice",
+                    server: { url: "https://sd-voice-backend.vercel.app/api/chat" }
+                },
+                transcriber: {
+                    provider: "deepgram",
+                    model: "nova-2",
+                    language: "multi" // Solves the Hinglish/Gujarati matching perfectly
+                }
+            });
         }
-        // Notice there is NO "firstMessage" here, so it won't interrupt your Namaste!
+    }
+}
+
+function setupVapiCallbacks() {
+    window.vapi.on('call-start', () => {
+        updateState('listening', "Listening...");
     });
-} catch (err) {
-updateState('listening', "Microphone denied. You can type.");
-return;
-}
-updateState('listening', "Listening...");
-}
+
+    window.vapi.on('speech-start', () => {
+        updateState('speaking', "Assistant is speaking...");
+    });
+
+    window.vapi.on('speech-end', () => {
+        updateState('listening', "Listening...");
+    });
+
+    window.vapi.on('message', (message) => {
+        if (message.type === 'transcript' && message.transcriptType === 'final') {
+            if (message.role === 'user') {
+                logMessage('user', message.transcript);
+                document.getElementById('usd-interim-text').innerText = "";
+                updateState('thinking', "Assistant is replying...");
+            } else if (message.role === 'assistant') {
+                logMessage('bot', message.transcript);
+                if (message.transcript.includes('[END_CHAT]')) {
+                    window.vapi.stop();
+                    updateState('off', "Conversation ended.");
+                    document.getElementById('usd-rating-overlay').style.display = 'flex';
+                }
+            }
+        }
+        if (message.type === 'transcript' && message.transcriptType === 'interim' && message.role === 'user') {
+            document.getElementById('usd-interim-text').innerText = message.transcript;
+        }
+    });
+
+    window.vapi.on('call-end', () => {
+        closeChat();
+    });
 }
 
 function closeChatBtnClicked() {
-document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
+    document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
 }
 
 function confirmEndChat(isYes) {
-document.getElementById('usd-end-confirm-overlay').style.display = 'none';
-if (isYes) {
-updateState('thinking', "Ending call...");
-window.vapi.send({
-    type: "add-message",
-    message: { role: "user", content: "bye" } // Safely triggers the end chat sequence
-});
-}
+    document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+    if (isYes) {
+        updateState('thinking', "Ending call...");
+        if (window.vapi) {
+            window.vapi.send({
+                type: "add-message",
+                message: { role: "user", content: "bye" } 
+            });
+        }
+    }
 }
 
 function closeChat() {
-updateState('off', "Disconnected");
-window.vapi.stop();
-document.getElementById('usd-chat-container').style.display = 'none';
-document.getElementById('usd-bubble').style.display = 'flex';
-}
-
-async function submitRating(stars) {
-const starElements = document.querySelectorAll('.usd-star');
-starElements.forEach((s, index) => {
-s.style.color = index < stars ? '#FFD700' : '#444';
-});
-document.getElementById('usd-rating-thanks').style.display = 'block';
-
-try {
-await fetch("https://sd-voice-backend.vercel.app/api/rate", {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ rating: stars, history: chatHistory })
-});
-} catch(e) { console.error("Failed to send rating"); }
-
-setTimeout(() => { closeChat(); }, 3000);
+    updateState('off', "Disconnected");
+    if (window.vapi) window.vapi.stop();
+    audioPlayer.pause();
+    document.getElementById('usd-chat-container').style.display = 'none';
+    document.getElementById('usd-bubble').style.display = 'flex';
 }
 
 function submitTextMessage() {
-const inputEl = document.getElementById('usd-text-input');
-const userText = inputEl.value.trim();
-if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
+    const inputEl = document.getElementById('usd-text-input');
+    const userText = inputEl.value.trim();
+    if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
 
-inputEl.value = '';
-logMessage('user', userText);
-
-// Types directly into the Vapi stream
-window.vapi.send({
-    type: "add-message",
-    message: { role: "user", content: userText }
-});
+    inputEl.value = '';
+    logMessage('user', userText);
+    
+    if (window.vapi) {
+        window.vapi.send({
+            type: "add-message",
+            message: { role: "user", content: userText }
+        });
+    }
 }
 
 function handleKeyPress(event) {
-if (event.key === 'Enter') {
-event.preventDefault();
-submitTextMessage();
-}
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        submitTextMessage();
+    }
 }
 
 function updateState(newState, statusText) {
-agentState = newState;
-const statusBox = document.getElementById('usd-status-box');
-const visualizer = document.getElementById('usd-visualizer');
-if (statusBox) statusBox.innerText = statusText;
-if (newState === 'speaking') {
-visualizer.classList.add('active');
-} else {
-visualizer.classList.remove('active');
+    agentState = newState;
+    const statusBox = document.getElementById('usd-status-box');
+    const visualizer = document.getElementById('usd-visualizer');
+    if (statusBox) statusBox.innerText = statusText;
+    if (newState === 'speaking') {
+        visualizer.classList.add('active');
+    } else {
+        visualizer.classList.remove('active');
+    }
 }
-}
 
-// Binds Vapi's flawless stream directly to your existing UI logs
-function setupRecognitionCallbacks() {
-    setTimeout(() => {
-        if (!window.vapi) return;
+async function submitRating(stars) {
+    const starElements = document.querySelectorAll('.usd-star');
+    starElements.forEach((s, index) => {
+        s.style.color = index < stars ? '#FFD700' : '#444';
+    });
+    document.getElementById('usd-rating-thanks').style.display = 'block';
 
-        window.vapi.on('call-start', () => {
-            updateState('listening', "Listening...");
+    try {
+        await fetch("https://sd-voice-backend.vercel.app/api/rate", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating: stars, history: chatHistory })
         });
+    } catch(e) { }
 
-        window.vapi.on('speech-start', () => {
-            updateState('speaking', "Assistant is speaking...");
-        });
-
-        window.vapi.on('speech-end', () => {
-            updateState('listening', "Listening...");
-        });
-
-        window.vapi.on('message', (message) => {
-            if (message.type === 'transcript' && message.transcriptType === 'final') {
-                if (message.role === 'user') {
-                    logMessage('user', message.transcript);
-                    document.getElementById('usd-interim-text').innerText = "";
-                } else if (message.role === 'assistant') {
-                    logMessage('bot', message.transcript);
-                    if (message.transcript.includes('[END_CHAT]')) {
-                        window.vapi.stop();
-                        updateState('off', "Conversation ended.");
-                        document.getElementById('usd-rating-overlay').style.display = 'flex';
-                    }
-                }
-            }
-            if (message.type === 'transcript' && message.transcriptType === 'interim' && message.role === 'user') {
-                document.getElementById('usd-interim-text').innerText = message.transcript;
-            }
-        });
-
-        window.vapi.on('call-end', () => {
-            closeChat();
-        });
-    }, 1000); // Small delay to ensure Vapi module loaded
+    setTimeout(() => { closeChat(); }, 3000);
 }
 
 function logMessage(sender, text) {
-const log = document.getElementById('usd-chat-log');
-const msgDiv = document.createElement('div');
-msgDiv.className = `msg msg-${sender}`;
-if (sender === 'user') msgDiv.innerText = "You: " + text;
-else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
-else msgDiv.innerText = text;
-log.appendChild(msgDiv);
-log.scrollTop = log.scrollHeight;
+    const log = document.getElementById('usd-chat-log');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `msg msg-${sender}`;
+    if (sender === 'user') msgDiv.innerText = "You: " + text;
+    else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
+    else msgDiv.innerText = text;
+    log.appendChild(msgDiv);
+    log.scrollTop = log.scrollHeight;
 }
 </script>
 </body>
