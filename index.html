@@ -94,10 +94,9 @@ height: 20px;
 width: 3px;
 background: #D4AF37;
 border-radius: 3px;
-height: 4px; /* Flat state when not speaking */
+height: 4px; 
 transition: height 0.2s ease;
 }
-/* Animate ONLY when .active is added (when bot speaks) */
 #usd-visualizer.active .usd-bar {
 animation: usd-sound 0.4s ease-in-out infinite alternate;
 }
@@ -203,7 +202,6 @@ padding: 20px;
 .usd-star { font-size: 30px; color: #444; transition: color 0.2s; }
 .usd-star:hover, .usd-star.active { color: #FFD700; }
 #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
-/* NEW: END CONFIRMATION OVERLAY */
 #usd-end-confirm-overlay {
 position: absolute;
 top: 0; left: 0; right: 0; bottom: 0;
@@ -236,10 +234,11 @@ padding: 20px;
 
 <script>
 window.usdUserName = "Guest";
+window.agentState = 'off';
 </script>
 
 <div id="usd-voice-widget">
-<div id="usd-tooltip" onclick="openChat()">
+<div id="usd-tooltip" onclick="window.openChat()">
 Namaste! Tap here to talk about your new smile!
 </div>
 
@@ -247,11 +246,11 @@ Namaste! Tap here to talk about your new smile!
 <div id="usd-rating-overlay">
 <div id="usd-rating-title">Rate your experience with USD Agent</div>
 <div class="usd-stars">
-<span class="usd-star" onclick="submitRating(1)">★</span>
-<span class="usd-star" onclick="submitRating(2)">★</span>
-<span class="usd-star" onclick="submitRating(3)">★</span>
-<span class="usd-star" onclick="submitRating(4)">★</span>
-<span class="usd-star" onclick="submitRating(5)">★</span>
+<span class="usd-star" onclick="window.submitRating(1)">★</span>
+<span class="usd-star" onclick="window.submitRating(2)">★</span>
+<span class="usd-star" onclick="window.submitRating(3)">★</span>
+<span class="usd-star" onclick="window.submitRating(4)">★</span>
+<span class="usd-star" onclick="window.submitRating(5)">★</span>
 </div>
 <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
 </div>
@@ -259,8 +258,8 @@ Namaste! Tap here to talk about your new smile!
 <div id="usd-end-confirm-overlay">
 <div class="usd-confirm-title">Want to end the call?</div>
 <div class="usd-confirm-btns">
-<button class="usd-btn-yes" onclick="confirmEndChat(true)">Yes</button>
-<button class="usd-btn-no" onclick="confirmEndChat(false)">No</button>
+<button class="usd-btn-yes" onclick="window.confirmEndChat(true)">Yes</button>
+<button class="usd-btn-no" onclick="window.confirmEndChat(false)">No</button>
 </div>
 </div>
 
@@ -273,18 +272,20 @@ Namaste! Tap here to talk about your new smile!
 <div id="usd-visualizer">
 <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
 </div>
-<button id="usd-close-btn" onclick="closeChatBtnClicked()">✕</button>
+<button id="usd-close-btn" onclick="window.closeChatBtnClicked()">✕</button>
 </div>
 </div>
 
 <div id="usd-chat-log"></div>
 <div id="usd-interim-text"></div>
+
 <div id="usd-input-container">
-<input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
-<button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
+<input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="window.handleKeyPress(event)">
+<button type="button" id="usd-send-btn" onclick="window.submitTextMessage()">Send</button>
 </div>
 </div>
-<div id="usd-bubble" onclick="openChat()">
+
+<div id="usd-bubble" onclick="window.openChat()">
 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -293,23 +294,22 @@ Namaste! Tap here to talk about your new smile!
 </div>
 </div>
 
-<script>
-let agentState = 'off';
-let chatHistory = [];
-let audioPlayer;
+<script type="module">
+    import Vapi from "https://esm.sh/@vapi-ai/web";
+    window.vapi = new Vapi("9a7cc76b-c700-42ba-8bcc-fd125ba91bc1"); 
+    setTimeout(window.setupVapiCallbacks, 500);
+</script>
 
-// Safely Load Vapi in the background to prevent "Initializing..." freeze
+<script>
+window.chatHistory = [];
+window.audioPlayer = null;
+
 window.onload = () => {
-    audioPlayer = document.getElementById('usd-html-player');
+    window.audioPlayer = document.getElementById('usd-html-player');
     const tooltip = document.getElementById('usd-tooltip');
     if(window.usdUserName !== "Guest") {
         tooltip.innerText = `Namaste ${window.usdUserName}! Tap here to talk about your new smile!`;
     }
-
-    import('https://esm.sh/@vapi-ai/web').then(({ default: Vapi }) => {
-        window.vapi = new Vapi("9a7cc76b-c700-42ba-8bcc-fd125ba91bc1"); // Your exact key
-        setupVapiCallbacks();
-    }).catch(err => console.error("Failed to load Vapi", err));
 };
 
 async function playSarvamGreeting(text) {
@@ -321,22 +321,22 @@ async function playSarvamGreeting(text) {
             body: JSON.stringify({ type: 'tts', text: text })
         });
         const data = await response.json();
-        audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+        window.audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
         await new Promise((resolve) => {
-            audioPlayer.onended = resolve;
-            audioPlayer.onerror = resolve;
-            audioPlayer.onpause = resolve;
-            audioPlayer.play().catch(() => resolve());
+            window.audioPlayer.onended = resolve;
+            window.audioPlayer.onerror = resolve;
+            window.audioPlayer.onpause = resolve;
+            window.audioPlayer.play().catch(() => resolve());
         });
     } catch(e) {}
 }
 
-async function openChat() {
+window.openChat = async function() {
     const container = document.getElementById('usd-chat-container');
     const tooltip = document.getElementById('usd-tooltip');
     const bubble = document.getElementById('usd-bubble');
 
-    if (agentState === 'off') {
+    if (window.agentState === 'off') {
         bubble.style.display = 'none';
         container.style.display = 'flex';
         tooltip.style.display = 'none';
@@ -344,22 +344,20 @@ async function openChat() {
         document.getElementById('usd-rating-thanks').style.display = 'none';
         document.getElementById('usd-end-confirm-overlay').style.display = 'none';
         
-        // Exact timing from your code
-        updateState('connecting', "Calling assistant... 🟡");
+        window.updateState('connecting', "Calling assistant... 🟡");
         await new Promise(resolve => setTimeout(resolve, 3000));
 
-        updateState('connecting', "Connected 🟢");
+        window.updateState('connecting', "Connected 🟢");
         await new Promise(resolve => setTimeout(resolve, 1500));
 
-        updateState('speaking', "Assistant is speaking...");
+        window.updateState('speaking', "Assistant is speaking...");
         const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
         const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
-        logMessage('bot', greeting);
+        window.logMessage('bot', greeting);
         
-        // Play the greeting BEFORE starting Vapi
         await playSarvamGreeting(greeting);
 
-        updateState('thinking', "Please allow microphone access...");
+        window.updateState('thinking', "Please allow microphone access...");
         
         if (window.vapi) {
             window.vapi.start({
@@ -373,39 +371,53 @@ async function openChat() {
                     server: { url: "https://sd-voice-backend.vercel.app/api/chat" }
                 },
                 transcriber: {
-                    provider: "deepgram",
-                    model: "nova-2",
-                    language: "multi" // Solves the Hinglish/Gujarati matching perfectly
+                    provider: "groq",
+                    model: "whisper-large-v3"
                 }
             });
         }
     }
 }
 
-function setupVapiCallbacks() {
+window.setupVapiCallbacks = function() {
+    if (!window.vapi) return;
+
     window.vapi.on('call-start', () => {
-        updateState('listening', "Listening...");
+        window.updateState('listening', "Listening...");
     });
 
     window.vapi.on('speech-start', () => {
-        updateState('speaking', "Assistant is speaking...");
+        window.updateState('speaking', "Assistant is speaking...");
     });
 
     window.vapi.on('speech-end', () => {
-        updateState('listening', "Listening...");
+        window.updateState('listening', "Listening...");
+    });
+
+    // FIXED: Prints exact Vapi errors to the screen so we aren't guessing what failed!
+    window.vapi.on('error', (e) => {
+        console.error("VAPI ERROR:", e);
+        window.logMessage('error', "Connection issue: Reconnecting...");
+        window.updateState('off', "Call Ended.");
+    });
+
+    // FIXED: Call-end no longer brutally closes the chat window. It shows the rating screen!
+    window.vapi.on('call-end', () => {
+        window.updateState('off', "Call Ended.");
+        document.getElementById('usd-rating-overlay').style.display = 'flex';
     });
 
     window.vapi.on('message', (message) => {
         if (message.type === 'transcript' && message.transcriptType === 'final') {
             if (message.role === 'user') {
-                logMessage('user', message.transcript);
+                window.logMessage('user', message.transcript);
                 document.getElementById('usd-interim-text').innerText = "";
-                updateState('thinking', "Assistant is replying...");
+                window.updateState('thinking', "Assistant is replying...");
             } else if (message.role === 'assistant') {
-                logMessage('bot', message.transcript);
+                window.logMessage('bot', message.transcript);
                 if (message.transcript.includes('[END_CHAT]')) {
                     window.vapi.stop();
-                    updateState('off', "Conversation ended.");
+                    window.updateState('off', "Conversation ended.");
                     document.getElementById('usd-rating-overlay').style.display = 'flex';
                 }
             }
@@ -414,20 +426,16 @@ function setupVapiCallbacks() {
             document.getElementById('usd-interim-text').innerText = message.transcript;
         }
     });
-
-    window.vapi.on('call-end', () => {
-        closeChat();
-    });
 }
 
-function closeChatBtnClicked() {
+window.closeChatBtnClicked = function() {
     document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
 }
 
-function confirmEndChat(isYes) {
+window.confirmEndChat = function(isYes) {
     document.getElementById('usd-end-confirm-overlay').style.display = 'none';
     if (isYes) {
-        updateState('thinking', "Ending call...");
+        window.updateState('thinking', "Ending call...");
         if (window.vapi) {
             window.vapi.send({
                 type: "add-message",
@@ -437,21 +445,22 @@ function confirmEndChat(isYes) {
     }
 }
 
-function closeChat() {
-    updateState('off', "Disconnected");
+// Full Force Close
+window.closeChat = function() {
+    window.updateState('off', "Disconnected");
     if (window.vapi) window.vapi.stop();
-    audioPlayer.pause();
+    if (window.audioPlayer) window.audioPlayer.pause();
     document.getElementById('usd-chat-container').style.display = 'none';
     document.getElementById('usd-bubble').style.display = 'flex';
 }
 
-function submitTextMessage() {
+window.submitTextMessage = function() {
     const inputEl = document.getElementById('usd-text-input');
     const userText = inputEl.value.trim();
-    if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
+    if (!userText || window.agentState === 'thinking' || window.agentState === 'connecting') return;
 
     inputEl.value = '';
-    logMessage('user', userText);
+    window.logMessage('user', userText);
     
     if (window.vapi) {
         window.vapi.send({
@@ -461,15 +470,15 @@ function submitTextMessage() {
     }
 }
 
-function handleKeyPress(event) {
+window.handleKeyPress = function(event) {
     if (event.key === 'Enter') {
         event.preventDefault();
-        submitTextMessage();
+        window.submitTextMessage();
     }
 }
 
-function updateState(newState, statusText) {
-    agentState = newState;
+window.updateState = function(newState, statusText) {
+    window.agentState = newState;
     const statusBox = document.getElementById('usd-status-box');
     const visualizer = document.getElementById('usd-visualizer');
     if (statusBox) statusBox.innerText = statusText;
@@ -480,7 +489,7 @@ function updateState(newState, statusText) {
     }
 }
 
-async function submitRating(stars) {
+window.submitRating = async function(stars) {
     const starElements = document.querySelectorAll('.usd-star');
     starElements.forEach((s, index) => {
         s.style.color = index < stars ? '#FFD700' : '#444';
@@ -491,14 +500,14 @@ async function submitRating(stars) {
         await fetch("https://sd-voice-backend.vercel.app/api/rate", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rating: stars, history: chatHistory })
+            body: JSON.stringify({ rating: stars, history: window.chatHistory })
         });
     } catch(e) { }
 
-    setTimeout(() => { closeChat(); }, 3000);
+    setTimeout(() => { window.closeChat(); }, 3000);
 }
 
-function logMessage(sender, text) {
+window.logMessage = function(sender, text) {
     const log = document.getElementById('usd-chat-log');
     const msgDiv = document.createElement('div');
     msgDiv.className = `msg msg-${sender}`;
