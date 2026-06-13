@@ -94,9 +94,10 @@
             width: 3px;
             background: #D4AF37;
             border-radius: 3px;
-            height: 4px;
+            height: 4px; /* Flat state when not speaking */
             transition: height 0.2s ease;
         }
+        /* Animate ONLY when .active is added (when bot speaks) */
         #usd-visualizer.active .usd-bar {
             animation: usd-sound 0.4s ease-in-out infinite alternate;
         }
@@ -133,6 +134,7 @@
         .msg-bot { color: #D4AF37; text-align: left; }
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
         .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; }
+        
         #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
         #usd-input-container {
             display: flex;
@@ -202,6 +204,7 @@
         .usd-star { font-size: 30px; color: #444; transition: color 0.2s; }
         .usd-star:hover, .usd-star.active { color: #FFD700; }
         #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
+        /* NEW: END CONFIRMATION OVERLAY */
         #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -301,6 +304,10 @@
         let speechTimeout;
         let userSpeechBuffer = ''; 
         window.lastBotText = ''; 
+        
+        // NEW: Global variables for advanced echo tracking & frequency filtering
+        window.botEndTime = 0;
+        window.isHumanSpeaking = true; 
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
@@ -320,6 +327,7 @@
             }
         };
 
+        // NEW: Fetch Sarvam Audio directly for Initial Greeting
         async function playSarvamGreeting(text) {
             const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat"; 
             try {
@@ -331,9 +339,9 @@
                 const data = await response.json();
                 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                 await new Promise((resolve) => {
-                    audioPlayer.onended = resolve;
-                    audioPlayer.onerror = resolve;
-                    audioPlayer.onpause = resolve; 
+                    audioPlayer.onended = () => { window.botEndTime = Date.now(); resolve(); };
+                    audioPlayer.onerror = () => { window.botEndTime = Date.now(); resolve(); };
+                    audioPlayer.onpause = () => { window.botEndTime = Date.now(); resolve(); };
                     audioPlayer.play().catch(() => resolve());
                 });
             } catch(e) {
@@ -341,13 +349,14 @@
             }
         }
 
+        // OPEN CHAT FUNCTION
         async function openChat() {
             const container = document.getElementById('usd-chat-container');
             const tooltip = document.getElementById('usd-tooltip');
             const bubble = document.getElementById('usd-bubble');
             
             if (agentState === 'off') {
-                bubble.style.display = 'none'; 
+                bubble.style.display = 'none'; // Hides the big bubble
                 container.style.display = 'flex';
                 tooltip.style.display = 'none'; 
                 document.getElementById('usd-rating-overlay').style.display = 'none';
@@ -369,18 +378,54 @@
                 const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
                 
                 logMessage('bot', greeting);
-                window.lastBotText = greeting; 
+                window.lastBotText = greeting; // Track the initial greeting text
                 await playSarvamGreeting(greeting); 
                 
                 updateState('thinking', "Please allow microphone access...");
                 try {
-                    await navigator.mediaDevices.getUserMedia({ 
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
                         audio: {
                             echoCancellation: true,
                             noiseSuppression: true,
                             autoGainControl: true
                         }
                     });
+
+                    // NEW: Special Human Frequency Input Analyzer (85 Hz to 255 Hz)
+                    try {
+                        window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        window.analyser = window.audioCtx.createAnalyser();
+                        window.analyser.fftSize = 1024;
+                        const source = window.audioCtx.createMediaStreamSource(stream);
+                        source.connect(window.analyser);
+                        window.freqData = new Uint8Array(window.analyser.frequencyBinCount);
+
+                        function checkFrequency() {
+                            if (agentState === 'listening') {
+                                window.analyser.getByteFrequencyData(window.freqData);
+                                const sampleRate = window.audioCtx.sampleRate;
+                                const binSize = sampleRate / window.analyser.fftSize;
+                                let humanEnergy = 0;
+                                
+                                // Calculate bins corresponding to 85Hz - 255Hz
+                                const startBin = Math.floor(85 / binSize);
+                                const endBin = Math.ceil(255 / binSize);
+                                
+                                for (let i = startBin; i <= endBin; i++) {
+                                    humanEnergy += window.freqData[i];
+                                }
+                                
+                                // Only flag as true if energy exists in the human vocal cord range
+                                window.isHumanSpeaking = (humanEnergy > 0);
+                            }
+                            requestAnimationFrame(checkFrequency);
+                        }
+                        checkFrequency();
+                    } catch (audioErr) {
+                        console.warn("Frequency analyzer not supported in this browser.");
+                        window.isHumanSpeaking = true; 
+                    }
+
                 } catch (err) {
                     updateState('listening', "Microphone denied. You can type.");
                     return;
@@ -390,6 +435,7 @@
             }
         }
 
+        // NEW: End Chat Confirmation Logic
         function closeChatBtnClicked() {
             document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
         }
@@ -504,6 +550,12 @@
                     }
                 }
 
+                // NEW: 800ms Hardware Echo Latency Shield. Ignores everything for 0.8s after bot finishes.
+                if (Date.now() - window.botEndTime < 800) return;
+
+                // NEW: Human Frequency Filter. Rejects background noise lacking vocal fundamentals (85Hz-255Hz).
+                if (!window.isHumanSpeaking) return;
+
                 if (agentState === 'speaking' && (interimTranscript.trim() || finalTranscript.trim())) {
                     let checkText = (interimTranscript + " " + finalTranscript).toLowerCase().replace(/[^a-zA-Z0-9\s\u0900-\u097F\u0A80-\u0AFF]/g, '').trim();
                     let cleanBot = (window.lastBotText || "").toLowerCase().replace(/[^a-zA-Z0-9\s\u0900-\u097F\u0A80-\u0AFF]/g, '').trim();
@@ -521,7 +573,6 @@
                     }
                 }
 
-                // If final transcript generated, officially lock it into the buffer
                 if (finalTranscript.trim()) {
                     userSpeechBuffer += (userSpeechBuffer ? " " : "") + finalTranscript.trim();
                 }
@@ -543,12 +594,10 @@
                     return;
                 }
 
-                // FIXED: Timer activates on ANY sound (interim or final) so it can NEVER get stuck!
                 if (interimTranscript.trim() || finalTranscript.trim() || userSpeechBuffer.trim()) {
                     clearTimeout(speechTimeout); 
                     
                     speechTimeout = setTimeout(async () => {
-                        // If it got stuck on an interim word, gracefully capture it before sending!
                         if (interimTranscript.trim() && !finalTranscript.trim()) {
                             userSpeechBuffer += (userSpeechBuffer ? " " : "") + interimTranscript.trim();
                         }
@@ -575,7 +624,7 @@
                             logMessage('error', `Error: ${error.message}`);
                             if (agentState !== 'off') updateState('listening', "Listening...");
                         }
-                    }, 2000); 
+                    }, 2500); 
                 }
             };
 
@@ -627,6 +676,7 @@
             
             await new Promise((resolve) => {
                 audioPlayer.onended = () => {
+                    window.botEndTime = Date.now(); // Global tracker for echo prevention
                     if (isEnding) {
                         updateState('off', "Conversation ended.");
                         try { recognition.stop(); } catch(e) {}
@@ -636,10 +686,8 @@
                     }
                     resolve();
                 };
-                audioPlayer.onerror = resolve;
-                audioPlayer.onpause = () => { 
-                    resolve();
-                };
+                audioPlayer.onerror = () => { window.botEndTime = Date.now(); resolve(); };
+                audioPlayer.onpause = () => { window.botEndTime = Date.now(); resolve(); };
                 audioPlayer.play().catch(() => resolve());
             });
 
@@ -651,8 +699,8 @@
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.lang = 'en-IN'; 
                 utterance.rate = 1.0;
-                utterance.onend = resolve;
-                utterance.onerror = resolve;
+                utterance.onend = () => { window.botEndTime = Date.now(); resolve(); };
+                utterance.onerror = () => { window.botEndTime = Date.now(); resolve(); };
                 window.speechSynthesis.speak(utterance);
             });
         }
