@@ -287,7 +287,7 @@
     <audio id="usd-html-player" preload="auto"></audio>
 
     <div id="usd-voice-widget">
-        <div id="usd-tooltip" onclick="openChat()">
+        <div id="usd-tooltip" onclick="openChat(false)">
             Namaste! Tap here to talk about your new smile!
         </div>
 
@@ -337,7 +337,7 @@
             </div>
         </div>
         
-        <div id="usd-bubble" onclick="openChat()">
+        <div id="usd-bubble" onclick="openChat(false)">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -357,7 +357,6 @@
         let globalStream = null;
         let isVoiceMode = true; 
 
-        // CEO APPROVED RESPONSES - Spoken text & visual log text synced
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist. Add your details and we will reach out to you soon.' },
@@ -369,9 +368,25 @@
             '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist', voice: 'Now you are on our dentist connect page.' }
         };
 
-        window.onload = () => {
+        // Check and reconstruct session on load
+        window.onload = async () => {
             audioPlayer = document.getElementById('usd-html-player');
+            if (sessionStorage.getItem('usd_chat_active') === 'true') {
+                await openChat(true);
+            }
         };
+
+        function saveSessionState() {
+            sessionStorage.setItem('usd_chat_active', 'true');
+            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
+            sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
+        }
+
+        function clearSessionState() {
+            sessionStorage.removeItem('usd_chat_active');
+            sessionStorage.removeItem('usd_chat_history');
+            sessionStorage.removeItem('usd_is_voice_mode');
+        }
 
         function toggleChatMode() {
             isVoiceMode = !isVoiceMode;
@@ -391,6 +406,7 @@
                 }
                 updateState('listening', "Chat Mode Active. Type below.");
             }
+            saveSessionState();
         }
 
         async function playSarvamGreeting(text) {
@@ -412,12 +428,12 @@
             } catch(e) {}
         }
 
-        async function openChat() {
+        async function openChat(isRestore = false) {
             const container = document.getElementById('usd-chat-container');
             const tooltip = document.getElementById('usd-tooltip');
             const bubble = document.getElementById('usd-bubble');
             
-            if (agentState === 'off') {
+            if (agentState === 'off' || isRestore) {
                 bubble.style.display = 'none'; 
                 container.style.display = 'flex';
                 tooltip.style.display = 'none'; 
@@ -425,28 +441,57 @@
                 document.getElementById('usd-input-container').style.display = 'flex';
                 document.getElementById('usd-inline-rating').style.display = 'none';
                 document.getElementById('usd-mode-toggle').style.display = 'block';
-                if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
-                document.getElementById('usd-chat-log').innerHTML = ""; 
-                chatHistory = [];
                 
-                audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
-                audioPlayer.play().catch(() => {});
+                if (isRestore) {
+                    // Restore data state from session storage
+                    chatHistory = JSON.parse(sessionStorage.getItem('usd_chat_history') || '[]');
+                    isVoiceMode = sessionStorage.getItem('usd_is_voice_mode') !== 'false';
+                    
+                    const toggleBtn = document.getElementById('usd-mode-toggle');
+                    toggleBtn.innerText = isVoiceMode ? "🎙️ Voice" : "💬 Text";
+                    if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
+                    else document.getElementById('usd-visualizer').style.display = 'none';
+                    
+                    // Render past visual logs instantly
+                    document.getElementById('usd-chat-log').innerHTML = ""; 
+                    chatHistory.forEach(turn => {
+                        const sender = turn.role === 'model' ? 'bot' : 'user';
+                        let cleanText = turn.parts[0].text.replace(/\[.*?\]/g, '').trim();
+                        let foundTag = null;
+                        if (turn.role === 'model') {
+                            for (const tag in usdLinks) {
+                                if (turn.parts[0].text.includes(tag)) { foundTag = tag; break; }
+                            }
+                        }
+                        logMessage(sender, cleanText, foundTag);
+                    });
 
-                updateState('connecting', "Calling assistant... 🟡");
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                    updateState('thinking', "Reconnecting session...");
+                    await startWebSocket();
+                } else {
+                    if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
+                    document.getElementById('usd-chat-log').innerHTML = ""; 
+                    chatHistory = [];
+                    
+                    audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
+                    audioPlayer.play().catch(() => {});
 
-                updateState('connecting', "Connected 🟢");
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                    updateState('connecting', "Calling assistant... 🟡");
+                    await new Promise(resolve => setTimeout(resolve, 2000));
 
-                updateState('speaking', "Assistant is speaking...");
-                
-                const greeting = "Namaste! How can we assist you today?";
-                
-                logMessage('bot', greeting);
-                await playSarvamGreeting(greeting); 
-                
-                updateState('thinking', "Connecting...");
-                await startWebSocket();
+                    updateState('connecting', "Connected 🟢");
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    updateState('speaking', "Assistant is speaking...");
+                    
+                    const greeting = "Namaste! How can we assist you today?";
+                    logMessage('bot', greeting);
+                    saveSessionState();
+                    await playSarvamGreeting(greeting); 
+                    
+                    updateState('thinking', "Connecting...");
+                    await startWebSocket();
+                }
             }
         }
 
@@ -557,6 +602,7 @@
                         
                         chatHistory.push({ role: "user", parts: [{ text: data.userText }] });
                         chatHistory.push({ role: "model", parts: [{ text: data.botText }] });
+                        saveSessionState();
 
                         let finalBotReply = data.botText;
                         let isEnding = false;
@@ -645,6 +691,8 @@
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
+            clearSessionState();
+            
             if (showRating) {
                 document.getElementById('usd-input-container').style.display = 'none';
                 document.getElementById('usd-mode-toggle').style.display = 'none';
@@ -732,18 +780,14 @@
             }
         }
 
-        // CEO APPROVED LOGIC: Handle User Click -> Open New Tab -> Print Chat Message -> Speak Custom Text
+        // REDIRECT IN THE SAME TAB LIKE ELEVENLABS
         async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
             
-            // 1. Immediately open link in a NEW TAB so the chat perfectly stays alive in current tab
-            window.open(linkInfo.url, '_blank');
-            
-            // 2. Add system text to the chat window visually
             logMessage('bot', linkInfo.voice);
             chatHistory.push({ role: "model", parts: [{ text: linkInfo.voice }] });
+            saveSessionState();
 
-            // 3. Play the custom Voice audio
             if (isVoiceMode) {
                 audioPlayer.pause();
                 if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
@@ -752,8 +796,10 @@
                 }
                 updateState('speaking', "Redirecting...");
                 await playSarvamGreeting(linkInfo.voice);
-                updateState('listening', "Listening...");
             }
+            
+            // Redirect smoothly in the same single browser tab
+            window.location.href = linkInfo.url;
         }
 
         function logMessage(sender, text, tag = null) {
