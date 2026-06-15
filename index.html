@@ -236,78 +236,14 @@
     <audio id="usd-html-player" preload="auto"></audio>
 
     <script>
+        const RENDER_BACKEND_URL = "https://nikjoshi123-usd-voice-backend.hf.space";
+        const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
+
         window.usdUserName = "Guest"; 
-    </script>
-
-    <div id="usd-voice-widget">
-        <div id="usd-tooltip" onclick="openChat()">
-            Namaste! Tap here to talk about your new smile!
-        </div>
-
-        <div id="usd-chat-container">
-            <div id="usd-rating-overlay">
-                <div id="usd-rating-title">Rate your experience with USD Agent</div>
-                <div class="usd-stars">
-                    <span class="usd-star" onclick="submitRating(1)">★</span>
-                    <span class="usd-star" onclick="submitRating(2)">★</span>
-                    <span class="usd-star" onclick="submitRating(3)">★</span>
-                    <span class="usd-star" onclick="submitRating(4)">★</span>
-                    <span class="usd-star" onclick="submitRating(5)">★</span>
-                </div>
-                <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
-            </div>
-
-            <div id="usd-end-confirm-overlay">
-                <div class="usd-confirm-title">Want to end the call?</div>
-                <div class="usd-confirm-btns">
-                    <button class="usd-btn-yes" onclick="confirmEndChat(true)">Yes</button>
-                    <button class="usd-btn-no" onclick="confirmEndChat(false)">No</button>
-                </div>
-            </div>
-
-            <div id="usd-chat-header">
-                <div id="usd-header-left">
-               <img src="https://raw.githubusercontent.com/teeth-vton/sd-voice-backend/dab01d9f2e96be2fcda278af63db62dfef9e1559/Gemini_Generated_Image_67gd1767gd1767gd.png" alt="USD Assistant" width="24" height="24" style="object-fit: contain;">
-                    <div id="usd-status-box">Initializing...</div>
-                </div>
-                <div id="usd-header-right">
-                    <div id="usd-visualizer">
-                        <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
-                    </div>
-                    <button id="usd-close-btn" onclick="closeChatBtnClicked()">✕</button>
-                </div>
-            </div>
-
-            <div id="usd-chat-log"></div>
-            <div id="usd-interim-text"></div>
-            
-            <div id="usd-input-container">
-                <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
-                <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
-            </div>
-        </div>
-        
-        <div id="usd-bubble" onclick="openChat()">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <line x1="12" y1="19" x2="12" y2="22"></line>
-            </svg>
-        </div>
-    </div>
-
-    <script>
-// Change these lines to point to your new running Hugging Face space!
-const RENDER_BACKEND_URL = "https://nikjoshi123-usd-voice-backend.hf.space";
-const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
-        
         let agentState = 'off'; 
         let chatHistory = [];
         let audioPlayer;
-        window.lastBotText = ''; 
         let socket = null;
-        let audioContext = null;
-        let processor = null;
         let globalStream = null;
 
         window.onload = () => {
@@ -364,11 +300,9 @@ const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
                 const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
                 
                 logMessage('bot', greeting);
-                window.lastBotText = greeting; 
                 await playSarvamGreeting(greeting); 
                 
                 updateState('thinking', "Please allow microphone access...");
-                
                 await startWebSocket();
             }
         }
@@ -382,18 +316,87 @@ const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
                         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
                     });
 
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-                    const source = audioContext.createMediaStreamSource(globalStream);
-                    processor = audioContext.createScriptProcessor(4096, 1, 1);
+                    let options = {};
+                    if (MediaRecorder.isTypeSupported('audio/webm')) {
+                        options = { mimeType: 'audio/webm' };
+                        window.audioExt = 'webm';
+                    } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                        options = { mimeType: 'audio/mp4' };
+                        window.audioExt = 'mp4';
+                    } else {
+                        window.audioExt = 'wav';
+                    }
+
+                    window.mediaRecorder = new MediaRecorder(globalStream, options);
+                    window.audioChunks = [];
                     
-                    processor.onaudioprocess = (e) => {
-                        if (agentState !== 'listening') return;
-                        const float32Array = e.inputBuffer.getChannelData(0);
-                        socket.send(float32Array.buffer);
+                    window.mediaRecorder.ondataavailable = (e) => {
+                        if (e.data.size > 0) window.audioChunks.push(e.data);
                     };
 
-                    source.connect(processor);
-                    processor.connect(audioContext.destination);
+                    window.mediaRecorder.onstop = () => {
+                        if (window.audioChunks.length === 0) return;
+                        
+                        updateState('thinking', "Assistant is replying...");
+                        const audioBlob = new Blob(window.audioChunks, { type: `audio/${window.audioExt}` });
+                        window.audioChunks = []; // Clear for next recording
+                        
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = () => {
+                            const base64Audio = reader.result.split(',')[1];
+                            if (socket && socket.readyState === WebSocket.OPEN) {
+                                socket.send(JSON.stringify({ 
+                                    type: 'audio_input', 
+                                    audioBase64: base64Audio, 
+                                    audioExt: window.audioExt,
+                                    history: chatHistory 
+                                }));
+                            }
+                        };
+                    };
+
+                    // HANDS FREE: Auto-Voice Activity Detection
+                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const analyser = audioCtx.createAnalyser();
+                    const source = audioCtx.createMediaStreamSource(globalStream);
+                    source.connect(analyser);
+                    analyser.fftSize = 512;
+
+                    let silenceTimer = null;
+                    let isRecording = false;
+
+                    function detectVoice() {
+                        if (agentState !== 'listening') {
+                            requestAnimationFrame(detectVoice);
+                            return;
+                        }
+
+                        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                        analyser.getByteFrequencyData(dataArray);
+                        let sum = 0;
+                        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                        let avg = sum / dataArray.length;
+
+                        if (avg > 15) { // Threshold for speech detection
+                            if (!isRecording) {
+                                isRecording = true;
+                                window.audioChunks = [];
+                                window.mediaRecorder.start();
+                                document.getElementById('usd-interim-text').innerText = "Listening...";
+                            }
+                            
+                            clearTimeout(silenceTimer);
+                            silenceTimer = setTimeout(() => {
+                                if (isRecording) {
+                                    isRecording = false;
+                                    window.mediaRecorder.stop(); 
+                                }
+                            }, 1500); // 1.5 seconds of silence triggers the send
+                        }
+                        requestAnimationFrame(detectVoice);
+                    }
+                    detectVoice();
 
                     updateState('listening', "Listening...");
                 };
@@ -404,8 +407,7 @@ const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
                     if (data.type === 'transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
                     } 
-                    
-                    if (data.type === 'reply') {
+                    else if (data.type === 'reply') {
                         document.getElementById('usd-interim-text').innerText = "";
                         logMessage('user', data.userText);
                         
@@ -433,6 +435,10 @@ const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
                         };
                         audioPlayer.play();
                     }
+                    else if (data.type === 'error') {
+                        logMessage('error', data.message);
+                        updateState('listening', "Listening...");
+                    }
                 };
 
                 socket.onerror = () => updateState('listening', "Microphone error. You can type.");
@@ -453,7 +459,6 @@ const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
                 audioPlayer.pause();
                 
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
-                
                 try {
                     const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                         method: 'POST',
@@ -467,7 +472,7 @@ const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
                         document.getElementById('usd-rating-overlay').style.display = 'flex';
                     };
                     audioPlayer.play();
-                } catch(e) {}
+                } catch(e) { closeChat(); }
             }
         }
 
@@ -475,8 +480,6 @@ const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
             updateState('off', "Disconnected");
             audioPlayer.pause();
             if (socket) socket.close();
-            if (processor) processor.disconnect();
-            if (audioContext) audioContext.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
             document.getElementById('usd-chat-container').style.display = 'none';
@@ -508,6 +511,12 @@ const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
 
             inputEl.value = ''; 
             audioPlayer.pause(); 
+            
+            if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
+                window.mediaRecorder.stop();
+                window.audioChunks = []; 
+            }
+
             updateState('thinking', "Assistant is replying...");
 
             if (socket && socket.readyState === WebSocket.OPEN) {
