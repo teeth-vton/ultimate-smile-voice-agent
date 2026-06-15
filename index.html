@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ultimate Smile Design - Live Agent</title>
     <style>
+        /* NEW: Black background to match the live site */
+        body {
+            background-color: #000000;
+            color: #ffffff;
+            margin: 0;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+
         #usd-voice-widget {
             position: fixed;
             bottom: 30px;
@@ -13,7 +21,6 @@
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
         #usd-tooltip {
             background: #D4AF37;
@@ -84,7 +91,6 @@
             align-items: center;
             gap: 10px;
         }
-        /* THE NEW TOGGLE BUTTON */
         #usd-mode-toggle {
             background: #222;
             color: #D4AF37;
@@ -143,6 +149,29 @@
         .msg-bot { color: #D4AF37; text-align: left; }
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
         .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; }
+
+        /* NEW: The Black & Gold Interactive Redirect Cards */
+        .usd-link-card {
+            display: block;
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px;
+            background: linear-gradient(135deg, #111111, #222222);
+            border: 1px solid #D4AF37;
+            color: #D4AF37;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: bold;
+            text-align: center;
+            cursor: pointer;
+            box-sizing: border-box;
+            transition: all 0.2s;
+        }
+        .usd-link-card:hover {
+            background: #D4AF37;
+            color: #111111;
+            transform: translateY(-2px);
+        }
         
         #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
         #usd-input-container {
@@ -195,10 +224,13 @@
             70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(212, 175, 55, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
         }
-        #usd-rating-overlay {
+
+        /* NEW: Premium Professional Star Rating UI */
+        #usd-rating-overlay, #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(17, 17, 17, 0.95);
+            background: rgba(10, 10, 10, 0.85); /* Darker, sleek overlay */
+            backdrop-filter: blur(8px); /* Apple-style blur effect */
             border-radius: 15px;
             display: none;
             flex-direction: column;
@@ -208,32 +240,48 @@
             text-align: center;
             padding: 20px;
         }
-        #usd-rating-title { color: #fff; font-size: 16px; margin-bottom: 15px; font-weight: bold; }
-        .usd-stars { display: flex; gap: 10px; cursor: pointer; }
-        .usd-star { font-size: 30px; color: #444; transition: color 0.2s; }
-        .usd-star:hover, .usd-star.active { color: #FFD700; }
-        #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
-        #usd-end-confirm-overlay {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(17, 17, 17, 0.95);
-            border-radius: 15px;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 101;
-            text-align: center;
-            padding: 20px;
+        #usd-rating-title, .usd-confirm-title { 
+            color: #fff; 
+            font-size: 18px; 
+            margin-bottom: 20px; 
+            font-weight: bold; 
+            letter-spacing: 0.5px;
         }
-        .usd-confirm-title { color: #fff; font-size: 16px; margin-bottom: 20px; font-weight: bold; }
+        .usd-stars { 
+            display: flex; 
+            gap: 15px; 
+            cursor: pointer; 
+        }
+        .usd-star { 
+            font-size: 35px; 
+            color: #333333; 
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            transition: transform 0.2s, color 0.2s, text-shadow 0.2s; 
+        }
+        .usd-star:hover, .usd-star.active { 
+            color: #FFD700; 
+            transform: scale(1.2);
+            text-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+        }
+        #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; font-weight: bold; }
+        
         .usd-confirm-btns { display: flex; gap: 15px; }
         .usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        
+        /* NEW: Highly Compact Mobile View */
         @media (max-width: 480px) {
             #usd-voice-widget { bottom: 15px; right: 15px; }
-            #usd-bubble { width: 60px; height: 60px; }
-            #usd-chat-container { width: calc(100vw - 30px); padding: 12px; margin-bottom: 10px; max-width: 320px; }
+            #usd-bubble { width: 50px; height: 50px; } /* Smaller Bubble */
+            #usd-bubble svg { width: 24px; height: 24px; }
+            
+            #usd-chat-container { 
+                width: calc(100vw - 40px); 
+                max-height: 300px; /* Reduced Height so it doesn't cover screen */
+                padding: 12px; 
+                margin-bottom: 10px; 
+            }
+            #usd-chat-log { max-height: 140px; } /* Less scroll space to fit better */
             #usd-tooltip { font-size: 12px; padding: 8px 12px; margin-bottom: 10px; }
             #usd-tooltip::after { right: 20px; }
         }
@@ -254,7 +302,7 @@
 
         <div id="usd-chat-container">
             <div id="usd-rating-overlay">
-                <div id="usd-rating-title">Rate your experience with USD Agent</div>
+                <div id="usd-rating-title">Rate your experience</div>
                 <div class="usd-stars">
                     <span class="usd-star" onclick="submitRating(1)">★</span>
                     <span class="usd-star" onclick="submitRating(2)">★</span>
@@ -280,7 +328,6 @@
                         <div id="usd-status-box">Initializing...</div>
                     </div>
                     <div id="usd-header-right">
-                        <!-- NEW: Voice vs Text Toggle Button -->
                         <button id="usd-mode-toggle" onclick="toggleChatMode()">🎙️ Voice</button>
                         <div id="usd-visualizer">
                             <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
@@ -317,9 +364,19 @@
         let audioPlayer;
         let socket = null;
         let globalStream = null;
-        
-        // NEW: Mode Tracker
         let isVoiceMode = true; 
+
+        // NEW: Database of redirect links, their UI labels, and the spoken instructions!
+        const usdLinks = {
+            '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
+            '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist.' },
+            '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On', voice: 'Now you are on our virtual try-on page.' },
+            '[LINK_BLOGS]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '📰 Read Our Blogs', voice: 'Now you are on our blogs page.' }, 
+            '[LINK_GALLERY]': { url: 'https://ultimatesmiledesign.com/gallery/', label: '🖼️ Check Out Gallery', voice: 'Now you are on our gallery page.' },
+            '[LINK_CONSULT]': { url: 'https://ultimatesmiledesign.com/consult-with-dentist/', label: '👨‍⚕️ Consult Expert Dentist', voice: 'Now you are on our consultation page.' },
+            '[LINK_CONTACT]': { url: 'https://ultimatesmiledesign.com/contact/', label: '📞 Contact Us', voice: 'Now you are on our contact page.' },
+            '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist', voice: 'Now you are on our dentist connect page.' }
+        };
 
         window.onload = () => {
             audioPlayer = document.getElementById('usd-html-player');
@@ -329,7 +386,6 @@
             }
         };
 
-        // NEW: Toggle function
         function toggleChatMode() {
             isVoiceMode = !isVoiceMode;
             const toggleBtn = document.getElementById('usd-mode-toggle');
@@ -339,7 +395,6 @@
                 toggleBtn.innerText = "🎙️ Voice";
                 visualizer.style.display = "flex";
                 updateState('listening', "Listening...");
-                // Restart Mic logic happens organically via VAD loop
             } else {
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "none";
@@ -352,7 +407,7 @@
         }
 
         async function playSarvamGreeting(text) {
-            if (!isVoiceMode) return; // Skip if in text mode
+            if (!isVoiceMode) return; 
             try {
                 const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                     method: 'POST',
@@ -435,7 +490,7 @@
                     };
 
                     window.mediaRecorder.onstop = () => {
-                        if (!isVoiceMode) return; // Prevent mic send if switched to text
+                        if (!isVoiceMode) return; 
                         if (window.audioChunks.length === 0) return;
                         
                         updateState('thinking', "Assistant is replying...");
@@ -517,12 +572,26 @@
 
                         let finalBotReply = data.botText;
                         let isEnding = false;
+                        let foundTag = null;
+                        
+                        // Check if the AI wants to end chat
                         if (finalBotReply.includes('[END_CHAT]')) {
                             isEnding = true;
-                            finalBotReply = finalBotReply.replace('[END_CHAT]', '').trim();
+                        }
+                        
+                        // Check if the AI appended any redirect link tags
+                        for (const tag in usdLinks) {
+                            if (finalBotReply.includes(tag)) {
+                                foundTag = tag;
+                                break; 
+                            }
                         }
 
-                        logMessage('bot', finalBotReply);
+                        // Remove ALL brackets before showing on UI
+                        finalBotReply = finalBotReply.replace(/\[.*?\]/g, '').trim();
+
+                        // Pass the found tag to the logger to build the interactive card
+                        logMessage('bot', finalBotReply, foundTag);
 
                         if (isVoiceMode && data.audioBase64) {
                             updateState('speaking', "Assistant is speaking...");
@@ -536,7 +605,6 @@
                             };
                             audioPlayer.play();
                         } else {
-                            // Text Mode: Don't play audio, just reset state
                             if (isEnding) {
                                 setTimeout(() => closeChat(true), 2000);
                             } else {
@@ -603,21 +671,20 @@
             }
         }
 
-     async function submitRating(stars) {
+        async function submitRating(stars) {
             const starElements = document.querySelectorAll('.usd-star');
             starElements.forEach((s, index) => {
                 s.style.color = index < stars ? '#FFD700' : '#444';
+                s.style.textShadow = index < stars ? '0 0 15px rgba(255, 215, 0, 0.6)' : '0 2px 4px rgba(0,0,0,0.5)';
             });
             document.getElementById('usd-rating-thanks').style.display = 'block';
 
             try {
-                // Safely gather the chat history
                 let transcript = "No chat history recorded.";
                 if (chatHistory && chatHistory.length > 0) {
                     transcript = chatHistory.map(turn => `${turn.role === 'user' ? 'User' : 'Agent'}: ${turn.parts[0].text}`).join('\n\n');
                 }
 
-                // Send email directly from the browser, completely bypassing Hugging Face!
                 await fetch('https://api.web3forms.com/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -629,11 +696,8 @@
                         message: `Transcript:\n\n${transcript}` 
                     })
                 });
-            } catch(e) { 
-                console.error("Email failed to send:", e); 
-            }
+            } catch(e) { }
 
-            // Close the window after 3 seconds
             setTimeout(() => { closeChat(false); }, 3000);
         }
 
@@ -657,7 +721,7 @@
                     type: 'text_input', 
                     text: userText, 
                     history: chatHistory,
-                    isVoiceMode: isVoiceMode // Tells backend to skip TTS generation if in Text Mode
+                    isVoiceMode: isVoiceMode 
                 }));
             }
         }
@@ -682,13 +746,37 @@
             }
         }
 
-        function logMessage(sender, text) {
+        // NEW: Handles the user clicking the BIK style redirect button!
+        async function handleLinkClick(tag) {
+            const linkInfo = usdLinks[tag];
+            if (isVoiceMode) {
+                audioPlayer.pause();
+                updateState('speaking', "Redirecting...");
+                await playSarvamGreeting(linkInfo.voice);
+                updateState('listening', "Listening...");
+            }
+            window.open(linkInfo.url, '_blank');
+        }
+
+        // MODIFIED: Injects the interactive BIK link card if a tag was found
+        function logMessage(sender, text, tag = null) {
             const log = document.getElementById('usd-chat-log');
             const msgDiv = document.createElement('div');
             msgDiv.className = `msg msg-${sender}`;
+            
             if (sender === 'user') msgDiv.innerText = "You: " + text;
             else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
             else msgDiv.innerText = text; 
+            
+            // If the LLM sent a redirect tag, create the button!
+            if (tag && usdLinks[tag]) {
+                const btn = document.createElement('button');
+                btn.className = 'usd-link-card';
+                btn.innerText = usdLinks[tag].label;
+                btn.onclick = () => handleLinkClick(tag);
+                msgDiv.appendChild(btn);
+            }
+
             log.appendChild(msgDiv);
             log.scrollTop = log.scrollHeight;
         }
