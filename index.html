@@ -1,559 +1,550 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ultimate Smile Design - Live Agent</title>
-<style>
-#usd-voice-widget {
-position: fixed;
-bottom: 30px;
-right: 30px;
-z-index: 99999;
-display: flex;
-flex-direction: column;
-align-items: flex-end;
-font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-}
-#usd-tooltip {
-background: #D4AF37;
-color: #111;
-padding: 10px 15px;
-border-radius: 12px;
-font-size: 14px;
-font-weight: bold;
-margin-bottom: 15px;
-box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-animation: bounce 2s infinite;
-position: relative;
-cursor: pointer;
-display: block;
-}
-#usd-tooltip::after {
-content: '';
-position: absolute;
-bottom: -8px;
-right: 30px;
-border-width: 8px 8px 0;
-border-style: solid;
-border-color: #D4AF37 transparent transparent transparent;
-}
-@keyframes bounce {
-0%, 100% { transform: translateY(0); }
-50% { transform: translateY(-5px); }
-}
-@keyframes floatContainer {
-0% { transform: translateY(0px); }
-50% { transform: translateY(-8px); }
-100% { transform: translateY(0px); }
-}
-#usd-chat-container {
-width: 320px;
-max-height: 380px;
-background-color: #111111;
-border: 1px solid rgba(255, 255, 255, 0.25);
-border-radius: 15px;
-padding: 15px;
-margin-bottom: 15px;
-box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-display: none;
-flex-direction: column;
-position: relative;
-animation: floatContainer 4s ease-in-out infinite;
-}
-#usd-chat-header {
-display: flex;
-justify-content: space-between;
-align-items: center;
-border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-padding-bottom: 10px;
-margin-bottom: 10px;
-}
-#usd-header-left {
-display: flex;
-align-items: center;
-gap: 10px;
-}
-#usd-status-box {
-color: #D4AF37;
-font-size: 13px;
-font-weight: bold;
-}
-#usd-header-right {
-display: flex;
-align-items: center;
-gap: 15px;
-}
-#usd-visualizer {
-display: flex;
-gap: 3px;
-align-items: center;
-height: 20px;
-}
-.usd-bar {
-width: 3px;
-background: #D4AF37;
-border-radius: 3px;
-height: 4px; 
-transition: height 0.2s ease;
-}
-#usd-visualizer.active .usd-bar {
-animation: usd-sound 0.4s ease-in-out infinite alternate;
-}
-#usd-visualizer.active .usd-bar:nth-child(1) { animation-delay: 0.0s; }
-#usd-visualizer.active .usd-bar:nth-child(2) { animation-delay: 0.2s; }
-#usd-visualizer.active .usd-bar:nth-child(3) { animation-delay: 0.1s; }
-#usd-visualizer.active .usd-bar:nth-child(4) { animation-delay: 0.3s; }
-#usd-visualizer.active .usd-bar:nth-child(5) { animation-delay: 0.1s; }
-@keyframes usd-sound {
-0% { height: 4px; }
-100% { height: 18px; }
-}
-#usd-close-btn {
-background: none;
-border: none;
-color: #888;
-font-size: 18px;
-cursor: pointer;
-padding: 0;
-transition: color 0.2s;
-}
-#usd-close-btn:hover { color: #ff4444; }
-#usd-chat-log {
-overflow-y: auto;
-flex-grow: 1;
-margin-bottom: 10px;
-max-height: 210px;
-padding-right: 5px;
-}
-#usd-chat-log::-webkit-scrollbar { width: 4px; }
-#usd-chat-log::-webkit-scrollbar-thumb { background: #D4AF37; border-radius: 10px; }
-.msg { margin-bottom: 8px; font-size: 13px; line-height: 1.4; }
-.msg-user { color: #ffffff; text-align: right; }
-.msg-bot { color: #D4AF37; text-align: left; }
-.msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
-.msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; }
-#usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
-#usd-input-container {
-display: flex;
-border-top: 1px solid rgba(255,255,255,0.1);
-padding-top: 10px;
-}
-#usd-text-input {
-flex-grow: 1;
-background: #222;
-border: 1px solid #444;
-color: #fff;
-border-radius: 4px;
-padding: 6px 10px;
-font-size: 13px;
-outline: none;
-}
-#usd-text-input:focus { border-color: #D4AF37; }
-#usd-send-btn {
-background: #D4AF37;
-color: #111;
-border: none;
-border-radius: 4px;
-padding: 6px 12px;
-margin-left: 6px;
-cursor: pointer;
-font-weight: bold;
-font-size: 13px;
-}
-#usd-send-btn:hover { background: #FFF8DC; }
-#usd-bubble {
-width: 80px;
-height: 80px;
-background: linear-gradient(135deg, #FFD700, #B8860B);
-border-radius: 50%;
-cursor: pointer;
-box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7);
-animation: usd-pulse 2s infinite;
-display: flex;
-align-items: center;
-justify-content: center;
-border: 3px solid #111111;
-transition: transform 0.2s ease-in-out;
-user-select: none;
-}
-#usd-bubble:hover { transform: scale(1.05); }
-#usd-bubble:active { transform: scale(0.95); }
-@keyframes usd-pulse {
-0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); }
-70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(212, 175, 55, 0); }
-100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
-}
-#usd-rating-overlay {
-position: absolute;
-top: 0; left: 0; right: 0; bottom: 0;
-background: rgba(17, 17, 17, 0.95);
-border-radius: 15px;
-display: none;
-flex-direction: column;
-align-items: center;
-justify-content: center;
-z-index: 100;
-text-align: center;
-padding: 20px;
-}
-#usd-rating-title { color: #fff; font-size: 16px; margin-bottom: 15px; font-weight: bold; }
-.usd-stars { display: flex; gap: 10px; cursor: pointer; }
-.usd-star { font-size: 30px; color: #444; transition: color 0.2s; }
-.usd-star:hover, .usd-star.active { color: #FFD700; }
-#usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
-#usd-end-confirm-overlay {
-position: absolute;
-top: 0; left: 0; right: 0; bottom: 0;
-background: rgba(17, 17, 17, 0.95);
-border-radius: 15px;
-display: none;
-flex-direction: column;
-align-items: center;
-justify-content: center;
-z-index: 101;
-text-align: center;
-padding: 20px;
-}
-.usd-confirm-title { color: #fff; font-size: 16px; margin-bottom: 20px; font-weight: bold; }
-.usd-confirm-btns { display: flex; gap: 15px; }
-.usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-.usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-@media (max-width: 480px) {
-#usd-voice-widget { bottom: 15px; right: 15px; }
-#usd-bubble { width: 60px; height: 60px; }
-#usd-chat-container { width: calc(100vw - 30px); padding: 12px; margin-bottom: 10px; max-width: 320px; }
-#usd-tooltip { font-size: 12px; padding: 8px 12px; margin-bottom: 10px; }
-#usd-tooltip::after { right: 20px; }
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Smile Design - Live Agent</title>
+    <style>
+        #usd-voice-widget {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+        #usd-tooltip {
+            background: #D4AF37;
+            color: #111;
+            padding: 10px 15px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            animation: bounce 2s infinite;
+            position: relative;
+            cursor: pointer;
+            display: block; 
+        }
+        #usd-tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            right: 30px;
+            border-width: 8px 8px 0;
+            border-style: solid;
+            border-color: #D4AF37 transparent transparent transparent;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+        @keyframes floatContainer {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+            100% { transform: translateY(0px); }
+        }
+        #usd-chat-container {
+            width: 320px;
+            max-height: 380px;
+            background-color: #111111;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            display: none;
+            flex-direction: column;
+            position: relative; 
+            animation: floatContainer 4s ease-in-out infinite;
+        }
+        #usd-chat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+        #usd-header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #usd-status-box {
+            color: #D4AF37;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        #usd-header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        #usd-visualizer {
+            display: flex;
+            gap: 3px;
+            align-items: center;
+            height: 20px;
+        }
+        .usd-bar {
+            width: 3px;
+            background: #D4AF37;
+            border-radius: 3px;
+            height: 4px; /* Flat state when not speaking */
+            transition: height 0.2s ease;
+        }
+        /* Animate ONLY when .active is added (when bot speaks) */
+        #usd-visualizer.active .usd-bar {
+            animation: usd-sound 0.4s ease-in-out infinite alternate;
+        }
+        #usd-visualizer.active .usd-bar:nth-child(1) { animation-delay: 0.0s; }
+        #usd-visualizer.active .usd-bar:nth-child(2) { animation-delay: 0.2s; }
+        #usd-visualizer.active .usd-bar:nth-child(3) { animation-delay: 0.1s; }
+        #usd-visualizer.active .usd-bar:nth-child(4) { animation-delay: 0.3s; }
+        #usd-visualizer.active .usd-bar:nth-child(5) { animation-delay: 0.1s; }
+        @keyframes usd-sound {
+            0% { height: 4px; }
+            100% { height: 18px; }
+        }
+        #usd-close-btn {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            transition: color 0.2s;
+        }
+        #usd-close-btn:hover { color: #ff4444; }
+        #usd-chat-log {
+            overflow-y: auto;
+            flex-grow: 1;
+            margin-bottom: 10px;
+            max-height: 210px;
+            padding-right: 5px;
+        }
+        #usd-chat-log::-webkit-scrollbar { width: 4px; }
+        #usd-chat-log::-webkit-scrollbar-thumb { background: #D4AF37; border-radius: 10px; }
+        .msg { margin-bottom: 8px; font-size: 13px; line-height: 1.4; }
+        .msg-user { color: #ffffff; text-align: right; }
+        .msg-bot { color: #D4AF37; text-align: left; }
+        .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
+        .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; }
+        
+        #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
+        #usd-input-container {
+            display: flex;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            padding-top: 10px;
+        }
+        #usd-text-input {
+            flex-grow: 1;
+            background: #222;
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 13px;
+            outline: none;
+        }
+        #usd-text-input:focus { border-color: #D4AF37; }
+        #usd-send-btn {
+            background: #D4AF37;
+            color: #111;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+            margin-left: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+        }
+        #usd-send-btn:hover { background: #FFF8DC; }
+        #usd-bubble {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #FFD700, #B8860B);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7);
+            animation: usd-pulse 2s infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid #111111;
+            transition: transform 0.2s ease-in-out;
+            user-select: none;
+        }
+        #usd-bubble:hover { transform: scale(1.05); }
+        #usd-bubble:active { transform: scale(0.95); }
+        @keyframes usd-pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(212, 175, 55, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
+        }
+        #usd-rating-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(17, 17, 17, 0.95);
+            border-radius: 15px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
+        }
+        #usd-rating-title { color: #fff; font-size: 16px; margin-bottom: 15px; font-weight: bold; }
+        .usd-stars { display: flex; gap: 10px; cursor: pointer; }
+        .usd-star { font-size: 30px; color: #444; transition: color 0.2s; }
+        .usd-star:hover, .usd-star.active { color: #FFD700; }
+        #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
+        /* NEW: END CONFIRMATION OVERLAY */
+        #usd-end-confirm-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(17, 17, 17, 0.95);
+            border-radius: 15px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 101;
+            text-align: center;
+            padding: 20px;
+        }
+        .usd-confirm-title { color: #fff; font-size: 16px; margin-bottom: 20px; font-weight: bold; }
+        .usd-confirm-btns { display: flex; gap: 15px; }
+        .usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        @media (max-width: 480px) {
+            #usd-voice-widget { bottom: 15px; right: 15px; }
+            #usd-bubble { width: 60px; height: 60px; }
+            #usd-chat-container { width: calc(100vw - 30px); padding: 12px; margin-bottom: 10px; max-width: 320px; }
+            #usd-tooltip { font-size: 12px; padding: 8px 12px; margin-bottom: 10px; }
+            #usd-tooltip::after { right: 20px; }
+        }
+    </style>
 </head>
 <body>
 
-<audio id="usd-html-player" preload="auto"></audio>
+    <audio id="usd-html-player" preload="auto"></audio>
 
-<script>
-window.usdUserName = "Guest";
-window.agentState = 'off';
-window.chatHistory = [];
-window.audioPlayer = null;
-window.botEndTime = 0;
-window.mediaRecorder = null;
-window.audioChunks = [];
-window.audioExt = 'webm';
-window.accumulatedText = ""; 
-window.silenceTimer = null;
-</script>
+    <script>
+        window.usdUserName = "Guest"; 
+    </script>
 
-<div id="usd-voice-widget">
-<div id="usd-tooltip" onclick="window.openChat()">
-Namaste! Tap here to talk about your new smile!
-</div>
+    <div id="usd-voice-widget">
+        <div id="usd-tooltip" onclick="openChat()">
+            Namaste! Tap here to talk about your new smile!
+        </div>
 
-<div id="usd-chat-container">
-<div id="usd-rating-overlay">
-<div id="usd-rating-title">Rate your experience with USD Agent</div>
-<div class="usd-stars">
-<span class="usd-star" onclick="window.submitRating(1)">★</span>
-<span class="usd-star" onclick="window.submitRating(2)">★</span>
-<span class="usd-star" onclick="window.submitRating(3)">★</span>
-<span class="usd-star" onclick="window.submitRating(4)">★</span>
-<span class="usd-star" onclick="window.submitRating(5)">★</span>
-</div>
-<div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
-</div>
+        <div id="usd-chat-container">
+            <div id="usd-rating-overlay">
+                <div id="usd-rating-title">Rate your experience with USD Agent</div>
+                <div class="usd-stars">
+                    <span class="usd-star" onclick="submitRating(1)">★</span>
+                    <span class="usd-star" onclick="submitRating(2)">★</span>
+                    <span class="usd-star" onclick="submitRating(3)">★</span>
+                    <span class="usd-star" onclick="submitRating(4)">★</span>
+                    <span class="usd-star" onclick="submitRating(5)">★</span>
+                </div>
+                <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
+            </div>
 
-<div id="usd-end-confirm-overlay">
-<div class="usd-confirm-title">Want to end the call?</div>
-<div class="usd-confirm-btns">
-<button class="usd-btn-yes" onclick="window.confirmEndChat(true)">Yes</button>
-<button class="usd-btn-no" onclick="window.confirmEndChat(false)">No</button>
-</div>
-</div>
+            <div id="usd-end-confirm-overlay">
+                <div class="usd-confirm-title">Want to end the call?</div>
+                <div class="usd-confirm-btns">
+                    <button class="usd-btn-yes" onclick="confirmEndChat(true)">Yes</button>
+                    <button class="usd-btn-no" onclick="confirmEndChat(false)">No</button>
+                </div>
+            </div>
 
-<div id="usd-chat-header">
-<div id="usd-header-left">
-<img src="https://raw.githubusercontent.com/teeth-vton/sd-voice-backend/dab01d9f2e96be2fcda278af63db62dfef9e1559/Gemini_Generated_Image_67gd1767gd1767gd.png" alt="USD Assistant" width="24" height="24" style="object-fit: contain;">
-<div id="usd-status-box">Initializing...</div>
-</div>
-<div id="usd-header-right">
-<div id="usd-visualizer">
-<div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
-</div>
-<button id="usd-close-btn" onclick="window.closeChatBtnClicked()">✕</button>
-</div>
-</div>
+            <div id="usd-chat-header">
+                <div id="usd-header-left">
+               <img src="https://raw.githubusercontent.com/teeth-vton/sd-voice-backend/dab01d9f2e96be2fcda278af63db62dfef9e1559/Gemini_Generated_Image_67gd1767gd1767gd.png" alt="USD Assistant" width="24" height="24" style="object-fit: contain;">
+                    <div id="usd-status-box">Initializing...</div>
+                </div>
+                <div id="usd-header-right">
+                    <div id="usd-visualizer">
+                        <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
+                    </div>
+                    <button id="usd-close-btn" onclick="closeChatBtnClicked()">✕</button>
+                </div>
+            </div>
 
-<div id="usd-chat-log"></div>
-<div id="usd-interim-text"></div>
-
-<div id="usd-input-container">
-<input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="window.handleKeyPress(event)">
-<button type="button" id="usd-send-btn" onclick="window.submitTextMessage()">Send</button>
-</div>
-</div>
-
-<div id="usd-bubble" onclick="window.openChat()">
-<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-<path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-<line x1="12" y1="19" x2="12" y2="22"></line>
-</svg>
-</div>
-</div>
-
-<script>
-window.onload = () => {
-    window.audioPlayer = document.getElementById('usd-html-player');
-    const tooltip = document.getElementById('usd-tooltip');
-    if(window.usdUserName !== "Guest") {
-        tooltip.innerText = `Namaste ${window.usdUserName}! Tap here to talk about your new smile!`;
-    }
-};
-
-async function playSarvamGreeting(text) {
-    const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat";
-    try {
-        const response = await fetch(BACKEND_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'tts', text: text })
-        });
-        const data = await response.json();
-        window.audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-        await new Promise((resolve) => {
-            window.audioPlayer.onended = resolve;
-            window.audioPlayer.onerror = resolve;
-            window.audioPlayer.onpause = resolve;
-            window.audioPlayer.play().catch(() => resolve());
-        });
-    } catch(e) {}
-}
-
-window.openChat = async function() {
-    const container = document.getElementById('usd-chat-container');
-    const tooltip = document.getElementById('usd-tooltip');
-    const bubble = document.getElementById('usd-bubble');
-
-    if (window.agentState === 'off') {
-        bubble.style.display = 'none';
-        container.style.display = 'flex';
-        tooltip.style.display = 'none';
-        
-        window.updateState('connecting', "Calling assistant... 🟡");
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        window.updateState('connecting', "Connected 🟢");
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
-        window.updateState('speaking', "Assistant is speaking...");
-        const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
-        const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
-        window.logMessage('bot', greeting);
-        
-        await playSarvamGreeting(greeting);
-
-        window.updateState('thinking', "Please allow microphone access...");
-        
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true }
-            });
-
-            let options = {};
-            if (MediaRecorder.isTypeSupported('audio/webm')) {
-                options = { mimeType: 'audio/webm' };
-                window.audioExt = 'webm';
-            } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                options = { mimeType: 'audio/mp4' };
-                window.audioExt = 'mp4';
-            } else {
-                window.audioExt = 'wav';
-            }
-
-            window.mediaRecorder = new MediaRecorder(stream, options);
+            <div id="usd-chat-log"></div>
+            <div id="usd-interim-text"></div>
             
-            // CONTINUOUS LISTENING FEATURE
-            window.mediaRecorder.ondataavailable = async event => {
-                if (event.data.size > 0 && window.agentState === 'listening') {
-                    window.audioChunks.push(event.data);
-                    
-                    // Transcribe quietly in background every chunk
-                    const audioBlob = new Blob(window.audioChunks, { type: `audio/${window.audioExt}` });
-                    const reader = new FileReader();
-                    reader.readAsDataURL(audioBlob);
-                    reader.onloadend = async () => {
-                        const base64Audio = reader.result.split(',')[1];
-                        try {
-                            const res = await fetch("https://sd-voice-backend.vercel.app/api/chat", {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ type: 'transcribe_only', audioBase64: base64Audio, audioExt: window.audioExt })
-                            });
-                            const data = await res.json();
-                            if (data.transcribedText) {
-                                window.accumulatedText = data.transcribedText;
-                                document.getElementById('usd-interim-text').innerText = window.accumulatedText + " (Press Send)";
-                                
-                                // Auto-Send after 4 seconds of pure silence
-                                clearTimeout(window.silenceTimer);
-                                window.silenceTimer = setTimeout(() => {
-                                    window.submitTextMessage();
-                                }, 4000);
-                            }
-                        } catch(e) {}
-                    };
-                }
-            };
-            
-            window.mediaRecorder.start(2000); // Take chunks every 2 seconds for smooth UI
-            window.updateState('listening', "Listening...");
+            <div id="usd-input-container">
+                <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
+                <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
+            </div>
+        </div>
+        
+        <div id="usd-bubble" onclick="openChat()">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+        </div>
+    </div>
 
-        } catch (err) {
-            window.updateState('listening', "Microphone denied. You can type.");
-        }
-    }
-}
+    <script>
+        // RENDER SERVER URL: Replace this after deploying to Render
+        const RENDER_BACKEND_URL = "https://your-render-app-name.onrender.com";
+        const WS_URL = RENDER_BACKEND_URL.replace("https", "wss");
 
-window.closeChatBtnClicked = function() {
-    document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
-}
+        let agentState = 'off'; 
+        let chatHistory = [];
+        let audioPlayer;
+        window.lastBotText = ''; 
+        let socket = null;
+        let audioContext = null;
+        let processor = null;
+        let globalStream = null;
 
-window.confirmEndChat = async function(isYes) {
-    document.getElementById('usd-end-confirm-overlay').style.display = 'none';
-    if (isYes) {
-        window.updateState('thinking', "Ending call...");
-        if (window.mediaRecorder) window.mediaRecorder.stop();
-        window.audioPlayer.pause();
-        await processTurnThroughBackend("bye");
-    }
-}
-
-window.closeChat = function() {
-    window.updateState('off', "Disconnected");
-    if (window.mediaRecorder) window.mediaRecorder.stop();
-    if (window.audioPlayer) window.audioPlayer.pause();
-    document.getElementById('usd-chat-container').style.display = 'none';
-    document.getElementById('usd-bubble').style.display = 'flex';
-}
-
-window.submitTextMessage = async function() {
-    const inputEl = document.getElementById('usd-text-input');
-    let userText = inputEl.value.trim() || window.accumulatedText;
-    
-    if (!userText || window.agentState === 'thinking' || window.agentState === 'connecting') return;
-
-    inputEl.value = '';
-    window.accumulatedText = '';
-    window.audioChunks = []; // Clear mic history
-    document.getElementById('usd-interim-text').innerText = '';
-    clearTimeout(window.silenceTimer);
-    
-    window.logMessage('user', userText);
-    window.updateState('thinking', "Assistant is replying...");
-    
-    try {
-        await processTurnThroughBackend(userText);
-    } catch (error) {
-        window.logMessage('error', `Error: ${error.message}`);
-        window.updateState('listening', "Listening...");
-    }
-}
-
-window.handleKeyPress = function(event) {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        window.submitTextMessage();
-    }
-}
-
-window.updateState = function(newState, statusText) {
-    window.agentState = newState;
-    const statusBox = document.getElementById('usd-status-box');
-    const visualizer = document.getElementById('usd-visualizer');
-    if (statusBox) statusBox.innerText = statusText;
-    if (newState === 'speaking') {
-        visualizer.classList.add('active');
-    } else {
-        visualizer.classList.remove('active');
-    }
-}
-
-window.submitRating = async function(stars) {
-    const starElements = document.querySelectorAll('.usd-star');
-    starElements.forEach((s, index) => {
-        s.style.color = index < stars ? '#FFD700' : '#444';
-    });
-    document.getElementById('usd-rating-thanks').style.display = 'block';
-
-    try {
-        await fetch("https://sd-voice-backend.vercel.app/api/rate", {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rating: stars, history: window.chatHistory })
-        });
-    } catch(e) { }
-
-    setTimeout(() => { window.closeChat(); }, 3000);
-}
-
-window.logMessage = function(sender, text) {
-    const log = document.getElementById('usd-chat-log');
-    const msgDiv = document.createElement('div');
-    msgDiv.className = `msg msg-${sender}`;
-    if (sender === 'user') msgDiv.innerText = "You: " + text;
-    else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
-    else msgDiv.innerText = text;
-    log.appendChild(msgDiv);
-    log.scrollTop = log.scrollHeight;
-}
-
-async function processTurnThroughBackend(userText) {
-    const BACKEND_URL = "https://sd-voice-backend.vercel.app/api/chat";
-    const payload = { userText: userText, history: window.chatHistory };
-
-    const response = await fetch(BACKEND_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-    
-    if (!response.ok) throw new Error("Vercel Server Unreachable.");
-    const data = await response.json();
-
-    window.chatHistory.push({ role: "user", parts: [{ text: userText }] });
-    window.chatHistory.push({ role: "model", parts: [{ text: data.replyText }] });
-
-    let finalBotReply = data.replyText;
-    let isEnding = false;
-    if (finalBotReply.includes('[END_CHAT]')) {
-        isEnding = true;
-        finalBotReply = finalBotReply.replace('[END_CHAT]', '').trim();
-    }
-
-    window.logMessage('bot', finalBotReply);
-    window.updateState('speaking', "Assistant is speaking...");
-    window.audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-    
-    await new Promise((resolve) => {
-        window.audioPlayer.onended = () => {
-            if (isEnding) {
-                window.updateState('off', "Conversation ended.");
-                if (window.mediaRecorder) window.mediaRecorder.stop();
-                document.getElementById('usd-rating-overlay').style.display = 'flex';
-            } else if(window.agentState === 'speaking') {
-                window.updateState('listening', "Listening...");
-                window.audioChunks = []; // clear buffer for next turn
+        window.onload = () => {
+            audioPlayer = document.getElementById('usd-html-player');
+            const tooltip = document.getElementById('usd-tooltip');
+            if(window.usdUserName !== "Guest") {
+                tooltip.innerText = `Namaste ${window.usdUserName}! Tap here to talk about your new smile!`;
             }
-            resolve();
         };
-        window.audioPlayer.onerror = resolve;
-        window.audioPlayer.onpause = resolve;
-        window.audioPlayer.play().catch(() => resolve());
-    });
 
-    return finalBotReply;
-}
-</script>
+        async function playSarvamGreeting(text) {
+            try {
+                const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                const data = await response.json();
+                audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+                await new Promise((resolve) => {
+                    audioPlayer.onended = resolve;
+                    audioPlayer.onerror = resolve;
+                    audioPlayer.onpause = resolve;
+                    audioPlayer.play().catch(() => resolve());
+                });
+            } catch(e) {}
+        }
+
+        async function openChat() {
+            const container = document.getElementById('usd-chat-container');
+            const tooltip = document.getElementById('usd-tooltip');
+            const bubble = document.getElementById('usd-bubble');
+            
+            if (agentState === 'off') {
+                bubble.style.display = 'none'; 
+                container.style.display = 'flex';
+                tooltip.style.display = 'none'; 
+                document.getElementById('usd-rating-overlay').style.display = 'none';
+                document.getElementById('usd-rating-thanks').style.display = 'none';
+                document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+                
+                audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
+                audioPlayer.play().catch(() => {});
+
+                updateState('connecting', "Calling assistant... 🟡");
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                updateState('connecting', "Connected 🟢");
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                updateState('speaking', "Assistant is speaking...");
+                
+                const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
+                const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
+                
+                logMessage('bot', greeting);
+                window.lastBotText = greeting; 
+                await playSarvamGreeting(greeting); 
+                
+                updateState('thinking', "Please allow microphone access...");
+                
+                await startWebSocket();
+            }
+        }
+
+        async function startWebSocket() {
+            try {
+                socket = new WebSocket(WS_URL);
+
+                socket.onopen = async () => {
+                    globalStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                    });
+
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                    const source = audioContext.createMediaStreamSource(globalStream);
+                    processor = audioContext.createScriptProcessor(4096, 1, 1);
+                    
+                    processor.onaudioprocess = (e) => {
+                        if (agentState !== 'listening') return;
+                        const float32Array = e.inputBuffer.getChannelData(0);
+                        socket.send(float32Array.buffer);
+                    };
+
+                    source.connect(processor);
+                    processor.connect(audioContext.destination);
+
+                    updateState('listening', "Listening...");
+                };
+
+                socket.onmessage = async (event) => {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'transcript') {
+                        document.getElementById('usd-interim-text').innerText = data.text;
+                    } 
+                    
+                    if (data.type === 'reply') {
+                        document.getElementById('usd-interim-text').innerText = "";
+                        logMessage('user', data.userText);
+                        
+                        chatHistory.push({ role: "user", parts: [{ text: data.userText }] });
+                        chatHistory.push({ role: "model", parts: [{ text: data.botText }] });
+
+                        let finalBotReply = data.botText;
+                        let isEnding = false;
+                        if (finalBotReply.includes('[END_CHAT]')) {
+                            isEnding = true;
+                            finalBotReply = finalBotReply.replace('[END_CHAT]', '').trim();
+                        }
+
+                        logMessage('bot', finalBotReply);
+                        updateState('speaking', "Assistant is speaking...");
+                        audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+                        
+                        audioPlayer.onended = () => {
+                            if (isEnding) {
+                                closeChat();
+                                document.getElementById('usd-rating-overlay').style.display = 'flex';
+                            } else {
+                                updateState('listening', "Listening...");
+                            }
+                        };
+                        audioPlayer.play();
+                    }
+                };
+
+                socket.onerror = () => updateState('listening', "Microphone error. You can type.");
+
+            } catch (err) {
+                updateState('listening', "Microphone denied. You can type.");
+            }
+        }
+
+        function closeChatBtnClicked() {
+            document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
+        }
+
+        async function confirmEndChat(isYes) {
+            document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+            if (isYes) {
+                updateState('thinking', "Ending call...");
+                audioPlayer.pause();
+                
+                const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
+                
+                try {
+                    const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: goodbyeText })
+                    });
+                    const data = await response.json();
+                    audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+                    audioPlayer.onended = () => {
+                        closeChat();
+                        document.getElementById('usd-rating-overlay').style.display = 'flex';
+                    };
+                    audioPlayer.play();
+                } catch(e) {}
+            }
+        }
+
+        function closeChat() {
+            updateState('off', "Disconnected");
+            audioPlayer.pause();
+            if (socket) socket.close();
+            if (processor) processor.disconnect();
+            if (audioContext) audioContext.close();
+            if (globalStream) globalStream.getTracks().forEach(track => track.stop());
+            
+            document.getElementById('usd-chat-container').style.display = 'none';
+            document.getElementById('usd-bubble').style.display = 'flex'; 
+        }
+
+        async function submitRating(stars) {
+            const starElements = document.querySelectorAll('.usd-star');
+            starElements.forEach((s, index) => {
+                s.style.color = index < stars ? '#FFD700' : '#444';
+            });
+            document.getElementById('usd-rating-thanks').style.display = 'block';
+
+            try {
+                await fetch(`${RENDER_BACKEND_URL}/api/rate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rating: stars, history: chatHistory })
+                });
+            } catch(e) { }
+
+            setTimeout(() => { closeChat(); }, 3000);
+        }
+
+        async function submitTextMessage() {
+            const inputEl = document.getElementById('usd-text-input');
+            const userText = inputEl.value.trim();
+            if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
+
+            inputEl.value = ''; 
+            audioPlayer.pause(); 
+            updateState('thinking', "Assistant is replying...");
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'text_input', text: userText, history: chatHistory }));
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); 
+                submitTextMessage();
+            }
+        }
+
+        function updateState(newState, statusText) {
+            agentState = newState;
+            const statusBox = document.getElementById('usd-status-box');
+            const visualizer = document.getElementById('usd-visualizer');
+            
+            if (statusBox) statusBox.innerText = statusText;
+            if (newState === 'speaking') {
+                visualizer.classList.add('active');
+            } else {
+                visualizer.classList.remove('active');
+            }
+        }
+
+        function logMessage(sender, text) {
+            const log = document.getElementById('usd-chat-log');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `msg msg-${sender}`;
+            if (sender === 'user') msgDiv.innerText = "You: " + text;
+            else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
+            else msgDiv.innerText = text; 
+            log.appendChild(msgDiv);
+            log.scrollTop = log.scrollHeight;
+        }
+    </script>
 </body>
 </html>
