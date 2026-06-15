@@ -82,8 +82,22 @@
         #usd-header-right {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 10px;
         }
+        /* THE NEW TOGGLE BUTTON */
+        #usd-mode-toggle {
+            background: #222;
+            color: #D4AF37;
+            border: 1px solid #D4AF37;
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #usd-mode-toggle:hover { background: #D4AF37; color: #111; }
+        
         #usd-visualizer {
             display: flex;
             gap: 3px;
@@ -94,21 +108,17 @@
             width: 3px;
             background: #D4AF37;
             border-radius: 3px;
-            height: 4px;
+            height: 4px; 
             transition: height 0.2s ease;
         }
-        #usd-visualizer.active .usd-bar {
-            animation: usd-sound 0.4s ease-in-out infinite alternate;
-        }
+        #usd-visualizer.active .usd-bar { animation: usd-sound 0.4s ease-in-out infinite alternate; }
         #usd-visualizer.active .usd-bar:nth-child(1) { animation-delay: 0.0s; }
         #usd-visualizer.active .usd-bar:nth-child(2) { animation-delay: 0.2s; }
         #usd-visualizer.active .usd-bar:nth-child(3) { animation-delay: 0.1s; }
         #usd-visualizer.active .usd-bar:nth-child(4) { animation-delay: 0.3s; }
         #usd-visualizer.active .usd-bar:nth-child(5) { animation-delay: 0.1s; }
-        @keyframes usd-sound {
-            0% { height: 4px; }
-            100% { height: 18px; }
-        }
+        @keyframes usd-sound { 0% { height: 4px; } 100% { height: 18px; } }
+        
         #usd-close-btn {
             background: none;
             border: none;
@@ -263,7 +273,6 @@
                 </div>
             </div>
 
-            <!-- Wrapping logs and headers so we can hide them cleanly when rating -->
             <div id="usd-chat-inner-wrap">
                 <div id="usd-chat-header">
                     <div id="usd-header-left">
@@ -271,6 +280,8 @@
                         <div id="usd-status-box">Initializing...</div>
                     </div>
                     <div id="usd-header-right">
+                        <!-- NEW: Voice vs Text Toggle Button -->
+                        <button id="usd-mode-toggle" onclick="toggleChatMode()">🎙️ Voice</button>
                         <div id="usd-visualizer">
                             <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
                         </div>
@@ -306,6 +317,9 @@
         let audioPlayer;
         let socket = null;
         let globalStream = null;
+        
+        // NEW: Mode Tracker
+        let isVoiceMode = true; 
 
         window.onload = () => {
             audioPlayer = document.getElementById('usd-html-player');
@@ -315,7 +329,30 @@
             }
         };
 
+        // NEW: Toggle function
+        function toggleChatMode() {
+            isVoiceMode = !isVoiceMode;
+            const toggleBtn = document.getElementById('usd-mode-toggle');
+            const visualizer = document.getElementById('usd-visualizer');
+            
+            if (isVoiceMode) {
+                toggleBtn.innerText = "🎙️ Voice";
+                visualizer.style.display = "flex";
+                updateState('listening', "Listening...");
+                // Restart Mic logic happens organically via VAD loop
+            } else {
+                toggleBtn.innerText = "💬 Text";
+                visualizer.style.display = "none";
+                audioPlayer.pause();
+                if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
+                    window.mediaRecorder.stop();
+                }
+                updateState('listening', "Chat Mode Active. Type below.");
+            }
+        }
+
         async function playSarvamGreeting(text) {
+            if (!isVoiceMode) return; // Skip if in text mode
             try {
                 const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                     method: 'POST',
@@ -343,7 +380,6 @@
                 container.style.display = 'flex';
                 tooltip.style.display = 'none'; 
                 
-                // Reset views
                 document.getElementById('usd-chat-inner-wrap').style.display = 'block';
                 document.getElementById('usd-rating-overlay').style.display = 'none';
                 document.getElementById('usd-rating-thanks').style.display = 'none';
@@ -366,7 +402,7 @@
                 logMessage('bot', greeting);
                 await playSarvamGreeting(greeting); 
                 
-                updateState('thinking', "Please allow microphone access...");
+                updateState('thinking', "Connecting...");
                 await startWebSocket();
             }
         }
@@ -399,6 +435,7 @@
                     };
 
                     window.mediaRecorder.onstop = () => {
+                        if (!isVoiceMode) return; // Prevent mic send if switched to text
                         if (window.audioChunks.length === 0) return;
                         
                         updateState('thinking', "Assistant is replying...");
@@ -414,7 +451,8 @@
                                     type: 'audio_input', 
                                     audioBase64: base64Audio, 
                                     audioExt: window.audioExt,
-                                    history: chatHistory 
+                                    history: chatHistory,
+                                    isVoiceMode: isVoiceMode
                                 }));
                             }
                         };
@@ -430,7 +468,7 @@
                     let isRecording = false;
 
                     function detectVoice() {
-                        if (agentState !== 'listening') {
+                        if (agentState !== 'listening' || !isVoiceMode) {
                             requestAnimationFrame(detectVoice);
                             return;
                         }
@@ -461,7 +499,7 @@
                     }
                     detectVoice();
 
-                    updateState('listening', "Listening...");
+                    updateState('listening', isVoiceMode ? "Listening..." : "Chat Mode Active.");
                 };
 
                 socket.onmessage = async (event) => {
@@ -485,21 +523,30 @@
                         }
 
                         logMessage('bot', finalBotReply);
-                        updateState('speaking', "Assistant is speaking...");
-                        audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-                        
-                        audioPlayer.onended = () => {
+
+                        if (isVoiceMode && data.audioBase64) {
+                            updateState('speaking', "Assistant is speaking...");
+                            audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+                            audioPlayer.onended = () => {
+                                if (isEnding) {
+                                    closeChat(true); 
+                                } else {
+                                    updateState('listening', "Listening...");
+                                }
+                            };
+                            audioPlayer.play();
+                        } else {
+                            // Text Mode: Don't play audio, just reset state
                             if (isEnding) {
-                                closeChat(true); // show rating screen
+                                setTimeout(() => closeChat(true), 2000);
                             } else {
-                                updateState('listening', "Listening...");
+                                updateState('listening', "Chat Mode Active.");
                             }
-                        };
-                        audioPlayer.play();
+                        }
                     }
                     else if (data.type === 'error') {
                         logMessage('error', data.message);
-                        updateState('listening', "Listening...");
+                        updateState('listening', isVoiceMode ? "Listening..." : "Chat Mode Active.");
                     }
                 };
 
@@ -521,23 +568,26 @@
                 audioPlayer.pause();
                 
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
-                try {
-                    const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: goodbyeText })
-                    });
-                    const data = await response.json();
-                    audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-                    audioPlayer.onended = () => {
-                        closeChat(true); // Show rating screen
-                    };
-                    audioPlayer.play();
-                } catch(e) { closeChat(true); }
+                
+                if (isVoiceMode) {
+                    try {
+                        const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: goodbyeText })
+                        });
+                        const data = await response.json();
+                        audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
+                        audioPlayer.onended = () => closeChat(true);
+                        audioPlayer.play();
+                    } catch(e) { closeChat(true); }
+                } else {
+                    logMessage('bot', goodbyeText);
+                    setTimeout(() => closeChat(true), 2000);
+                }
             }
         }
 
-        // FIXED: Allows isolating the rating screen without closing the container!
         function closeChat(showRating = false) {
             updateState('off', "Disconnected");
             audioPlayer.pause();
@@ -568,7 +618,7 @@
                 });
             } catch(e) { }
 
-            setTimeout(() => { closeChat(false); }, 3000); // Fully close after rating
+            setTimeout(() => { closeChat(false); }, 3000);
         }
 
         async function submitTextMessage() {
@@ -587,7 +637,12 @@
             updateState('thinking', "Assistant is replying...");
 
             if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'text_input', text: userText, history: chatHistory }));
+                socket.send(JSON.stringify({ 
+                    type: 'text_input', 
+                    text: userText, 
+                    history: chatHistory,
+                    isVoiceMode: isVoiceMode // Tells backend to skip TTS generation if in Text Mode
+                }));
             }
         }
 
