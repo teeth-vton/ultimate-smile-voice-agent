@@ -94,10 +94,9 @@
             width: 3px;
             background: #D4AF37;
             border-radius: 3px;
-            height: 4px; /* Flat state when not speaking */
+            height: 4px;
             transition: height 0.2s ease;
         }
-        /* Animate ONLY when .active is added (when bot speaks) */
         #usd-visualizer.active .usd-bar {
             animation: usd-sound 0.4s ease-in-out infinite alternate;
         }
@@ -204,7 +203,6 @@
         .usd-star { font-size: 30px; color: #444; transition: color 0.2s; }
         .usd-star:hover, .usd-star.active { color: #FFD700; }
         #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; }
-        /* NEW: END CONFIRMATION OVERLAY */
         #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -239,7 +237,6 @@
         window.usdUserName = "Guest"; 
     </script>
 
-    <!-- RESTORED: This entire HTML block was accidentally left out last time! -->
     <div id="usd-voice-widget">
         <div id="usd-tooltip" onclick="openChat()">
             Namaste! Tap here to talk about your new smile!
@@ -266,25 +263,28 @@
                 </div>
             </div>
 
-            <div id="usd-chat-header">
-                <div id="usd-header-left">
-                    <img src="https://raw.githubusercontent.com/teeth-vton/sd-voice-backend/dab01d9f2e96be2fcda278af63db62dfef9e1559/Gemini_Generated_Image_67gd1767gd1767gd.png" alt="USD Assistant" width="24" height="24" style="object-fit: contain;">
-                    <div id="usd-status-box">Initializing...</div>
-                </div>
-                <div id="usd-header-right">
-                    <div id="usd-visualizer">
-                        <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
+            <!-- Wrapping logs and headers so we can hide them cleanly when rating -->
+            <div id="usd-chat-inner-wrap">
+                <div id="usd-chat-header">
+                    <div id="usd-header-left">
+                        <img src="https://raw.githubusercontent.com/teeth-vton/sd-voice-backend/dab01d9f2e96be2fcda278af63db62dfef9e1559/Gemini_Generated_Image_67gd1767gd1767gd.png" alt="USD Assistant" width="24" height="24" style="object-fit: contain;">
+                        <div id="usd-status-box">Initializing...</div>
                     </div>
-                    <button id="usd-close-btn" onclick="closeChatBtnClicked()">✕</button>
+                    <div id="usd-header-right">
+                        <div id="usd-visualizer">
+                            <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
+                        </div>
+                        <button id="usd-close-btn" onclick="closeChatBtnClicked()">✕</button>
+                    </div>
                 </div>
-            </div>
 
-            <div id="usd-chat-log"></div>
-            <div id="usd-interim-text"></div>
-            
-            <div id="usd-input-container">
-                <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
-                <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
+                <div id="usd-chat-log"></div>
+                <div id="usd-interim-text"></div>
+                
+                <div id="usd-input-container">
+                    <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
+                    <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
+                </div>
             </div>
         </div>
         
@@ -342,6 +342,9 @@
                 bubble.style.display = 'none'; 
                 container.style.display = 'flex';
                 tooltip.style.display = 'none'; 
+                
+                // Reset views
+                document.getElementById('usd-chat-inner-wrap').style.display = 'block';
                 document.getElementById('usd-rating-overlay').style.display = 'none';
                 document.getElementById('usd-rating-thanks').style.display = 'none';
                 document.getElementById('usd-end-confirm-overlay').style.display = 'none';
@@ -487,8 +490,7 @@
                         
                         audioPlayer.onended = () => {
                             if (isEnding) {
-                                closeChat();
-                                document.getElementById('usd-rating-overlay').style.display = 'flex';
+                                closeChat(true); // show rating screen
                             } else {
                                 updateState('listening', "Listening...");
                             }
@@ -528,22 +530,27 @@
                     const data = await response.json();
                     audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                     audioPlayer.onended = () => {
-                        closeChat();
-                        document.getElementById('usd-rating-overlay').style.display = 'flex';
+                        closeChat(true); // Show rating screen
                     };
                     audioPlayer.play();
-                } catch(e) { closeChat(); }
+                } catch(e) { closeChat(true); }
             }
         }
 
-        function closeChat() {
+        // FIXED: Allows isolating the rating screen without closing the container!
+        function closeChat(showRating = false) {
             updateState('off', "Disconnected");
             audioPlayer.pause();
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
-            document.getElementById('usd-chat-container').style.display = 'none';
-            document.getElementById('usd-bubble').style.display = 'flex'; 
+            if (showRating) {
+                document.getElementById('usd-chat-inner-wrap').style.display = 'none';
+                document.getElementById('usd-rating-overlay').style.display = 'flex';
+            } else {
+                document.getElementById('usd-chat-container').style.display = 'none';
+                document.getElementById('usd-bubble').style.display = 'flex'; 
+            }
         }
 
         async function submitRating(stars) {
@@ -561,7 +568,7 @@
                 });
             } catch(e) { }
 
-            setTimeout(() => { closeChat(); }, 3000);
+            setTimeout(() => { closeChat(false); }, 3000); // Fully close after rating
         }
 
         async function submitTextMessage() {
