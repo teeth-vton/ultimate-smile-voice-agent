@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ultimate Smile Design - Live Agent</title>
     <style>
-        /* NEW: Black background to match the live site */
         body {
             background-color: #000000;
             color: #ffffff;
@@ -54,11 +53,13 @@
             50% { transform: translateY(-8px); }
             100% { transform: translateY(0px); }
         }
+        
         #usd-chat-container {
             width: 320px;
             max-height: 380px;
             background-color: #111111;
-            border: 1px solid rgba(255, 255, 255, 0.25);
+            /* FIXED: Stopped border flickering with solid color and hardware acceleration */
+            border: 1px solid #333333; 
             border-radius: 15px;
             padding: 15px;
             margin-bottom: 15px;
@@ -67,7 +68,10 @@
             flex-direction: column;
             position: relative; 
             animation: floatContainer 4s ease-in-out infinite;
+            transform: translateZ(0);
+            backface-visibility: hidden;
         }
+
         #usd-chat-header {
             display: flex;
             justify-content: space-between;
@@ -148,9 +152,8 @@
         .msg-user { color: #ffffff; text-align: right; }
         .msg-bot { color: #D4AF37; text-align: left; }
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
-        .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; }
+        .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; margin-top: 15px; }
 
-        /* NEW: The Black & Gold Interactive Redirect Cards */
         .usd-link-card {
             display: block;
             width: 100%;
@@ -225,35 +228,17 @@
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
         }
 
-        /* NEW: Premium Professional Star Rating UI */
-        #usd-rating-overlay, #usd-end-confirm-overlay {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(10, 10, 10, 0.85); /* Darker, sleek overlay */
-            backdrop-filter: blur(8px); /* Apple-style blur effect */
-            border-radius: 15px;
+        /* NEW: Inline Rating Box (Replaces input container at end of chat) */
+        #usd-inline-rating {
             display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            padding-top: 15px;
             text-align: center;
-            padding: 20px;
         }
-        #usd-rating-title, .usd-confirm-title { 
-            color: #fff; 
-            font-size: 18px; 
-            margin-bottom: 20px; 
-            font-weight: bold; 
-            letter-spacing: 0.5px;
-        }
-        .usd-stars { 
-            display: flex; 
-            gap: 15px; 
-            cursor: pointer; 
-        }
+        #usd-rating-title { color: #fff; font-size: 15px; margin-bottom: 12px; font-weight: bold; letter-spacing: 0.5px;}
+        .usd-stars { display: flex; justify-content: center; gap: 12px; cursor: pointer; }
         .usd-star { 
-            font-size: 35px; 
+            font-size: 28px; 
             color: #333333; 
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
             transition: transform 0.2s, color 0.2s, text-shadow 0.2s; 
@@ -261,27 +246,39 @@
         .usd-star:hover, .usd-star.active { 
             color: #FFD700; 
             transform: scale(1.2);
-            text-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
         }
-        #usd-rating-thanks { display: none; color: #D4AF37; font-size: 14px; margin-top: 15px; font-weight: bold; }
-        
+        #usd-rating-thanks { display: none; color: #D4AF37; font-size: 13px; margin-top: 12px; font-weight: bold; }
+
+        #usd-end-confirm-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(10, 10, 10, 0.95);
+            border-radius: 15px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 101;
+            text-align: center;
+            padding: 20px;
+        }
+        .usd-confirm-title { color: #fff; font-size: 16px; margin-bottom: 20px; font-weight: bold; }
         .usd-confirm-btns { display: flex; gap: 15px; }
         .usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         
-        /* NEW: Highly Compact Mobile View */
         @media (max-width: 480px) {
             #usd-voice-widget { bottom: 15px; right: 15px; }
-            #usd-bubble { width: 50px; height: 50px; } /* Smaller Bubble */
+            #usd-bubble { width: 50px; height: 50px; } 
             #usd-bubble svg { width: 24px; height: 24px; }
-            
             #usd-chat-container { 
                 width: calc(100vw - 40px); 
-                max-height: 300px; /* Reduced Height so it doesn't cover screen */
+                max-height: 300px; 
                 padding: 12px; 
                 margin-bottom: 10px; 
             }
-            #usd-chat-log { max-height: 140px; } /* Less scroll space to fit better */
+            #usd-chat-log { max-height: 140px; } 
             #usd-tooltip { font-size: 12px; padding: 8px 12px; margin-bottom: 10px; }
             #usd-tooltip::after { right: 20px; }
         }
@@ -291,28 +288,12 @@
 
     <audio id="usd-html-player" preload="auto"></audio>
 
-    <script>
-        window.usdUserName = "Guest"; 
-    </script>
-
     <div id="usd-voice-widget">
         <div id="usd-tooltip" onclick="openChat()">
             Namaste! Tap here to talk about your new smile!
         </div>
 
         <div id="usd-chat-container">
-            <div id="usd-rating-overlay">
-                <div id="usd-rating-title">Rate your experience</div>
-                <div class="usd-stars">
-                    <span class="usd-star" onclick="submitRating(1)">★</span>
-                    <span class="usd-star" onclick="submitRating(2)">★</span>
-                    <span class="usd-star" onclick="submitRating(3)">★</span>
-                    <span class="usd-star" onclick="submitRating(4)">★</span>
-                    <span class="usd-star" onclick="submitRating(5)">★</span>
-                </div>
-                <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
-            </div>
-
             <div id="usd-end-confirm-overlay">
                 <div class="usd-confirm-title">Want to end the call?</div>
                 <div class="usd-confirm-btns">
@@ -321,7 +302,7 @@
                 </div>
             </div>
 
-            <div id="usd-chat-inner-wrap">
+            <div id="usd-chat-inner-wrap" style="height: 100%; display: flex; flex-direction: column;">
                 <div id="usd-chat-header">
                     <div id="usd-header-left">
                         <img src="https://raw.githubusercontent.com/teeth-vton/sd-voice-backend/dab01d9f2e96be2fcda278af63db62dfef9e1559/Gemini_Generated_Image_67gd1767gd1767gd.png" alt="USD Assistant" width="24" height="24" style="object-fit: contain;">
@@ -339,10 +320,25 @@
                 <div id="usd-chat-log"></div>
                 <div id="usd-interim-text"></div>
                 
+                <!-- This hides, and the rating box appears in its place! -->
                 <div id="usd-input-container">
                     <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
                     <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
                 </div>
+
+                <!-- NEW: Inline Rating Box -->
+                <div id="usd-inline-rating">
+                    <div id="usd-rating-title">Rate your experience</div>
+                    <div class="usd-stars">
+                        <span class="usd-star" onclick="submitRating(1)">★</span>
+                        <span class="usd-star" onclick="submitRating(2)">★</span>
+                        <span class="usd-star" onclick="submitRating(3)">★</span>
+                        <span class="usd-star" onclick="submitRating(4)">★</span>
+                        <span class="usd-star" onclick="submitRating(5)">★</span>
+                    </div>
+                    <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
+                </div>
+
             </div>
         </div>
         
@@ -366,7 +362,6 @@
         let globalStream = null;
         let isVoiceMode = true; 
 
-        // NEW: Database of redirect links, their UI labels, and the spoken instructions!
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist.' },
@@ -380,10 +375,6 @@
 
         window.onload = () => {
             audioPlayer = document.getElementById('usd-html-player');
-            const tooltip = document.getElementById('usd-tooltip');
-            if(window.usdUserName !== "Guest") {
-                tooltip.innerText = `Namaste ${window.usdUserName}! Tap here to talk about your new smile!`;
-            }
         };
 
         function toggleChatMode() {
@@ -435,24 +426,27 @@
                 container.style.display = 'flex';
                 tooltip.style.display = 'none'; 
                 
-                document.getElementById('usd-chat-inner-wrap').style.display = 'block';
-                document.getElementById('usd-rating-overlay').style.display = 'none';
-                document.getElementById('usd-rating-thanks').style.display = 'none';
-                document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+                // Reset UI in case it was closed after a rating previously
+                document.getElementById('usd-input-container').style.display = 'flex';
+                document.getElementById('usd-inline-rating').style.display = 'none';
+                document.getElementById('usd-mode-toggle').style.display = 'block';
+                if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
+                document.getElementById('usd-chat-log').innerHTML = ""; // Clear old chat
+                chatHistory = [];
                 
                 audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
                 audioPlayer.play().catch(() => {});
 
                 updateState('connecting', "Calling assistant... 🟡");
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                await new Promise(resolve => setTimeout(resolve, 2000));
 
                 updateState('connecting', "Connected 🟢");
-                await new Promise(resolve => setTimeout(resolve, 1500));
+                await new Promise(resolve => setTimeout(resolve, 1000));
 
                 updateState('speaking', "Assistant is speaking...");
                 
-                const actualName = window.usdUserName !== "Guest" ? window.usdUserName : "";
-                const greeting = `Namaste ${actualName}! What's your thought on this? According to us, your smile looks very good and confident.`;
+                // FIXED: The new general ecosystem greeting!
+                const greeting = "Namaste! How can we assist you today?";
                 
                 logMessage('bot', greeting);
                 await playSarvamGreeting(greeting); 
@@ -574,12 +568,10 @@
                         let isEnding = false;
                         let foundTag = null;
                         
-                        // Check if the AI wants to end chat
                         if (finalBotReply.includes('[END_CHAT]')) {
                             isEnding = true;
                         }
                         
-                        // Check if the AI appended any redirect link tags
                         for (const tag in usdLinks) {
                             if (finalBotReply.includes(tag)) {
                                 foundTag = tag;
@@ -587,10 +579,7 @@
                             }
                         }
 
-                        // Remove ALL brackets before showing on UI
                         finalBotReply = finalBotReply.replace(/\[.*?\]/g, '').trim();
-
-                        // Pass the found tag to the logger to build the interactive card
                         logMessage('bot', finalBotReply, foundTag);
 
                         if (isVoiceMode && data.audioBase64) {
@@ -656,16 +645,22 @@
             }
         }
 
+        // FIXED: The Inline Rating UI Trigger
         function closeChat(showRating = false) {
-            updateState('off', "Disconnected");
+            updateState('off', "Chat Ended");
             audioPlayer.pause();
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
             if (showRating) {
-                document.getElementById('usd-chat-inner-wrap').style.display = 'none';
-                document.getElementById('usd-rating-overlay').style.display = 'flex';
+                // Keep the chat log open, hide the inputs, and show the stars inline!
+                document.getElementById('usd-input-container').style.display = 'none';
+                document.getElementById('usd-mode-toggle').style.display = 'none';
+                document.getElementById('usd-visualizer').style.display = 'none';
+                document.getElementById('usd-inline-rating').style.display = 'block';
+                logMessage('system', 'The chat has ended. Please rate your experience below.');
             } else {
+                // Full force close
                 document.getElementById('usd-chat-container').style.display = 'none';
                 document.getElementById('usd-bubble').style.display = 'flex'; 
             }
@@ -675,7 +670,7 @@
             const starElements = document.querySelectorAll('.usd-star');
             starElements.forEach((s, index) => {
                 s.style.color = index < stars ? '#FFD700' : '#444';
-                s.style.textShadow = index < stars ? '0 0 15px rgba(255, 215, 0, 0.6)' : '0 2px 4px rgba(0,0,0,0.5)';
+                s.style.textShadow = index < stars ? '0 0 10px rgba(255, 215, 0, 0.6)' : '0 2px 4px rgba(0,0,0,0.5)';
             });
             document.getElementById('usd-rating-thanks').style.display = 'block';
 
@@ -698,6 +693,7 @@
                 });
             } catch(e) { }
 
+            // Fully close the widget 3 seconds after they click the stars
             setTimeout(() => { closeChat(false); }, 3000);
         }
 
@@ -740,13 +736,12 @@
             
             if (statusBox) statusBox.innerText = statusText;
             if (newState === 'speaking') {
-                visualizer.classList.add('active');
+                if (isVoiceMode) visualizer.classList.add('active');
             } else {
-                visualizer.classList.remove('active');
+                if (isVoiceMode) visualizer.classList.remove('active');
             }
         }
 
-        // NEW: Handles the user clicking the BIK style redirect button!
         async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
             if (isVoiceMode) {
@@ -758,7 +753,6 @@
             window.open(linkInfo.url, '_blank');
         }
 
-        // MODIFIED: Injects the interactive BIK link card if a tag was found
         function logMessage(sender, text, tag = null) {
             const log = document.getElementById('usd-chat-log');
             const msgDiv = document.createElement('div');
@@ -768,7 +762,6 @@
             else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
             else msgDiv.innerText = text; 
             
-            // If the LLM sent a redirect tag, create the button!
             if (tag && usdLinks[tag]) {
                 const btn = document.createElement('button');
                 btn.className = 'usd-link-card';
