@@ -58,7 +58,6 @@
             width: 320px;
             max-height: 380px;
             background-color: #111111;
-            /* FIXED: Stopped border flickering with solid color and hardware acceleration */
             border: 1px solid #333333; 
             border-radius: 15px;
             padding: 15px;
@@ -228,7 +227,6 @@
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
         }
 
-        /* NEW: Inline Rating Box (Replaces input container at end of chat) */
         #usd-inline-rating {
             display: none;
             border-top: 1px solid rgba(255,255,255,0.1);
@@ -320,13 +318,11 @@
                 <div id="usd-chat-log"></div>
                 <div id="usd-interim-text"></div>
                 
-                <!-- This hides, and the rating box appears in its place! -->
                 <div id="usd-input-container">
                     <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
                     <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
                 </div>
 
-                <!-- NEW: Inline Rating Box -->
                 <div id="usd-inline-rating">
                     <div id="usd-rating-title">Rate your experience</div>
                     <div class="usd-stars">
@@ -338,7 +334,6 @@
                     </div>
                     <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
                 </div>
-
             </div>
         </div>
         
@@ -362,14 +357,15 @@
         let globalStream = null;
         let isVoiceMode = true; 
 
+        // CEO APPROVED RESPONSES - Spoken text & visual log text synced
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
-            '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist.' },
-            '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On', voice: 'Now you are on our virtual try-on page.' },
+            '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist. Add your details and we will reach out to you soon.' },
+            '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On', voice: 'Click design my smile to know how your beautiful smile looks after treatment.' },
             '[LINK_BLOGS]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '📰 Read Our Blogs', voice: 'Now you are on our blogs page.' }, 
             '[LINK_GALLERY]': { url: 'https://ultimatesmiledesign.com/gallery/', label: '🖼️ Check Out Gallery', voice: 'Now you are on our gallery page.' },
-            '[LINK_CONSULT]': { url: 'https://ultimatesmiledesign.com/consult-with-dentist/', label: '👨‍⚕️ Consult Expert Dentist', voice: 'Now you are on our consultation page.' },
-            '[LINK_CONTACT]': { url: 'https://ultimatesmiledesign.com/contact/', label: '📞 Contact Us', voice: 'Now you are on our contact page.' },
+            '[LINK_CONSULT]': { url: 'https://ultimatesmiledesign.com/consult-with-dentist/', label: '👨‍⚕️ Consult Expert Dentist', voice: 'Please fill the answers to get a response from our expert dentist.' },
+            '[LINK_CONTACT]': { url: 'https://ultimatesmiledesign.com/contact/', label: '📞 Contact Us', voice: 'Please fill the answers to get a response from us.' },
             '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist', voice: 'Now you are on our dentist connect page.' }
         };
 
@@ -426,12 +422,11 @@
                 container.style.display = 'flex';
                 tooltip.style.display = 'none'; 
                 
-                // Reset UI in case it was closed after a rating previously
                 document.getElementById('usd-input-container').style.display = 'flex';
                 document.getElementById('usd-inline-rating').style.display = 'none';
                 document.getElementById('usd-mode-toggle').style.display = 'block';
                 if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
-                document.getElementById('usd-chat-log').innerHTML = ""; // Clear old chat
+                document.getElementById('usd-chat-log').innerHTML = ""; 
                 chatHistory = [];
                 
                 audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
@@ -445,7 +440,6 @@
 
                 updateState('speaking', "Assistant is speaking...");
                 
-                // FIXED: The new general ecosystem greeting!
                 const greeting = "Namaste! How can we assist you today?";
                 
                 logMessage('bot', greeting);
@@ -645,7 +639,6 @@
             }
         }
 
-        // FIXED: The Inline Rating UI Trigger
         function closeChat(showRating = false) {
             updateState('off', "Chat Ended");
             audioPlayer.pause();
@@ -653,14 +646,12 @@
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
             if (showRating) {
-                // Keep the chat log open, hide the inputs, and show the stars inline!
                 document.getElementById('usd-input-container').style.display = 'none';
                 document.getElementById('usd-mode-toggle').style.display = 'none';
                 document.getElementById('usd-visualizer').style.display = 'none';
                 document.getElementById('usd-inline-rating').style.display = 'block';
                 logMessage('system', 'The chat has ended. Please rate your experience below.');
             } else {
-                // Full force close
                 document.getElementById('usd-chat-container').style.display = 'none';
                 document.getElementById('usd-bubble').style.display = 'flex'; 
             }
@@ -693,7 +684,6 @@
                 });
             } catch(e) { }
 
-            // Fully close the widget 3 seconds after they click the stars
             setTimeout(() => { closeChat(false); }, 3000);
         }
 
@@ -742,15 +732,28 @@
             }
         }
 
+        // CEO APPROVED LOGIC: Handle User Click -> Open New Tab -> Print Chat Message -> Speak Custom Text
         async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
+            
+            // 1. Immediately open link in a NEW TAB so the chat perfectly stays alive in current tab
+            window.open(linkInfo.url, '_blank');
+            
+            // 2. Add system text to the chat window visually
+            logMessage('bot', linkInfo.voice);
+            chatHistory.push({ role: "model", parts: [{ text: linkInfo.voice }] });
+
+            // 3. Play the custom Voice audio
             if (isVoiceMode) {
                 audioPlayer.pause();
+                if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
+                    window.mediaRecorder.stop();
+                    window.audioChunks = [];
+                }
                 updateState('speaking', "Redirecting...");
                 await playSarvamGreeting(linkInfo.voice);
                 updateState('listening', "Listening...");
             }
-            window.open(linkInfo.url, '_blank');
         }
 
         function logMessage(sender, text, tag = null) {
