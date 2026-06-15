@@ -21,6 +21,7 @@
             flex-direction: column;
             align-items: flex-end;
         }
+        
         #usd-tooltip {
             background: #D4AF37;
             color: #111;
@@ -34,6 +35,9 @@
             position: relative;
             cursor: pointer;
             display: block; 
+            /* NEW: Smooth fade transition for when the user scrolls */
+            transition: opacity 0.3s ease-in-out;
+            opacity: 1;
         }
         #usd-tooltip::after {
             content: '';
@@ -204,12 +208,15 @@
             font-size: 13px;
         }
         #usd-send-btn:hover { background: #FFF8DC; }
+        
         #usd-bubble {
             width: 80px;
             height: 80px;
             background: linear-gradient(135deg, #FFD700, #B8860B);
             border-radius: 50%;
             cursor: pointer;
+            /* Default pulse size set via CSS variable */
+            --pulse-max: 20px; 
             box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7);
             animation: usd-pulse 2s infinite;
             display: flex;
@@ -221,9 +228,11 @@
         }
         #usd-bubble:hover { transform: scale(1.05); }
         #usd-bubble:active { transform: scale(0.95); }
+        
+        /* NEW: The animation dynamically reads the variable set by our scroll script! */
         @keyframes usd-pulse {
             0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(212, 175, 55, 0); }
+            70% { transform: scale(1); box-shadow: 0 0 0 var(--pulse-max) rgba(212, 175, 55, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
         }
 
@@ -357,6 +366,7 @@
         let globalStream = null;
         let isVoiceMode = true; 
 
+        // CEO APPROVED RESPONSES
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist. Add your details and we will reach out to you soon.' },
@@ -368,13 +378,47 @@
             '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist', voice: 'Now you are on our dentist connect page.' }
         };
 
-        // Check and reconstruct session on load
         window.onload = async () => {
             audioPlayer = document.getElementById('usd-html-player');
             if (sessionStorage.getItem('usd_chat_active') === 'true') {
                 await openChat(true);
             }
         };
+
+        // NEW: Scroll Activity Listener (Tooltip Fade + Dynamic Bubble Pulse)
+        let lastScrollY = window.scrollY || 0;
+        let scrollTimeout = null;
+
+        window.addEventListener('scroll', () => {
+            const currentScrollY = window.scrollY || document.documentElement.scrollTop;
+            const tooltip = document.getElementById('usd-tooltip');
+            const bubble = document.getElementById('usd-bubble');
+            
+            // 1. Tooltip Fade Logic: Hide if scrolled past 30px
+            if (currentScrollY > 30) {
+                tooltip.style.opacity = '0';
+                tooltip.style.pointerEvents = 'none';
+            } else {
+                tooltip.style.opacity = '1';
+                tooltip.style.pointerEvents = 'auto';
+            }
+
+            // 2. Kinetic Pulse Logic: Measure speed of scroll
+            let scrollSpeed = Math.abs(currentScrollY - lastScrollY);
+            lastScrollY = currentScrollY;
+
+            // Base pulse is 20px. Max is 80px based on user swipe speed.
+            let dynamicPulseSize = Math.min(20 + (scrollSpeed * 1.5), 80);
+            
+            // Instantly apply the expanded aura to the bubble animation variable
+            bubble.style.setProperty('--pulse-max', `${dynamicPulseSize}px`);
+
+            // Reset smoothly back to 20px when the user stops scrolling
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                bubble.style.setProperty('--pulse-max', '20px');
+            }, 150);
+        });
 
         function saveSessionState() {
             sessionStorage.setItem('usd_chat_active', 'true');
@@ -436,14 +480,16 @@
             if (agentState === 'off' || isRestore) {
                 bubble.style.display = 'none'; 
                 container.style.display = 'flex';
-                tooltip.style.display = 'none'; 
+                
+                // Hide tooltip permanently once chat is opened
+                tooltip.style.opacity = '0'; 
+                tooltip.style.pointerEvents = 'none';
                 
                 document.getElementById('usd-input-container').style.display = 'flex';
                 document.getElementById('usd-inline-rating').style.display = 'none';
                 document.getElementById('usd-mode-toggle').style.display = 'block';
                 
                 if (isRestore) {
-                    // Restore data state from session storage
                     chatHistory = JSON.parse(sessionStorage.getItem('usd_chat_history') || '[]');
                     isVoiceMode = sessionStorage.getItem('usd_is_voice_mode') !== 'false';
                     
@@ -452,7 +498,6 @@
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
                     else document.getElementById('usd-visualizer').style.display = 'none';
                     
-                    // Render past visual logs instantly
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory.forEach(turn => {
                         const sender = turn.role === 'model' ? 'bot' : 'user';
@@ -702,6 +747,13 @@
             } else {
                 document.getElementById('usd-chat-container').style.display = 'none';
                 document.getElementById('usd-bubble').style.display = 'flex'; 
+                
+                // Show the tooltip again if they are at the top of the page
+                if (window.scrollY <= 30) {
+                    const tooltip = document.getElementById('usd-tooltip');
+                    tooltip.style.opacity = '1';
+                    tooltip.style.pointerEvents = 'auto';
+                }
             }
         }
 
@@ -780,7 +832,6 @@
             }
         }
 
-        // REDIRECT IN THE SAME TAB LIKE ELEVENLABS
         async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
             
@@ -798,7 +849,6 @@
                 await playSarvamGreeting(linkInfo.voice);
             }
             
-            // Redirect smoothly in the same single browser tab
             window.location.href = linkInfo.url;
         }
 
