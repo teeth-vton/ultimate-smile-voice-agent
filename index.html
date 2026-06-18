@@ -441,7 +441,7 @@
                 const data = await response.json();
                 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                 await new Promise((resolve) => {
-                    audioPlayer.onended = () => { setTimeout(() => { isBotSpeaking = false; resolve(); }, 400); }; // Echo Blocker
+                    audioPlayer.onended = () => { setTimeout(() => { isBotSpeaking = false; resolve(); }, 400); };
                     audioPlayer.onerror = () => { isBotSpeaking = false; resolve(); };
                     audioPlayer.onpause = () => { isBotSpeaking = false; resolve(); };
                     audioPlayer.play().catch(() => { isBotSpeaking = false; resolve(); });
@@ -544,7 +544,6 @@
                     let isRecording = false;
 
                     processor.onaudioprocess = (e) => {
-                        // Allow audio to be processed if NOT speaking OR if we are doing a LOUD Interrupt.
                         if (!isVoiceMode || agentState !== 'listening') return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
@@ -580,20 +579,15 @@
                         }
                         let volumeAvg = sum / validBins;
 
-                        // =====================================
-                        // THE LOUD BARGE-IN (INTERRUPT) LOGIC
-                        // =====================================
                         if (isBotSpeaking) {
-                            // Only trigger if you speak VERY loudly over the bot!
                             if (volumeAvg > 65) { 
                                 audioPlayer.pause();
-                                isBotSpeaking = false; // Mute bot and force listen
+                                isBotSpeaking = false; 
                                 if (socket && socket.readyState === WebSocket.OPEN) {
                                     socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                 }
                             }
                         } else {
-                            // Normal Listening
                             if (volumeAvg > 35) { 
                                 if (!isRecording) {
                                     isRecording = true;
@@ -620,6 +614,7 @@
                                 
                                 clearTimeout(silenceTimer);
                                 
+                                // FIXED: Ultra-Snappy 600ms cutoff for instant interaction!
                                 silenceTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -634,7 +629,7 @@
                                         }
                                         document.getElementById('usd-interim-text').innerText = "Processing...";
                                     }
-                                }, 900); 
+                                }, 600); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
@@ -647,7 +642,6 @@
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    // NEW: Silent Reset Handler (No infinite loops!)
                     if (data.type === 'idle') {
                         document.getElementById('usd-interim-text').innerText = "";
                         updateState('listening', "Listening...");
@@ -688,7 +682,6 @@
                             isBotSpeaking = true; 
                             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                             audioPlayer.onended = () => {
-                                // 400ms Echo Blocker! Prevents mic from immediately hearing the speakers.
                                 setTimeout(() => {
                                     isBotSpeaking = false; 
                                     if (isEnding) {
@@ -708,7 +701,6 @@
                         }
                     }
                     else if (data.type === 'error') {
-                        // Suppress background noise errors quietly
                         if(data.message !== "No speech detected.") logMessage('error', data.message);
                         document.getElementById('usd-interim-text').innerText = "";
                         updateState('listening', isVoiceMode ? "Listening..." : "Chat Mode Active.");
