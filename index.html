@@ -343,14 +343,14 @@
         const RENDER_BACKEND_URL = "https://nikjoshi123-usd-voice-backend.hf.space";
         const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
 
-        let agentState = 'off'; 
+        // THE ULTIMATE STATE MACHINE (Prevents Infinite Loops)
+        // States: 'off', 'listening', 'thinking', 'speaking', 'cooldown'
+        let currentAgentState = 'off'; 
         let chatHistory = [];
         let audioPlayer;
         let socket = null;
         let globalStream = null;
         let isVoiceMode = true; 
-        
-        let isBotSpeaking = false;
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
@@ -423,16 +423,28 @@
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "none";
                 audioPlayer.pause();
-                isBotSpeaking = false;
                 updateState('listening', "Chat Mode Active. Type below.");
             }
             saveSessionState();
         }
 
+        function updateState(newState, statusText) {
+            currentAgentState = newState;
+            const statusBox = document.getElementById('usd-status-box');
+            const visualizer = document.getElementById('usd-visualizer');
+            
+            if (statusBox && statusText) statusBox.innerText = statusText;
+            if (newState === 'speaking') {
+                if (isVoiceMode) visualizer.classList.add('active');
+            } else {
+                if (isVoiceMode) visualizer.classList.remove('active');
+            }
+        }
+
         async function playSarvamGreeting(text) {
             if (!isVoiceMode) return; 
             try {
-                isBotSpeaking = true; 
+                updateState('speaking', "Assistant is speaking..."); 
                 const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -441,13 +453,19 @@
                 const data = await response.json();
                 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                 await new Promise((resolve) => {
-                    audioPlayer.onended = () => { setTimeout(() => { isBotSpeaking = false; resolve(); }, 600); };
-                    audioPlayer.onerror = () => { isBotSpeaking = false; resolve(); };
-                    audioPlayer.onpause = () => { isBotSpeaking = false; resolve(); };
-                    audioPlayer.play().catch(() => { isBotSpeaking = false; resolve(); });
+                    audioPlayer.onended = () => { 
+                        updateState('cooldown', "Listening..."); // Enter cooldown to kill room echo
+                        setTimeout(() => { 
+                            if(currentAgentState === 'cooldown') updateState('listening', "Listening..."); 
+                            resolve(); 
+                        }, 800); 
+                    };
+                    audioPlayer.onerror = resolve;
+                    audioPlayer.onpause = resolve;
+                    audioPlayer.play().catch(resolve);
                 });
             } catch(e) {
-                isBotSpeaking = false;
+                updateState('listening', "Listening...");
             }
         }
 
@@ -456,7 +474,7 @@
             const tooltip = document.getElementById('usd-tooltip');
             const bubble = document.getElementById('usd-bubble');
             
-            if (agentState === 'off' || isRestore) {
+            if (currentAgentState === 'off' || isRestore) {
                 bubble.style.display = 'none'; 
                 container.style.display = 'flex';
                 tooltip.style.opacity = '0'; 
@@ -503,15 +521,12 @@
 
                     updateState('connecting', "Connected 🟢");
                     await new Promise(resolve => setTimeout(resolve, 1000));
-
-                    updateState('speaking', "Assistant is speaking...");
                     
                     const greeting = "Namaste! How can we assist you today?";
                     logMessage('bot', greeting);
                     saveSessionState();
                     await playSarvamGreeting(greeting); 
                     
-                    updateState('thinking', "Connecting...");
                     await startWebSocket();
                 }
             }
@@ -539,14 +554,14 @@
                     source.connect(processor);
                     processor.connect(audioCtx.destination); 
 
+                    let isRecording = false;
                     let silenceTimer = null;
                     let maxRecordingTimer = null;
-                    let isRecording = false;
-                    
                     let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
-                        if (!isVoiceMode || agentState === 'thinking') return;
+                        // ONLY stream audio to the server if we are actively in the "isRecording" state
+                        if (!isVoiceMode || currentAgentState !== 'listening' || !isRecording) return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
                         const pcm16 = new Int16Array(inputData.length);
@@ -554,13 +569,13 @@
                             pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
                         }
                         
-                        if (socket && socket.readyState === WebSocket.OPEN && isRecording) {
+                        if (socket && socket.readyState === WebSocket.OPEN) {
                             socket.send(pcm16.buffer); 
                         }
                     };
 
                     function detectVoice() {
-                        if (!isVoiceMode) {
+                        if (!isVoiceMode || currentAgentState === 'off' || currentAgentState === 'connecting') {
                             requestAnimationFrame(detectVoice);
                             return;
                         }
@@ -568,11 +583,6 @@
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
                         analyser.getByteFrequencyData(dataArray);
                         
-                        // ==========================================
-                        // THE PRECISE HUMAN-VOICE ISOLATOR
-                        // Bins 10 to 96 = approx 300Hz to 3000Hz (Human Vocal Cords)
-                        // This completely ignores low bass thuds and high treble clicks.
-                        // ==========================================
                         let voiceSum = 0;
                         let voiceBins = 0;
                         for (let i = 10; i < 96; i++) {
@@ -581,39 +591,42 @@
                         }
                         let humanVolume = voiceSum / voiceBins;
 
-                        if (agentState === 'thinking') {
-                            if (isRecording) {
-                                isRecording = false;
-                                clearTimeout(silenceTimer);
-                                clearTimeout(maxRecordingTimer);
-                            }
+                        // 1. ABSOLUTE DEAF MODE: If thinking or in cooldown, ignore the mic entirely
+                        if (currentAgentState === 'thinking' || currentAgentState === 'cooldown') {
+                            isRecording = false;
+                            clearTimeout(silenceTimer);
+                            clearTimeout(maxRecordingTimer);
                             requestAnimationFrame(detectVoice);
                             return;
                         }
 
-                        // THE SMART, PRECISE BARGE-IN
-                        if (agentState === 'speaking' || isBotSpeaking) {
-                            if (humanVolume > 50) { 
+                        // 2. THE SMART BARGE-IN (INTERRUPT)
+                        if (currentAgentState === 'speaking') {
+                            // Volume must be extremely loud (70)
+                            if (humanVolume > 70) { 
                                 consecutiveLoudFrames++;
-                                // Must be sustained human voice for ~250ms (12 frames) to interrupt
-                                if (consecutiveLoudFrames > 12) {
-                                    audioPlayer.pause();
-                                    isBotSpeaking = false; 
+                                // MUST be loud for 30 consecutive frames (~600ms of continuous yelling)
+                                if (consecutiveLoudFrames > 30) {
+                                    audioPlayer.pause(); // Physically mute the bot
                                     consecutiveLoudFrames = 0;
+                                    
+                                    // Instantly transition to listening
                                     updateState('listening', "Listening...");
+                                    isRecording = true;
+                                    document.getElementById('usd-interim-text').innerText = "Listening...";
                                     if (socket && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
                                 }
                             } else {
-                                consecutiveLoudFrames = 0; // A fast thud or clack will reset this instantly
+                                consecutiveLoudFrames = 0; // A desk thud resets this counter immediately
                             }
                             requestAnimationFrame(detectVoice);
                             return;
                         }
 
-                        // NORMAL LISTENING
-                        if (agentState === 'listening' && !isBotSpeaking) {
+                        // 3. NORMAL LISTENING
+                        if (currentAgentState === 'listening') {
                             if (humanVolume > 35) { 
                                 if (!isRecording) {
                                     isRecording = true;
@@ -626,12 +639,11 @@
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
-                                            if (socket.readyState === WebSocket.OPEN) {
-                                                socket.send(JSON.stringify({ 
-                                                    type: 'end_of_speech', history: chatHistory, isVoiceMode: isVoiceMode 
-                                                }));
-                                            }
                                             updateState('thinking', "Processing...");
+                                            document.getElementById('usd-interim-text').innerText = "Processing...";
+                                            if (socket.readyState === WebSocket.OPEN) {
+                                                socket.send(JSON.stringify({ type: 'end_of_speech', history: chatHistory, isVoiceMode: isVoiceMode }));
+                                            }
                                         }
                                     }, 14000); 
                                 }
@@ -642,13 +654,11 @@
                                     if (isRecording) {
                                         isRecording = false;
                                         clearTimeout(maxRecordingTimer);
-                                        
-                                        if (socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ 
-                                                type: 'end_of_speech', history: chatHistory, isVoiceMode: isVoiceMode 
-                                            }));
-                                        }
                                         updateState('thinking', "Processing...");
+                                        document.getElementById('usd-interim-text').innerText = "Processing...";
+                                        if (socket.readyState === WebSocket.OPEN) {
+                                            socket.send(JSON.stringify({ type: 'end_of_speech', history: chatHistory, isVoiceMode: isVoiceMode }));
+                                        }
                                     }
                                 }, 600); 
                             }
@@ -657,7 +667,7 @@
                     }
                     
                     detectVoice();
-                    updateState('listening', isVoiceMode ? "Listening..." : "Chat Mode Active.");
+                    if(currentAgentState === 'listening') updateState('listening', "Listening...");
                 };
 
                 socket.onmessage = async (event) => {
@@ -700,19 +710,17 @@
 
                         if (isVoiceMode && data.audioBase64) {
                             updateState('speaking', "Assistant is speaking...");
-                            isBotSpeaking = true; 
                             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                             audioPlayer.onended = () => {
+                                updateState('cooldown', "Listening..."); // Cooldown state to kill echo
                                 setTimeout(() => {
-                                    isBotSpeaking = false; 
-                                    if (isEnding) {
-                                        closeChat(true); 
-                                    } else {
+                                    if (currentAgentState === 'cooldown') {
                                         updateState('listening', "Listening...");
+                                        if (isEnding) closeChat(true); 
                                     }
-                                }, 600);
+                                }, 800); // 800ms of strictly ignored audio to let the room settle
                             };
-                            audioPlayer.play().catch(() => { isBotSpeaking = false; updateState('listening', "Listening..."); });
+                            audioPlayer.play().catch(() => { updateState('listening', "Listening..."); });
                         } else {
                             if (isEnding) {
                                 setTimeout(() => closeChat(true), 2000);
@@ -744,13 +752,12 @@
             if (isYes) {
                 updateState('thinking', "Ending call...");
                 audioPlayer.pause();
-                isBotSpeaking = false;
                 
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
                 
                 if (isVoiceMode) {
                     try {
-                        isBotSpeaking = true;
+                        updateState('speaking', "Ending call...");
                         const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -758,9 +765,9 @@
                         });
                         const data = await response.json();
                         audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-                        audioPlayer.onended = () => { isBotSpeaking = false; closeChat(true); };
+                        audioPlayer.onended = () => { closeChat(true); };
                         audioPlayer.play();
-                    } catch(e) { isBotSpeaking = false; closeChat(true); }
+                    } catch(e) { closeChat(true); }
                 } else {
                     logMessage('bot', goodbyeText);
                     setTimeout(() => closeChat(true), 2000);
@@ -771,7 +778,6 @@
         function closeChat(showRating = false) {
             updateState('off', "Chat Ended");
             audioPlayer.pause();
-            isBotSpeaking = false;
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
@@ -828,11 +834,10 @@
         async function submitTextMessage() {
             const inputEl = document.getElementById('usd-text-input');
             const userText = inputEl.value.trim();
-            if (!userText || agentState === 'thinking' || agentState === 'connecting') return;
+            if (!userText || currentAgentState === 'thinking' || currentAgentState === 'connecting') return;
 
             inputEl.value = ''; 
             audioPlayer.pause(); 
-            isBotSpeaking = false;
 
             updateState('thinking', "Processing...");
 
@@ -853,19 +858,6 @@
             }
         }
 
-        function updateState(newState, statusText) {
-            agentState = newState;
-            const statusBox = document.getElementById('usd-status-box');
-            const visualizer = document.getElementById('usd-visualizer');
-            
-            if (statusBox) statusBox.innerText = statusText;
-            if (newState === 'speaking') {
-                if (isVoiceMode) visualizer.classList.add('active');
-            } else {
-                if (isVoiceMode) visualizer.classList.remove('active');
-            }
-        }
-
         async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
             
@@ -875,7 +867,6 @@
 
             if (isVoiceMode) {
                 audioPlayer.pause();
-                isBotSpeaking = false;
                 updateState('speaking', "Redirecting...");
                 await playSarvamGreeting(linkInfo.voice);
             }
