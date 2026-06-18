@@ -350,7 +350,6 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        // THE STRICT AUDIO LOCK
         let isBotSpeaking = false;
 
         const usdLinks = {
@@ -433,7 +432,7 @@
         async function playSarvamGreeting(text) {
             if (!isVoiceMode) return; 
             try {
-                isBotSpeaking = true; // Lock Microphone
+                isBotSpeaking = true; 
                 const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -545,8 +544,8 @@
                     let isRecording = false;
 
                     processor.onaudioprocess = (e) => {
-                        // FIX: Strict Audio Lock. Ignore mic if bot is talking. No interruptions.
-                        if (!isRecording || !isVoiceMode || isBotSpeaking) return;
+                        // FIX: THE PROCESSING LOCK. Drops all audio if bot is speaking or thinking!
+                        if (!isRecording || !isVoiceMode || agentState !== 'listening') return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
                         const pcm16 = new Int16Array(inputData.length);
@@ -560,8 +559,8 @@
                     };
 
                     function detectVoice() {
-                        // FIX: Lock Voice Activity Detector while bot is speaking
-                        if (agentState !== 'listening' || !isVoiceMode || isBotSpeaking) {
+                        // FIX: Lock Voice Activity Detector while bot is speaking OR thinking
+                        if (agentState !== 'listening' || !isVoiceMode) {
                             if (isRecording) {
                                 isRecording = false;
                                 clearTimeout(silenceTimer);
@@ -574,8 +573,6 @@
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
                         analyser.getByteFrequencyData(dataArray);
                         
-                        // NEW: Advanced Noise Filter (High-Pass)
-                        // Ignore the first 10 data bins which carry low AC/Fan hums
                         let sum = 0;
                         let validBins = 0;
                         for (let i = 10; i < dataArray.length; i++) {
@@ -584,7 +581,6 @@
                         }
                         let volumeAvg = sum / validBins;
 
-                        // Increased threshold so it doesn't get stuck listening to background noise
                         if (volumeAvg > 30) { 
                             if (!isRecording) {
                                 isRecording = true;
@@ -604,13 +600,14 @@
                                                 isVoiceMode: isVoiceMode 
                                             }));
                                         }
+                                        // FIX: Immediately lock the microphone while waiting for the AI!
+                                        updateState('thinking', "Assistant is replying...");
                                     }
                                 }, 14000); 
                             }
                             
                             clearTimeout(silenceTimer);
                             
-                            // FIX: Increased patience. Waits 1.5 seconds after you pause before cutting you off.
                             silenceTimer = setTimeout(() => {
                                 if (isRecording) {
                                     isRecording = false;
@@ -623,6 +620,8 @@
                                             isVoiceMode: isVoiceMode 
                                         }));
                                     }
+                                    // FIX: Immediately lock the microphone while waiting for the AI!
+                                    updateState('thinking', "Assistant is replying...");
                                 }
                             }, 1500); 
                         }
@@ -667,17 +666,17 @@
 
                         if (isVoiceMode && data.audioBase64) {
                             updateState('speaking', "Assistant is speaking...");
-                            isBotSpeaking = true; // Lock Microphone
+                            isBotSpeaking = true; 
                             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                             audioPlayer.onended = () => {
-                                isBotSpeaking = false; // Unlock Microphone perfectly after bot finishes
+                                isBotSpeaking = false; 
                                 if (isEnding) {
                                     closeChat(true); 
                                 } else {
                                     updateState('listening', "Listening...");
                                 }
                             };
-                            audioPlayer.play().catch(() => { isBotSpeaking = false; });
+                            audioPlayer.play().catch(() => { isBotSpeaking = false; updateState('listening', "Listening..."); });
                         } else {
                             if (isEnding) {
                                 setTimeout(() => closeChat(true), 2000);
