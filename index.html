@@ -441,7 +441,8 @@
                 const data = await response.json();
                 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                 await new Promise((resolve) => {
-                    audioPlayer.onended = () => { setTimeout(() => { isBotSpeaking = false; resolve(); }, 400); };
+                    // FIXED: Wait 600ms after greeting finishes so mic doesn't catch echo!
+                    audioPlayer.onended = () => { setTimeout(() => { isBotSpeaking = false; resolve(); }, 600); };
                     audioPlayer.onerror = () => { isBotSpeaking = false; resolve(); };
                     audioPlayer.onpause = () => { isBotSpeaking = false; resolve(); };
                     audioPlayer.play().catch(() => { isBotSpeaking = false; resolve(); });
@@ -542,9 +543,13 @@
                     let silenceTimer = null;
                     let maxRecordingTimer = null;
                     let isRecording = false;
+                    
+                    // FIXED: Smart debouncer prevents speaker pops from interrupting
+                    let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
-                        if (!isVoiceMode || agentState !== 'listening') return;
+                        // FIXED: Absolutely ignore mic if we are processing AI request
+                        if (!isVoiceMode || agentState === 'thinking') return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
                         const pcm16 = new Int16Array(inputData.length);
@@ -558,12 +563,7 @@
                     };
 
                     function detectVoice() {
-                        if (agentState !== 'listening' || !isVoiceMode) {
-                            if (isRecording) {
-                                isRecording = false;
-                                clearTimeout(silenceTimer);
-                                clearTimeout(maxRecordingTimer);
-                            }
+                        if (!isVoiceMode) {
                             requestAnimationFrame(detectVoice);
                             return;
                         }
@@ -579,16 +579,41 @@
                         }
                         let volumeAvg = sum / validBins;
 
-                        if (isBotSpeaking) {
-                            if (volumeAvg > 65) { 
-                                audioPlayer.pause();
-                                isBotSpeaking = false; 
-                                if (socket && socket.readyState === WebSocket.OPEN) {
-                                    socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                }
+                        // FIXED: The Absolute Lock. If bot is thinking, DO NOT let the mic pick up anything!
+                        if (agentState === 'thinking') {
+                            if (isRecording) {
+                                isRecording = false;
+                                clearTimeout(silenceTimer);
+                                clearTimeout(maxRecordingTimer);
                             }
-                        } else {
-                            if (volumeAvg > 35) { 
+                            requestAnimationFrame(detectVoice);
+                            return;
+                        }
+
+                        // THE SMART BARGE-IN (INTERRUPT)
+                        if (agentState === 'speaking' || isBotSpeaking) {
+                            if (volumeAvg > 65) { 
+                                consecutiveLoudFrames++;
+                                // Must be loud for 5 consecutive frames (~100ms) to trigger an interrupt
+                                if (consecutiveLoudFrames > 5) {
+                                    audioPlayer.pause();
+                                    isBotSpeaking = false; 
+                                    consecutiveLoudFrames = 0;
+                                    updateState('listening', "Listening...");
+                                    if (socket && socket.readyState === WebSocket.OPEN) {
+                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
+                                    }
+                                }
+                            } else {
+                                consecutiveLoudFrames = 0; // Reset if volume drops (it was just a pop)
+                            }
+                            requestAnimationFrame(detectVoice);
+                            return;
+                        }
+
+                        // NORMAL LISTENING
+                        if (agentState === 'listening' && !isBotSpeaking) {
+                            if (volumeAvg > 40) { 
                                 if (!isRecording) {
                                     isRecording = true;
                                     document.getElementById('usd-interim-text').innerText = "Listening...";
@@ -602,19 +627,17 @@
                                             isRecording = false;
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ 
-                                                    type: 'end_of_speech', 
-                                                    history: chatHistory, 
-                                                    isVoiceMode: isVoiceMode 
+                                                    type: 'end_of_speech', history: chatHistory, isVoiceMode: isVoiceMode 
                                                 }));
                                             }
-                                            document.getElementById('usd-interim-text').innerText = "Processing...";
+                                            updateState('thinking', "Processing...");
                                         }
                                     }, 14000); 
                                 }
                                 
                                 clearTimeout(silenceTimer);
                                 
-                                // FIXED: Ultra-Snappy 600ms cutoff for instant interaction!
+                                // Ultra-snappy 600ms cutoff
                                 silenceTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -622,12 +645,11 @@
                                         
                                         if (socket.readyState === WebSocket.OPEN) {
                                             socket.send(JSON.stringify({ 
-                                                type: 'end_of_speech', 
-                                                history: chatHistory, 
-                                                isVoiceMode: isVoiceMode 
+                                                type: 'end_of_speech', history: chatHistory, isVoiceMode: isVoiceMode 
                                             }));
                                         }
-                                        document.getElementById('usd-interim-text').innerText = "Processing...";
+                                        // FIXED: Instantly lock the state so mic stops listening!
+                                        updateState('thinking', "Processing...");
                                     }
                                 }, 600); 
                             }
@@ -682,6 +704,7 @@
                             isBotSpeaking = true; 
                             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                             audioPlayer.onended = () => {
+                                // FIXED: Wait 600ms after bot finishes speaking to unlock the mic
                                 setTimeout(() => {
                                     isBotSpeaking = false; 
                                     if (isEnding) {
@@ -689,7 +712,7 @@
                                     } else {
                                         updateState('listening', "Listening...");
                                     }
-                                }, 400);
+                                }, 600);
                             };
                             audioPlayer.play().catch(() => { isBotSpeaking = false; updateState('listening', "Listening..."); });
                         } else {
@@ -813,7 +836,7 @@
             audioPlayer.pause(); 
             isBotSpeaking = false;
 
-            document.getElementById('usd-interim-text').innerText = "Processing...";
+            updateState('thinking', "Processing...");
 
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ 
