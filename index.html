@@ -416,22 +416,35 @@
             if (isVoiceMode) {
                 toggleBtn.innerText = "🎙️ Voice";
                 visualizer.style.display = "flex";
-                updateState('listening', "Listening...");
+                updateState('listening');
             } else {
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "none";
                 audioPlayer.pause();
-                updateState('listening', "Chat Mode Active. Type below.");
+                updateState('listening');
             }
             saveSessionState();
         }
 
-        function updateState(newState, statusText) {
+        // ==========================================
+        // UI FIX: Remved all "Processing..." text injections
+        // ==========================================
+        function updateState(newState, statusText = null) {
             currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
             const visualizer = document.getElementById('usd-visualizer');
-            
-            if (statusBox && statusText) statusBox.innerText = statusText;
+
+            if (statusBox) {
+                // Only explicitly change the top header for connecting or ending states
+                if (newState === 'connecting' || newState === 'off') {
+                    if (statusText) statusBox.innerText = statusText;
+                } else if (isVoiceMode) {
+                    statusBox.innerText = "Connected 🟢"; // Prevents user impatience!
+                } else {
+                    statusBox.innerText = "Chat Mode Active. Type below.";
+                }
+            }
+
             if (newState === 'speaking') {
                 if (isVoiceMode) visualizer.classList.add('active');
             } else {
@@ -442,7 +455,7 @@
         async function playSarvamGreeting(text) {
             if (!isVoiceMode) return; 
             try {
-                updateState('speaking', "Assistant is speaking..."); 
+                updateState('speaking'); 
                 const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -452,9 +465,9 @@
                 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                 await new Promise((resolve) => {
                     audioPlayer.onended = () => { 
-                        updateState('cooldown', "Listening..."); 
+                        updateState('cooldown'); 
                         setTimeout(() => { 
-                            if(currentAgentState === 'cooldown') updateState('listening', "Listening..."); 
+                            if(currentAgentState === 'cooldown') updateState('listening'); 
                             resolve(); 
                         }, 800); 
                     };
@@ -463,7 +476,7 @@
                     audioPlayer.play().catch(resolve);
                 });
             } catch(e) {
-                updateState('listening', "Listening...");
+                updateState('listening');
             }
         }
 
@@ -504,7 +517,7 @@
                         logMessage(sender, cleanText, foundTag);
                     });
 
-                    updateState('thinking', "Connecting...");
+                    updateState('thinking');
                     await startWebSocket();
                 } else {
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
@@ -535,15 +548,11 @@
                 socket = new WebSocket(WS_URL);
 
                 socket.onopen = async () => {
-                    // ==========================================
-                    // CRITICAL FIX: autoGainControl is FALSE.
-                    // The mic will NOT secretly amplify the office background noise!
-                    // ==========================================
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
                         audio: { 
                             echoCancellation: true, 
                             noiseSuppression: true, 
-                            autoGainControl: false // Prevents the mic from picking up people 15 feet away!
+                            autoGainControl: false 
                         }
                     });
 
@@ -606,18 +615,16 @@
                             return;
                         }
 
-                        // BARGE IN LOGIC (Since AGC is off, we lower the threshold slightly to 60)
                         if (currentAgentState === 'speaking') {
                             if (humanVolume > 60) { 
                                 consecutiveLoudFrames++;
-                                // Needs to be loud for ~500ms continuous to interrupt
                                 if (consecutiveLoudFrames > 25) {
                                     audioPlayer.pause(); 
                                     consecutiveLoudFrames = 0;
                                     
-                                    updateState('listening', "Listening...");
+                                    updateState('listening');
                                     isRecording = true;
-                                    document.getElementById('usd-interim-text').innerText = "Listening...";
+                                    
                                     if (socket && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
@@ -629,7 +636,6 @@
                             return;
                         }
 
-                        // NORMAL LISTENING (Threshold 25 because AGC is off)
                         if (currentAgentState === 'listening') {
                             if (humanVolume > 25) { 
                                 if (!isRecording) {
@@ -641,7 +647,8 @@
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
-                                            updateState('thinking', "Processing...");
+                                            updateState('thinking');
+                                            document.getElementById('usd-interim-text').innerText = ""; 
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                             }
@@ -664,7 +671,8 @@
                                     if (isRecording) {
                                         isRecording = false;
                                         clearTimeout(maxRecordingTimer);
-                                        updateState('thinking', "Processing...");
+                                        updateState('thinking');
+                                        document.getElementById('usd-interim-text').innerText = ""; 
                                         if (socket.readyState === WebSocket.OPEN) {
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
@@ -676,7 +684,7 @@
                     }
                     
                     detectVoice();
-                    if(currentAgentState === 'listening') updateState('listening', "Listening...");
+                    if(currentAgentState === 'listening') updateState('listening');
                 };
 
                 socket.onmessage = async (event) => {
@@ -684,7 +692,7 @@
                     
                     if (data.type === 'idle') {
                         document.getElementById('usd-interim-text').innerText = "";
-                        updateState('listening', "Listening...");
+                        updateState('listening');
                         return;
                     }
 
@@ -721,37 +729,37 @@
                         logMessage('bot', finalBotReply, foundTag);
 
                         if (isVoiceMode && data.audioBase64) {
-                            updateState('speaking', "Assistant is speaking...");
+                            updateState('speaking');
                             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                             audioPlayer.onended = () => {
-                                updateState('cooldown', "Listening..."); 
+                                updateState('cooldown'); 
                                 setTimeout(() => {
                                     if (currentAgentState === 'cooldown') {
-                                        updateState('listening', "Listening...");
+                                        updateState('listening');
                                         if (isEnding) closeChat(true); 
                                     }
                                 }, 800); 
                             };
-                            audioPlayer.play().catch(() => { updateState('listening', "Listening..."); });
+                            audioPlayer.play().catch(() => { updateState('listening'); });
                         } else {
                             if (isEnding) {
                                 setTimeout(() => closeChat(true), 2000);
                             } else {
-                                updateState('listening', "Chat Mode Active.");
+                                updateState('listening');
                             }
                         }
                     }
                     else if (data.type === 'error') {
                         if(data.message !== "No speech detected.") logMessage('error', data.message);
                         document.getElementById('usd-interim-text').innerText = "";
-                        updateState('listening', isVoiceMode ? "Listening..." : "Chat Mode Active.");
+                        updateState('listening');
                     }
                 };
 
-                socket.onerror = () => updateState('listening', "Microphone error. You can type.");
+                socket.onerror = () => updateState('listening');
 
             } catch (err) {
-                updateState('listening', "Microphone denied. You can type.");
+                updateState('listening');
             }
         }
 
@@ -762,14 +770,14 @@
         async function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
-                updateState('thinking', "Ending call...");
+                updateState('thinking');
                 audioPlayer.pause();
                 
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
                 
                 if (isVoiceMode) {
                     try {
-                        updateState('speaking', "Ending call...");
+                        updateState('speaking');
                         const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -851,7 +859,8 @@
             inputEl.value = ''; 
             audioPlayer.pause(); 
 
-            updateState('thinking', "Processing...");
+            updateState('thinking');
+            document.getElementById('usd-interim-text').innerText = ""; 
 
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ 
@@ -879,7 +888,7 @@
 
             if (isVoiceMode) {
                 audioPlayer.pause();
-                updateState('speaking', "Redirecting...");
+                updateState('speaking');
                 await playSarvamGreeting(linkInfo.voice);
             }
             
