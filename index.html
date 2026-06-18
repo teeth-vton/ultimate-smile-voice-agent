@@ -441,7 +441,7 @@
                 const data = await response.json();
                 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                 await new Promise((resolve) => {
-                    audioPlayer.onended = () => { isBotSpeaking = false; resolve(); }; 
+                    audioPlayer.onended = () => { setTimeout(() => { isBotSpeaking = false; resolve(); }, 400); }; // Echo Blocker
                     audioPlayer.onerror = () => { isBotSpeaking = false; resolve(); };
                     audioPlayer.onpause = () => { isBotSpeaking = false; resolve(); };
                     audioPlayer.play().catch(() => { isBotSpeaking = false; resolve(); });
@@ -488,7 +488,7 @@
                         logMessage(sender, cleanText, foundTag);
                     });
 
-                    updateState('thinking', "Reconnecting session...");
+                    updateState('thinking', "Connecting...");
                     await startWebSocket();
                 } else {
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
@@ -544,8 +544,8 @@
                     let isRecording = false;
 
                     processor.onaudioprocess = (e) => {
-                        // FIX: THE PROCESSING LOCK. Drops all audio if bot is speaking or thinking!
-                        if (!isRecording || !isVoiceMode || agentState !== 'listening') return;
+                        // Allow audio to be processed if NOT speaking OR if we are doing a LOUD Interrupt.
+                        if (!isVoiceMode || agentState !== 'listening') return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
                         const pcm16 = new Int16Array(inputData.length);
@@ -553,13 +553,12 @@
                             pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
                         }
                         
-                        if (socket && socket.readyState === WebSocket.OPEN) {
+                        if (socket && socket.readyState === WebSocket.OPEN && isRecording) {
                             socket.send(pcm16.buffer); 
                         }
                     };
 
                     function detectVoice() {
-                        // FIX: Lock Voice Activity Detector while bot is speaking OR thinking
                         if (agentState !== 'listening' || !isVoiceMode) {
                             if (isRecording) {
                                 isRecording = false;
@@ -581,18 +580,51 @@
                         }
                         let volumeAvg = sum / validBins;
 
-                        if (volumeAvg > 30) { 
-                            if (!isRecording) {
-                                isRecording = true;
-                                document.getElementById('usd-interim-text').innerText = "Listening...";
-                                
-                                if (socket.readyState === WebSocket.OPEN) {
+                        // =====================================
+                        // THE LOUD BARGE-IN (INTERRUPT) LOGIC
+                        // =====================================
+                        if (isBotSpeaking) {
+                            // Only trigger if you speak VERY loudly over the bot!
+                            if (volumeAvg > 65) { 
+                                audioPlayer.pause();
+                                isBotSpeaking = false; // Mute bot and force listen
+                                if (socket && socket.readyState === WebSocket.OPEN) {
                                     socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                 }
+                            }
+                        } else {
+                            // Normal Listening
+                            if (volumeAvg > 35) { 
+                                if (!isRecording) {
+                                    isRecording = true;
+                                    document.getElementById('usd-interim-text').innerText = "Listening...";
+                                    
+                                    if (socket.readyState === WebSocket.OPEN) {
+                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
+                                    }
+                                    
+                                    maxRecordingTimer = setTimeout(() => {
+                                        if (isRecording) {
+                                            isRecording = false;
+                                            if (socket.readyState === WebSocket.OPEN) {
+                                                socket.send(JSON.stringify({ 
+                                                    type: 'end_of_speech', 
+                                                    history: chatHistory, 
+                                                    isVoiceMode: isVoiceMode 
+                                                }));
+                                            }
+                                            document.getElementById('usd-interim-text').innerText = "Processing...";
+                                        }
+                                    }, 14000); 
+                                }
                                 
-                                maxRecordingTimer = setTimeout(() => {
+                                clearTimeout(silenceTimer);
+                                
+                                silenceTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
+                                        clearTimeout(maxRecordingTimer);
+                                        
                                         if (socket.readyState === WebSocket.OPEN) {
                                             socket.send(JSON.stringify({ 
                                                 type: 'end_of_speech', 
@@ -600,30 +632,10 @@
                                                 isVoiceMode: isVoiceMode 
                                             }));
                                         }
-                                        // FIX: Immediately lock the microphone while waiting for the AI!
-                                        updateState('thinking', "Assistant is replying...");
+                                        document.getElementById('usd-interim-text').innerText = "Processing...";
                                     }
-                                }, 14000); 
+                                }, 900); 
                             }
-                            
-                            clearTimeout(silenceTimer);
-                            
-                            silenceTimer = setTimeout(() => {
-                                if (isRecording) {
-                                    isRecording = false;
-                                    clearTimeout(maxRecordingTimer);
-                                    
-                                    if (socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ 
-                                            type: 'end_of_speech', 
-                                            history: chatHistory, 
-                                            isVoiceMode: isVoiceMode 
-                                        }));
-                                    }
-                                    // FIX: Immediately lock the microphone while waiting for the AI!
-                                    updateState('thinking', "Assistant is replying...");
-                                }
-                            }, 1500); 
                         }
                         requestAnimationFrame(detectVoice);
                     }
@@ -635,6 +647,13 @@
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
+                    // NEW: Silent Reset Handler (No infinite loops!)
+                    if (data.type === 'idle') {
+                        document.getElementById('usd-interim-text').innerText = "";
+                        updateState('listening', "Listening...");
+                        return;
+                    }
+
                     if (data.type === 'transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
                     } 
@@ -669,12 +688,15 @@
                             isBotSpeaking = true; 
                             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                             audioPlayer.onended = () => {
-                                isBotSpeaking = false; 
-                                if (isEnding) {
-                                    closeChat(true); 
-                                } else {
-                                    updateState('listening', "Listening...");
-                                }
+                                // 400ms Echo Blocker! Prevents mic from immediately hearing the speakers.
+                                setTimeout(() => {
+                                    isBotSpeaking = false; 
+                                    if (isEnding) {
+                                        closeChat(true); 
+                                    } else {
+                                        updateState('listening', "Listening...");
+                                    }
+                                }, 400);
                             };
                             audioPlayer.play().catch(() => { isBotSpeaking = false; updateState('listening', "Listening..."); });
                         } else {
@@ -686,7 +708,9 @@
                         }
                     }
                     else if (data.type === 'error') {
-                        logMessage('error', data.message);
+                        // Suppress background noise errors quietly
+                        if(data.message !== "No speech detected.") logMessage('error', data.message);
+                        document.getElementById('usd-interim-text').innerText = "";
                         updateState('listening', isVoiceMode ? "Listening..." : "Chat Mode Active.");
                     }
                 };
@@ -797,7 +821,7 @@
             audioPlayer.pause(); 
             isBotSpeaking = false;
 
-            updateState('thinking', "Assistant is replying...");
+            document.getElementById('usd-interim-text').innerText = "Processing...";
 
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ 
