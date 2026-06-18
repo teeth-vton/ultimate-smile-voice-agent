@@ -350,7 +350,7 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        // NEW: Audio Lock State
+        // THE STRICT AUDIO LOCK
         let isBotSpeaking = false;
 
         const usdLinks = {
@@ -442,7 +442,7 @@
                 const data = await response.json();
                 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                 await new Promise((resolve) => {
-                    audioPlayer.onended = () => { isBotSpeaking = false; resolve(); }; // Unlock Microphone
+                    audioPlayer.onended = () => { isBotSpeaking = false; resolve(); }; 
                     audioPlayer.onerror = () => { isBotSpeaking = false; resolve(); };
                     audioPlayer.onpause = () => { isBotSpeaking = false; resolve(); };
                     audioPlayer.play().catch(() => { isBotSpeaking = false; resolve(); });
@@ -545,7 +545,7 @@
                     let isRecording = false;
 
                     processor.onaudioprocess = (e) => {
-                        // FIX: If the bot is speaking, completely ignore audio input (Prevents Echo Loop)
+                        // FIX: Strict Audio Lock. Ignore mic if bot is talking. No interruptions.
                         if (!isRecording || !isVoiceMode || isBotSpeaking) return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
@@ -560,10 +560,9 @@
                     };
 
                     function detectVoice() {
-                        // FIX: Do not listen if the bot is currently speaking
+                        // FIX: Lock Voice Activity Detector while bot is speaking
                         if (agentState !== 'listening' || !isVoiceMode || isBotSpeaking) {
                             if (isRecording) {
-                                // Force stop recording if bot starts talking
                                 isRecording = false;
                                 clearTimeout(silenceTimer);
                                 clearTimeout(maxRecordingTimer);
@@ -575,11 +574,18 @@
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
                         analyser.getByteFrequencyData(dataArray);
                         
+                        // NEW: Advanced Noise Filter (High-Pass)
+                        // Ignore the first 10 data bins which carry low AC/Fan hums
                         let sum = 0;
-                        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-                        let volumeAvg = sum / dataArray.length;
+                        let validBins = 0;
+                        for (let i = 10; i < dataArray.length; i++) {
+                            sum += dataArray[i];
+                            validBins++;
+                        }
+                        let volumeAvg = sum / validBins;
 
-                        if (volumeAvg > 20) { 
+                        // Increased threshold so it doesn't get stuck listening to background noise
+                        if (volumeAvg > 30) { 
                             if (!isRecording) {
                                 isRecording = true;
                                 document.getElementById('usd-interim-text').innerText = "Listening...";
@@ -604,6 +610,7 @@
                             
                             clearTimeout(silenceTimer);
                             
+                            // FIX: Increased patience. Waits 1.5 seconds after you pause before cutting you off.
                             silenceTimer = setTimeout(() => {
                                 if (isRecording) {
                                     isRecording = false;
@@ -617,7 +624,7 @@
                                         }));
                                     }
                                 }
-                            }, 800); 
+                            }, 1500); 
                         }
                         requestAnimationFrame(detectVoice);
                     }
@@ -663,7 +670,7 @@
                             isBotSpeaking = true; // Lock Microphone
                             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                             audioPlayer.onended = () => {
-                                isBotSpeaking = false; // Unlock Microphone
+                                isBotSpeaking = false; // Unlock Microphone perfectly after bot finishes
                                 if (isEnding) {
                                     closeChat(true); 
                                 } else {
