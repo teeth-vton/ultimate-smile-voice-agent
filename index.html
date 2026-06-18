@@ -441,7 +441,6 @@
                 const data = await response.json();
                 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                 await new Promise((resolve) => {
-                    // FIXED: Wait 600ms after greeting finishes so mic doesn't catch echo!
                     audioPlayer.onended = () => { setTimeout(() => { isBotSpeaking = false; resolve(); }, 600); };
                     audioPlayer.onerror = () => { isBotSpeaking = false; resolve(); };
                     audioPlayer.onpause = () => { isBotSpeaking = false; resolve(); };
@@ -544,11 +543,9 @@
                     let maxRecordingTimer = null;
                     let isRecording = false;
                     
-                    // FIXED: Smart debouncer prevents speaker pops from interrupting
                     let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
-                        // FIXED: Absolutely ignore mic if we are processing AI request
                         if (!isVoiceMode || agentState === 'thinking') return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
@@ -571,15 +568,19 @@
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
                         analyser.getByteFrequencyData(dataArray);
                         
-                        let sum = 0;
-                        let validBins = 0;
-                        for (let i = 10; i < dataArray.length; i++) {
-                            sum += dataArray[i];
-                            validBins++;
+                        // ==========================================
+                        // THE PRECISE HUMAN-VOICE ISOLATOR
+                        // Bins 10 to 96 = approx 300Hz to 3000Hz (Human Vocal Cords)
+                        // This completely ignores low bass thuds and high treble clicks.
+                        // ==========================================
+                        let voiceSum = 0;
+                        let voiceBins = 0;
+                        for (let i = 10; i < 96; i++) {
+                            voiceSum += dataArray[i];
+                            voiceBins++;
                         }
-                        let volumeAvg = sum / validBins;
+                        let humanVolume = voiceSum / voiceBins;
 
-                        // FIXED: The Absolute Lock. If bot is thinking, DO NOT let the mic pick up anything!
                         if (agentState === 'thinking') {
                             if (isRecording) {
                                 isRecording = false;
@@ -590,12 +591,12 @@
                             return;
                         }
 
-                        // THE SMART BARGE-IN (INTERRUPT)
+                        // THE SMART, PRECISE BARGE-IN
                         if (agentState === 'speaking' || isBotSpeaking) {
-                            if (volumeAvg > 65) { 
+                            if (humanVolume > 50) { 
                                 consecutiveLoudFrames++;
-                                // Must be loud for 5 consecutive frames (~100ms) to trigger an interrupt
-                                if (consecutiveLoudFrames > 5) {
+                                // Must be sustained human voice for ~250ms (12 frames) to interrupt
+                                if (consecutiveLoudFrames > 12) {
                                     audioPlayer.pause();
                                     isBotSpeaking = false; 
                                     consecutiveLoudFrames = 0;
@@ -605,7 +606,7 @@
                                     }
                                 }
                             } else {
-                                consecutiveLoudFrames = 0; // Reset if volume drops (it was just a pop)
+                                consecutiveLoudFrames = 0; // A fast thud or clack will reset this instantly
                             }
                             requestAnimationFrame(detectVoice);
                             return;
@@ -613,7 +614,7 @@
 
                         // NORMAL LISTENING
                         if (agentState === 'listening' && !isBotSpeaking) {
-                            if (volumeAvg > 40) { 
+                            if (humanVolume > 35) { 
                                 if (!isRecording) {
                                     isRecording = true;
                                     document.getElementById('usd-interim-text').innerText = "Listening...";
@@ -637,7 +638,6 @@
                                 
                                 clearTimeout(silenceTimer);
                                 
-                                // Ultra-snappy 600ms cutoff
                                 silenceTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -648,7 +648,6 @@
                                                 type: 'end_of_speech', history: chatHistory, isVoiceMode: isVoiceMode 
                                             }));
                                         }
-                                        // FIXED: Instantly lock the state so mic stops listening!
                                         updateState('thinking', "Processing...");
                                     }
                                 }, 600); 
@@ -704,7 +703,6 @@
                             isBotSpeaking = true; 
                             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                             audioPlayer.onended = () => {
-                                // FIXED: Wait 600ms after bot finishes speaking to unlock the mic
                                 setTimeout(() => {
                                     isBotSpeaking = false; 
                                     if (isEnding) {
