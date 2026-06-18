@@ -11,7 +11,6 @@
             margin: 0;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
-
         #usd-voice-widget {
             position: fixed;
             bottom: 30px;
@@ -21,7 +20,6 @@
             flex-direction: column;
             align-items: flex-end;
         }
-        
         #usd-tooltip {
             background: #D4AF37;
             color: #111;
@@ -56,7 +54,6 @@
             50% { transform: translateY(-8px); }
             100% { transform: translateY(0px); }
         }
-        
         #usd-chat-container {
             width: 320px;
             max-height: 380px;
@@ -73,7 +70,6 @@
             transform: translateZ(0);
             backface-visibility: hidden;
         }
-
         #usd-chat-header {
             display: flex;
             justify-content: space-between;
@@ -109,7 +105,6 @@
             transition: all 0.2s;
         }
         #usd-mode-toggle:hover { background: #D4AF37; color: #111; }
-        
         #usd-visualizer {
             display: flex;
             gap: 3px;
@@ -130,7 +125,6 @@
         #usd-visualizer.active .usd-bar:nth-child(4) { animation-delay: 0.3s; }
         #usd-visualizer.active .usd-bar:nth-child(5) { animation-delay: 0.1s; }
         @keyframes usd-sound { 0% { height: 4px; } 100% { height: 18px; } }
-        
         #usd-close-btn {
             background: none;
             border: none;
@@ -155,7 +149,6 @@
         .msg-bot { color: #D4AF37; text-align: left; }
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
         .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; margin-top: 15px; }
-
         .usd-link-card {
             display: block;
             width: 100%;
@@ -177,7 +170,6 @@
             color: #111111;
             transform: translateY(-2px);
         }
-        
         #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
         #usd-input-container {
             display: flex;
@@ -207,7 +199,6 @@
             font-size: 13px;
         }
         #usd-send-btn:hover { background: #FFF8DC; }
-        
         #usd-bubble {
             width: 80px;
             height: 80px;
@@ -226,13 +217,11 @@
         }
         #usd-bubble:hover { transform: scale(1.05); }
         #usd-bubble:active { transform: scale(0.95); }
-        
         @keyframes usd-pulse {
             0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); }
             70% { transform: scale(1); box-shadow: 0 0 0 var(--pulse-max) rgba(212, 175, 55, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
         }
-
         #usd-inline-rating {
             display: none;
             border-top: 1px solid rgba(255,255,255,0.1);
@@ -253,7 +242,6 @@
             text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
         }
         #usd-rating-thanks { display: none; color: #D4AF37; font-size: 13px; margin-top: 12px; font-weight: bold; }
-
         #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -271,7 +259,6 @@
         .usd-confirm-btns { display: flex; gap: 15px; }
         .usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        
         @media (max-width: 480px) {
             #usd-voice-widget { bottom: 15px; right: 15px; }
             #usd-bubble { width: 50px; height: 50px; } 
@@ -434,9 +421,6 @@
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "none";
                 audioPlayer.pause();
-                if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
-                    window.mediaRecorder.stop();
-                }
                 updateState('listening', "Chat Mode Active. Type below.");
             }
             saveSessionState();
@@ -527,140 +511,49 @@
             }
         }
 
-       async function startWebSocket() {
-    try {
-        socket = new WebSocket(WS_URL);
+        // ==========================================
+        // FRONTEND: BINARY STREAMING ENGINE
+        // Extracts raw audio bypassing MediaRecorder overhead
+        // ==========================================
+        async function startWebSocket() {
+            try {
+                socket = new WebSocket(WS_URL);
 
-        socket.onopen = async () => {
-            // 1. Get raw audio access with noise suppression enabled
-            globalStream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { 
-                    echoCancellation: true, 
-                    noiseSuppression: true, 
-                    autoGainControl: true 
-                }
-            });
+                socket.onopen = async () => {
+                    globalStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                    });
 
-            // 2. Initialize the Web Audio Context (Standard 16kHz for STT)
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            const source = audioCtx.createMediaStreamSource(globalStream);
-            
-            // 3. Create a processor to grab 256ms chunks of live audio
-            const bufferSize = 4096; // 4096 / 16000Hz = ~256ms of audio
-            const processor = audioCtx.createScriptProcessor(bufferSize, 1, 1);
-            
-            // 4. Create an Analyzer for the Smart VAD (Voice Activity Detector)
-            const analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 512;
-
-            source.connect(analyser);
-            source.connect(processor);
-            processor.connect(audioCtx.destination); 
-
-            let silenceTimer = null;
-            let maxRecordingTimer = null;
-            let isRecording = false;
-
-            // 5. The Live Streaming Loop: Fires every ~256ms
-            processor.onaudioprocess = (e) => {
-                if (!isRecording || !isVoiceMode) return;
-                
-                // Extract floating point audio data (-1.0 to 1.0)
-                const inputData = e.inputBuffer.getChannelData(0);
-                
-                // Convert to raw 16-bit PCM integer data for the server
-                const pcm16 = new Int16Array(inputData.length);
-                for (let i = 0; i < inputData.length; i++) {
-                    pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
-                }
-                
-                // Stream binary payload instantly over WebSocket
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(pcm16.buffer); 
-                }
-            };
-
-            // 6. The Smart VAD: Precisely detects when words begin and end
-            function detectVoice() {
-                if (agentState !== 'listening' || !isVoiceMode) {
-                    requestAnimationFrame(detectVoice);
-                    return;
-                }
-
-                const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                analyser.getByteFrequencyData(dataArray);
-                
-                let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-                let volumeAvg = sum / dataArray.length;
-
-                // Threshold set to 20 to ignore AC/Fan hum but catch all words
-                if (volumeAvg > 20) { 
-                    if (!isRecording) {
-                        isRecording = true;
-                        document.getElementById('usd-interim-text').innerText = "Listening...";
-                        
-                        // Tell server the user started talking
-                        if (socket.readyState === WebSocket.OPEN) {
-                            socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                        }
-                        
-                        // Safety timeout (Prevents 30s crash if background noise spikes)
-                        maxRecordingTimer = setTimeout(() => {
-                            if (isRecording) {
-                                isRecording = false;
-                                if (socket.readyState === WebSocket.OPEN) {
-                                    socket.send(JSON.stringify({ 
-                                        type: 'end_of_speech', 
-                                        history: chatHistory, 
-                                        isVoiceMode: isVoiceMode 
-                                    }));
-                                }
-                            }
-                        }, 14000); 
-                    }
-                    
-                    clearTimeout(silenceTimer);
-                    
-                    // The 800ms Snappy Cutoff: The moment they stop speaking, fire the AI!
-                    silenceTimer = setTimeout(() => {
-                        if (isRecording) {
-                            isRecording = false;
-                            clearTimeout(maxRecordingTimer);
-                            
-                            if (socket.readyState === WebSocket.OPEN) {
-                                socket.send(JSON.stringify({ 
-                                    type: 'end_of_speech', 
-                                    history: chatHistory, 
-                                    isVoiceMode: isVoiceMode 
-                                }));
-                            }
-                        }
-                    }, 800); 
-                }
-                requestAnimationFrame(detectVoice);
-            }
-            
-            detectVoice();
-            updateState('listening', isVoiceMode ? "Listening..." : "Chat Mode Active.");
-        };
-
-        // ... (Keep your existing socket.onmessage and socket.onerror here) ...
-
-    } catch (err) {
-        updateState('listening', "Microphone denied. You can type.");
-    }
-}
-
-                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    const analyser = audioCtx.createAnalyser();
+                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
                     const source = audioCtx.createMediaStreamSource(globalStream);
-                    source.connect(analyser);
+                    
+                    const bufferSize = 4096;
+                    const processor = audioCtx.createScriptProcessor(bufferSize, 1, 1);
+                    
+                    const analyser = audioCtx.createAnalyser();
                     analyser.fftSize = 512;
+
+                    source.connect(analyser);
+                    source.connect(processor);
+                    processor.connect(audioCtx.destination); 
 
                     let silenceTimer = null;
                     let maxRecordingTimer = null;
                     let isRecording = false;
+
+                    processor.onaudioprocess = (e) => {
+                        if (!isRecording || !isVoiceMode) return;
+                        
+                        const inputData = e.inputBuffer.getChannelData(0);
+                        const pcm16 = new Int16Array(inputData.length);
+                        for (let i = 0; i < inputData.length; i++) {
+                            pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+                        }
+                        
+                        if (socket && socket.readyState === WebSocket.OPEN) {
+                            socket.send(pcm16.buffer); 
+                        }
+                    };
 
                     function detectVoice() {
                         if (agentState !== 'listening' || !isVoiceMode) {
@@ -670,40 +563,57 @@
 
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
                         analyser.getByteFrequencyData(dataArray);
+                        
                         let sum = 0;
                         for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-                        let avg = sum / dataArray.length;
+                        let volumeAvg = sum / dataArray.length;
 
-                        if (avg > 20) { 
+                        // Snappy VAD triggers at volume 20
+                        if (volumeAvg > 20) { 
                             if (!isRecording) {
                                 isRecording = true;
-                                window.audioChunks = [];
-                                window.mediaRecorder.start();
                                 document.getElementById('usd-interim-text').innerText = "Listening...";
                                 
+                                if (socket.readyState === WebSocket.OPEN) {
+                                    socket.send(JSON.stringify({ type: 'start_of_speech' }));
+                                }
+                                
                                 maxRecordingTimer = setTimeout(() => {
-                                    if (isRecording && window.mediaRecorder.state === 'recording') {
+                                    if (isRecording) {
                                         isRecording = false;
-                                        window.mediaRecorder.stop();
+                                        if (socket.readyState === WebSocket.OPEN) {
+                                            socket.send(JSON.stringify({ 
+                                                type: 'end_of_speech', 
+                                                history: chatHistory, 
+                                                isVoiceMode: isVoiceMode 
+                                            }));
+                                        }
                                     }
-                                }, 14000);
+                                }, 14000); 
                             }
                             
                             clearTimeout(silenceTimer);
-                            // HYPER-SNAPPY VAD: Reduced from 1800ms to 800ms. 
-                            // The bot will now answer almost instantly when you finish your sentence!
+                            
+                            // Snappy 800ms cutoff for Live Feel
                             silenceTimer = setTimeout(() => {
-                                if (isRecording && window.mediaRecorder.state === 'recording') {
+                                if (isRecording) {
                                     isRecording = false;
-                                    window.mediaRecorder.stop(); 
                                     clearTimeout(maxRecordingTimer);
+                                    
+                                    if (socket.readyState === WebSocket.OPEN) {
+                                        socket.send(JSON.stringify({ 
+                                            type: 'end_of_speech', 
+                                            history: chatHistory, 
+                                            isVoiceMode: isVoiceMode 
+                                        }));
+                                    }
                                 }
                             }, 800); 
                         }
                         requestAnimationFrame(detectVoice);
                     }
+                    
                     detectVoice();
-
                     updateState('listening', isVoiceMode ? "Listening..." : "Chat Mode Active.");
                 };
 
@@ -865,11 +775,6 @@
 
             inputEl.value = ''; 
             audioPlayer.pause(); 
-            
-            if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
-                window.mediaRecorder.stop();
-                window.audioChunks = []; 
-            }
 
             updateState('thinking', "Assistant is replying...");
 
@@ -912,10 +817,6 @@
 
             if (isVoiceMode) {
                 audioPlayer.pause();
-                if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
-                    window.mediaRecorder.stop();
-                    window.audioChunks = [];
-                }
                 updateState('speaking', "Redirecting...");
                 await playSarvamGreeting(linkInfo.voice);
             }
