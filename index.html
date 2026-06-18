@@ -434,9 +434,6 @@
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "none";
                 audioPlayer.pause();
-                if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
-                    window.mediaRecorder.stop();
-                }
                 updateState('listening', "Chat Mode Active. Type below.");
             }
             saveSessionState();
@@ -527,6 +524,10 @@
             }
         }
 
+        // ==========================================
+        // THE NEW RAW PCM LIVE STREAMING PIPELINE 
+        // Eliminates MediaRecorder, WebM, and Base64 delays!
+        // ==========================================
         async function startWebSocket() {
             try {
                 socket = new WebSocket(WS_URL);
@@ -536,57 +537,42 @@
                         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
                     });
 
-                    let options = {};
-                    if (MediaRecorder.isTypeSupported('audio/webm')) {
-                        options = { mimeType: 'audio/webm' };
-                        window.audioExt = 'webm';
-                    } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-                        options = { mimeType: 'audio/mp4' };
-                        window.audioExt = 'mp4';
-                    } else {
-                        window.audioExt = 'wav';
-                    }
-
-                    window.mediaRecorder = new MediaRecorder(globalStream, options);
-                    window.audioChunks = [];
-                    
-                    window.mediaRecorder.ondataavailable = (e) => {
-                        if (e.data.size > 0) window.audioChunks.push(e.data);
-                    };
-
-                    window.mediaRecorder.onstop = () => {
-                        if (!isVoiceMode) return; 
-                        if (window.audioChunks.length === 0) return;
-                        
-                        updateState('thinking', "Assistant is replying...");
-                        const audioBlob = new Blob(window.audioChunks, { type: `audio/${window.audioExt}` });
-                        window.audioChunks = []; 
-                        
-                        const reader = new FileReader();
-                        reader.readAsDataURL(audioBlob);
-                        reader.onloadend = () => {
-                            const base64Audio = reader.result.split(',')[1];
-                            if (socket && socket.readyState === WebSocket.OPEN) {
-                                socket.send(JSON.stringify({ 
-                                    type: 'audio_input', 
-                                    audioBase64: base64Audio, 
-                                    audioExt: window.audioExt,
-                                    history: chatHistory,
-                                    isVoiceMode: isVoiceMode
-                                }));
-                            }
-                        };
-                    };
-
-                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    const analyser = audioCtx.createAnalyser();
+                    // We use Web Audio API to capture raw, microscopic binary fragments of sound instantly
+                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
                     const source = audioCtx.createMediaStreamSource(globalStream);
-                    source.connect(analyser);
+                    
+                    // Creates chunks of 4096 frames (around 250ms of audio)
+                    const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+                    
+                    const analyser = audioCtx.createAnalyser();
                     analyser.fftSize = 512;
+
+                    source.connect(analyser);
+                    source.connect(processor);
+                    processor.connect(audioCtx.destination); 
 
                     let silenceTimer = null;
                     let maxRecordingTimer = null;
                     let isRecording = false;
+
+                    // The Binary Streaming Engine
+                    processor.onaudioprocess = (e) => {
+                        if (!isRecording || !isVoiceMode) return;
+                        
+                        // Grab raw audio instantly
+                        const inputData = e.inputBuffer.getChannelData(0);
+                        const pcm16 = new Int16Array(inputData.length);
+                        
+                        // Convert to standard 16-bit PCM for the Server
+                        for (let i = 0; i < inputData.length; i++) {
+                            pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+                        }
+                        
+                        // Stream it over WebSockets as raw bytes immediately
+                        if (socket && socket.readyState === WebSocket.OPEN) {
+                            socket.send(pcm16.buffer); 
+                        }
+                    };
 
                     function detectVoice() {
                         if (agentState !== 'listening' || !isVoiceMode) {
@@ -600,29 +586,44 @@
                         for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
                         let avg = sum / dataArray.length;
 
-                        // FIXED: Increased threshold from 15 to 20 to ignore background fan/AC hum
                         if (avg > 20) { 
                             if (!isRecording) {
                                 isRecording = true;
-                                window.audioChunks = [];
-                                window.mediaRecorder.start();
                                 document.getElementById('usd-interim-text').innerText = "Listening...";
                                 
-                                // THE SMART CLIPPER: Automatically stops at 14s. Mathematically prevents Sarvam 30s crash!
+                                // Tell server a new sentence is starting
+                                if (socket.readyState === WebSocket.OPEN) {
+                                    socket.send(JSON.stringify({ type: 'start_of_speech' }));
+                                }
+                                
                                 maxRecordingTimer = setTimeout(() => {
-                                    if (isRecording && window.mediaRecorder.state === 'recording') {
+                                    if (isRecording) {
                                         isRecording = false;
-                                        window.mediaRecorder.stop();
+                                        if (socket.readyState === WebSocket.OPEN) {
+                                            socket.send(JSON.stringify({ 
+                                                type: 'end_of_speech', 
+                                                history: chatHistory, 
+                                                isVoiceMode: isVoiceMode 
+                                            }));
+                                        }
                                     }
                                 }, 14000);
                             }
                             
                             clearTimeout(silenceTimer);
                             silenceTimer = setTimeout(() => {
-                                if (isRecording && window.mediaRecorder.state === 'recording') {
+                                if (isRecording) {
                                     isRecording = false;
-                                    window.mediaRecorder.stop(); 
                                     clearTimeout(maxRecordingTimer);
+                                    
+                                    // The millisecond they stop, tell the server to execute AI instantly
+                                    if (socket.readyState === WebSocket.OPEN) {
+                                        socket.send(JSON.stringify({ 
+                                            type: 'end_of_speech', 
+                                            history: chatHistory, 
+                                            isVoiceMode: isVoiceMode 
+                                        }));
+                                    }
                                 }
                             }, 1800); 
                         }
@@ -791,11 +792,6 @@
 
             inputEl.value = ''; 
             audioPlayer.pause(); 
-            
-            if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
-                window.mediaRecorder.stop();
-                window.audioChunks = []; 
-            }
 
             updateState('thinking', "Assistant is replying...");
 
@@ -838,10 +834,6 @@
 
             if (isVoiceMode) {
                 audioPlayer.pause();
-                if (window.mediaRecorder && window.mediaRecorder.state === 'recording') {
-                    window.mediaRecorder.stop();
-                    window.audioChunks = [];
-                }
                 updateState('speaking', "Redirecting...");
                 await playSarvamGreeting(linkInfo.voice);
             }
