@@ -535,8 +535,16 @@
                 socket = new WebSocket(WS_URL);
 
                 socket.onopen = async () => {
+                    // ==========================================
+                    // CRITICAL FIX: autoGainControl is FALSE.
+                    // The mic will NOT secretly amplify the office background noise!
+                    // ==========================================
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                        audio: { 
+                            echoCancellation: true, 
+                            noiseSuppression: true, 
+                            autoGainControl: false // Prevents the mic from picking up people 15 feet away!
+                        }
                     });
 
                     const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
@@ -553,11 +561,8 @@
                     processor.connect(audioCtx.destination); 
 
                     let isRecording = false;
-                    
-                    // NEW: The Double Timer Engine
                     let shortPauseTimer = null; 
                     let longPauseTimer = null; 
-                    
                     let maxRecordingTimer = null;
                     let consecutiveLoudFrames = 0; 
 
@@ -592,7 +597,6 @@
                         }
                         let humanVolume = voiceSum / voiceBins;
 
-                        // 1. ABSOLUTE DEAF MODE: Lock the mic!
                         if (currentAgentState === 'thinking' || currentAgentState === 'cooldown') {
                             isRecording = false;
                             clearTimeout(shortPauseTimer);
@@ -602,12 +606,12 @@
                             return;
                         }
 
-                        // 2. THE LOUD BARGE-IN (INTERRUPT)
+                        // BARGE IN LOGIC (Since AGC is off, we lower the threshold slightly to 60)
                         if (currentAgentState === 'speaking') {
-                            if (humanVolume > 70) { 
+                            if (humanVolume > 60) { 
                                 consecutiveLoudFrames++;
-                                // Requires ~600ms of continuous yelling to interrupt her. Stops accidental room echoes.
-                                if (consecutiveLoudFrames > 30) {
+                                // Needs to be loud for ~500ms continuous to interrupt
+                                if (consecutiveLoudFrames > 25) {
                                     audioPlayer.pause(); 
                                     consecutiveLoudFrames = 0;
                                     
@@ -625,9 +629,9 @@
                             return;
                         }
 
-                        // 3. NORMAL LISTENING (The "Live-Stitch" Logic)
+                        // NORMAL LISTENING (Threshold 25 because AGC is off)
                         if (currentAgentState === 'listening') {
-                            if (humanVolume > 35) { 
+                            if (humanVolume > 25) { 
                                 if (!isRecording) {
                                     isRecording = true;
                                     if (socket.readyState === WebSocket.OPEN) {
@@ -648,7 +652,6 @@
                                 clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
                                 
-                                // THE BREATH TIMER (450ms) -> Translates in the background while you speak!
                                 shortPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         if (socket.readyState === WebSocket.OPEN) {
@@ -657,7 +660,6 @@
                                     }
                                 }, 450); 
 
-                                // THE FINAL TIMER (1.5s) -> The long pause that fires the final AI response
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -686,7 +688,6 @@
                         return;
                     }
 
-                    // NEW: Shows the live-stitched sentence building on screen!
                     if (data.type === 'interim_transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
                     }
@@ -723,13 +724,13 @@
                             updateState('speaking', "Assistant is speaking...");
                             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                             audioPlayer.onended = () => {
-                                updateState('cooldown', "Listening..."); // Cooldown state to kill echo
+                                updateState('cooldown', "Listening..."); 
                                 setTimeout(() => {
                                     if (currentAgentState === 'cooldown') {
                                         updateState('listening', "Listening...");
                                         if (isEnding) closeChat(true); 
                                     }
-                                }, 800); // 800ms of strictly ignored audio to let the room settle
+                                }, 800); 
                             };
                             audioPlayer.play().catch(() => { updateState('listening', "Listening..."); });
                         } else {
