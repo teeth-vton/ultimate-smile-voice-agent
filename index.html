@@ -343,8 +343,6 @@
         const RENDER_BACKEND_URL = "https://nikjoshi123-usd-voice-backend.hf.space";
         const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
 
-        // THE ULTIMATE STATE MACHINE (Prevents Infinite Loops)
-        // States: 'off', 'listening', 'thinking', 'speaking', 'cooldown'
         let currentAgentState = 'off'; 
         let chatHistory = [];
         let audioPlayer;
@@ -454,7 +452,7 @@
                 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                 await new Promise((resolve) => {
                     audioPlayer.onended = () => { 
-                        updateState('cooldown', "Listening..."); // Enter cooldown to kill room echo
+                        updateState('cooldown', "Listening..."); 
                         setTimeout(() => { 
                             if(currentAgentState === 'cooldown') updateState('listening', "Listening..."); 
                             resolve(); 
@@ -555,12 +553,15 @@
                     processor.connect(audioCtx.destination); 
 
                     let isRecording = false;
-                    let silenceTimer = null;
+                    
+                    // NEW: The Double Timer Engine
+                    let shortPauseTimer = null; 
+                    let longPauseTimer = null; 
+                    
                     let maxRecordingTimer = null;
                     let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
-                        // ONLY stream audio to the server if we are actively in the "isRecording" state
                         if (!isVoiceMode || currentAgentState !== 'listening' || !isRecording) return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
@@ -591,26 +592,25 @@
                         }
                         let humanVolume = voiceSum / voiceBins;
 
-                        // 1. ABSOLUTE DEAF MODE: If thinking or in cooldown, ignore the mic entirely
+                        // 1. ABSOLUTE DEAF MODE: Lock the mic!
                         if (currentAgentState === 'thinking' || currentAgentState === 'cooldown') {
                             isRecording = false;
-                            clearTimeout(silenceTimer);
+                            clearTimeout(shortPauseTimer);
+                            clearTimeout(longPauseTimer);
                             clearTimeout(maxRecordingTimer);
                             requestAnimationFrame(detectVoice);
                             return;
                         }
 
-                        // 2. THE SMART BARGE-IN (INTERRUPT)
+                        // 2. THE LOUD BARGE-IN (INTERRUPT)
                         if (currentAgentState === 'speaking') {
-                            // Volume must be extremely loud (70)
                             if (humanVolume > 70) { 
                                 consecutiveLoudFrames++;
-                                // MUST be loud for 30 consecutive frames (~600ms of continuous yelling)
+                                // Requires ~600ms of continuous yelling to interrupt her. Stops accidental room echoes.
                                 if (consecutiveLoudFrames > 30) {
-                                    audioPlayer.pause(); // Physically mute the bot
+                                    audioPlayer.pause(); 
                                     consecutiveLoudFrames = 0;
                                     
-                                    // Instantly transition to listening
                                     updateState('listening', "Listening...");
                                     isRecording = true;
                                     document.getElementById('usd-interim-text').innerText = "Listening...";
@@ -619,19 +619,17 @@
                                     }
                                 }
                             } else {
-                                consecutiveLoudFrames = 0; // A desk thud resets this counter immediately
+                                consecutiveLoudFrames = 0; 
                             }
                             requestAnimationFrame(detectVoice);
                             return;
                         }
 
-                        // 3. NORMAL LISTENING
+                        // 3. NORMAL LISTENING (The "Live-Stitch" Logic)
                         if (currentAgentState === 'listening') {
                             if (humanVolume > 35) { 
                                 if (!isRecording) {
                                     isRecording = true;
-                                    document.getElementById('usd-interim-text').innerText = "Listening...";
-                                    
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
@@ -640,27 +638,36 @@
                                         if (isRecording) {
                                             isRecording = false;
                                             updateState('thinking', "Processing...");
-                                            document.getElementById('usd-interim-text').innerText = "Processing...";
                                             if (socket.readyState === WebSocket.OPEN) {
-                                                socket.send(JSON.stringify({ type: 'end_of_speech', history: chatHistory, isVoiceMode: isVoiceMode }));
+                                                socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                             }
                                         }
                                     }, 14000); 
                                 }
                                 
-                                clearTimeout(silenceTimer);
+                                clearTimeout(shortPauseTimer);
+                                clearTimeout(longPauseTimer);
                                 
-                                silenceTimer = setTimeout(() => {
+                                // THE BREATH TIMER (450ms) -> Translates in the background while you speak!
+                                shortPauseTimer = setTimeout(() => {
+                                    if (isRecording) {
+                                        if (socket.readyState === WebSocket.OPEN) {
+                                            socket.send(JSON.stringify({ type: 'process_interim' }));
+                                        }
+                                    }
+                                }, 450); 
+
+                                // THE FINAL TIMER (1.5s) -> The long pause that fires the final AI response
+                                longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking', "Processing...");
-                                        document.getElementById('usd-interim-text').innerText = "Processing...";
                                         if (socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ type: 'end_of_speech', history: chatHistory, isVoiceMode: isVoiceMode }));
+                                            socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 600); 
+                                }, 1500); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
@@ -679,7 +686,11 @@
                         return;
                     }
 
-                    if (data.type === 'transcript') {
+                    // NEW: Shows the live-stitched sentence building on screen!
+                    if (data.type === 'interim_transcript') {
+                        document.getElementById('usd-interim-text').innerText = data.text;
+                    }
+                    else if (data.type === 'transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
                     } 
                     else if (data.type === 'reply') {
