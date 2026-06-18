@@ -349,6 +349,9 @@
         let socket = null;
         let globalStream = null;
         let isVoiceMode = true; 
+        
+        // NEW: Audio Lock State
+        let isBotSpeaking = false;
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
@@ -421,6 +424,7 @@
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "none";
                 audioPlayer.pause();
+                isBotSpeaking = false;
                 updateState('listening', "Chat Mode Active. Type below.");
             }
             saveSessionState();
@@ -429,6 +433,7 @@
         async function playSarvamGreeting(text) {
             if (!isVoiceMode) return; 
             try {
+                isBotSpeaking = true; // Lock Microphone
                 const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -437,12 +442,14 @@
                 const data = await response.json();
                 audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                 await new Promise((resolve) => {
-                    audioPlayer.onended = resolve;
-                    audioPlayer.onerror = resolve;
-                    audioPlayer.onpause = resolve;
-                    audioPlayer.play().catch(() => resolve());
+                    audioPlayer.onended = () => { isBotSpeaking = false; resolve(); }; // Unlock Microphone
+                    audioPlayer.onerror = () => { isBotSpeaking = false; resolve(); };
+                    audioPlayer.onpause = () => { isBotSpeaking = false; resolve(); };
+                    audioPlayer.play().catch(() => { isBotSpeaking = false; resolve(); });
                 });
-            } catch(e) {}
+            } catch(e) {
+                isBotSpeaking = false;
+            }
         }
 
         async function openChat(isRestore = false) {
@@ -511,10 +518,6 @@
             }
         }
 
-        // ==========================================
-        // FRONTEND: BINARY STREAMING ENGINE
-        // Extracts raw audio bypassing MediaRecorder overhead
-        // ==========================================
         async function startWebSocket() {
             try {
                 socket = new WebSocket(WS_URL);
@@ -542,7 +545,8 @@
                     let isRecording = false;
 
                     processor.onaudioprocess = (e) => {
-                        if (!isRecording || !isVoiceMode) return;
+                        // FIX: If the bot is speaking, completely ignore audio input (Prevents Echo Loop)
+                        if (!isRecording || !isVoiceMode || isBotSpeaking) return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
                         const pcm16 = new Int16Array(inputData.length);
@@ -556,7 +560,14 @@
                     };
 
                     function detectVoice() {
-                        if (agentState !== 'listening' || !isVoiceMode) {
+                        // FIX: Do not listen if the bot is currently speaking
+                        if (agentState !== 'listening' || !isVoiceMode || isBotSpeaking) {
+                            if (isRecording) {
+                                // Force stop recording if bot starts talking
+                                isRecording = false;
+                                clearTimeout(silenceTimer);
+                                clearTimeout(maxRecordingTimer);
+                            }
                             requestAnimationFrame(detectVoice);
                             return;
                         }
@@ -568,7 +579,6 @@
                         for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
                         let volumeAvg = sum / dataArray.length;
 
-                        // Snappy VAD triggers at volume 20
                         if (volumeAvg > 20) { 
                             if (!isRecording) {
                                 isRecording = true;
@@ -594,7 +604,6 @@
                             
                             clearTimeout(silenceTimer);
                             
-                            // Snappy 800ms cutoff for Live Feel
                             silenceTimer = setTimeout(() => {
                                 if (isRecording) {
                                     isRecording = false;
@@ -651,15 +660,17 @@
 
                         if (isVoiceMode && data.audioBase64) {
                             updateState('speaking', "Assistant is speaking...");
+                            isBotSpeaking = true; // Lock Microphone
                             audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
                             audioPlayer.onended = () => {
+                                isBotSpeaking = false; // Unlock Microphone
                                 if (isEnding) {
                                     closeChat(true); 
                                 } else {
                                     updateState('listening', "Listening...");
                                 }
                             };
-                            audioPlayer.play();
+                            audioPlayer.play().catch(() => { isBotSpeaking = false; });
                         } else {
                             if (isEnding) {
                                 setTimeout(() => closeChat(true), 2000);
@@ -690,11 +701,13 @@
             if (isYes) {
                 updateState('thinking', "Ending call...");
                 audioPlayer.pause();
+                isBotSpeaking = false;
                 
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
                 
                 if (isVoiceMode) {
                     try {
+                        isBotSpeaking = true;
                         const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -702,9 +715,9 @@
                         });
                         const data = await response.json();
                         audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-                        audioPlayer.onended = () => closeChat(true);
+                        audioPlayer.onended = () => { isBotSpeaking = false; closeChat(true); };
                         audioPlayer.play();
-                    } catch(e) { closeChat(true); }
+                    } catch(e) { isBotSpeaking = false; closeChat(true); }
                 } else {
                     logMessage('bot', goodbyeText);
                     setTimeout(() => closeChat(true), 2000);
@@ -715,6 +728,7 @@
         function closeChat(showRating = false) {
             updateState('off', "Chat Ended");
             audioPlayer.pause();
+            isBotSpeaking = false;
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
@@ -775,6 +789,7 @@
 
             inputEl.value = ''; 
             audioPlayer.pause(); 
+            isBotSpeaking = false;
 
             updateState('thinking', "Assistant is replying...");
 
@@ -817,6 +832,7 @@
 
             if (isVoiceMode) {
                 audioPlayer.pause();
+                isBotSpeaking = false;
                 updateState('speaking', "Redirecting...");
                 await playSarvamGreeting(linkInfo.voice);
             }
