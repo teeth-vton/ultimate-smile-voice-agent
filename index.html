@@ -20,30 +20,25 @@
             flex-direction: column;
             align-items: flex-end;
         }
-        #usd-tooltip {
+        /* The Initial Start Button for Mobile */
+        #usd-start-btn {
             background: #D4AF37;
             color: #111;
-            padding: 10px 15px;
-            border-radius: 12px;
-            font-size: 14px;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 16px;
             font-weight: bold;
             margin-bottom: 15px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
             animation: bounce 2s infinite;
-            position: relative;
             cursor: pointer;
+            border: none;
             display: block; 
-            transition: opacity 0.3s ease-in-out;
-            opacity: 1;
+            transition: all 0.3s ease;
         }
-        #usd-tooltip::after {
-            content: '';
-            position: absolute;
-            bottom: -8px;
-            right: 30px;
-            border-width: 8px 8px 0;
-            border-style: solid;
-            border-color: #D4AF37 transparent transparent transparent;
+        #usd-start-btn:hover {
+            transform: scale(1.05);
+            background: #FFD700;
         }
         @keyframes bounce {
             0%, 100% { transform: translateY(0); }
@@ -56,7 +51,7 @@
         }
         #usd-chat-container {
             width: 320px;
-            max-height: 380px;
+            max-height: 420px; 
             background-color: #111111;
             border: 1px solid #333333; 
             border-radius: 15px;
@@ -170,8 +165,9 @@
             transform: translateY(-2px);
         }
         #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
+        
         #usd-input-container {
-            display: flex;
+            display: none; 
             border-top: 1px solid rgba(255,255,255,0.1);
             padding-top: 10px;
         }
@@ -198,49 +194,7 @@
             font-size: 13px;
         }
         #usd-send-btn:hover { background: #FFF8DC; }
-        #usd-bubble {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #FFD700, #B8860B);
-            border-radius: 50%;
-            cursor: pointer;
-            --pulse-max: 20px; 
-            box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7);
-            animation: usd-pulse 2s infinite;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 3px solid #111111;
-            transition: transform 0.2s ease-in-out;
-            user-select: none;
-        }
-        #usd-bubble:hover { transform: scale(1.05); }
-        #usd-bubble:active { transform: scale(0.95); }
-        @keyframes usd-pulse {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 var(--pulse-max) rgba(212, 175, 55, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
-        }
-        #usd-inline-rating {
-            display: none;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            padding-top: 15px;
-            text-align: center;
-        }
-        #usd-rating-title { color: #fff; font-size: 15px; margin-bottom: 12px; font-weight: bold; letter-spacing: 0.5px;}
-        .usd-stars { display: flex; justify-content: center; gap: 12px; cursor: pointer; }
-        .usd-star { 
-            font-size: 28px; 
-            color: #333333; 
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-            transition: transform 0.2s, color 0.2s, text-shadow 0.2s; 
-        }
-        .usd-star:hover, .usd-star.active { 
-            color: #FFD700; 
-            transform: scale(1.2);
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
-        }
-        #usd-rating-thanks { display: none; color: #D4AF37; font-size: 13px; margin-top: 12px; font-weight: bold; }
+        
         #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -258,30 +212,26 @@
         .usd-confirm-btns { display: flex; gap: 15px; }
         .usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+
         @media (max-width: 480px) {
             #usd-voice-widget { bottom: 15px; right: 15px; }
-            #usd-bubble { width: 50px; height: 50px; } 
-            #usd-bubble svg { width: 24px; height: 24px; }
             #usd-chat-container { 
                 width: calc(100vw - 40px); 
-                max-height: 300px; 
+                max-height: 380px; 
                 padding: 12px; 
                 margin-bottom: 10px; 
             }
-            #usd-chat-log { max-height: 140px; } 
-            #usd-tooltip { font-size: 12px; padding: 8px 12px; margin-bottom: 10px; }
-            #usd-tooltip::after { right: 20px; }
+            #usd-chat-log { max-height: 160px; } 
+            #usd-start-btn { font-size: 14px; padding: 10px 20px; }
         }
     </style>
 </head>
 <body>
 
-    <audio id="usd-html-player" preload="auto"></audio>
-
     <div id="usd-voice-widget">
-        <div id="usd-tooltip" onclick="openChat(false)">
-            Namaste! Tap here to talk about your new smile!
-        </div>
+        <button id="usd-start-btn" onclick="initChat()">
+            🎙️ Tap to talk about your smile!
+        </button>
 
         <div id="usd-chat-container">
             <div id="usd-end-confirm-overlay">
@@ -299,7 +249,7 @@
                         <div id="usd-status-box">Connected 🟢</div>
                     </div>
                     <div id="usd-header-right">
-                        <button id="usd-mode-toggle" onclick="toggleChatMode()">🎙️ Voice</button>
+                        <button id="usd-mode-toggle" onclick="toggleChatMode()">💬 Text</button>
                         <div id="usd-visualizer">
                             <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
                         </div>
@@ -309,32 +259,13 @@
 
                 <div id="usd-chat-log"></div>
                 <div id="usd-interim-text"></div>
-                
+
                 <div id="usd-input-container">
                     <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
                     <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
                 </div>
 
-                <div id="usd-inline-rating">
-                    <div id="usd-rating-title">Rate your experience</div>
-                    <div class="usd-stars">
-                        <span class="usd-star" onclick="submitRating(1)">★</span>
-                        <span class="usd-star" onclick="submitRating(2)">★</span>
-                        <span class="usd-star" onclick="submitRating(3)">★</span>
-                        <span class="usd-star" onclick="submitRating(4)">★</span>
-                        <span class="usd-star" onclick="submitRating(5)">★</span>
-                    </div>
-                    <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
-                </div>
             </div>
-        </div>
-        
-        <div id="usd-bubble" onclick="openChat(false)">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <line x1="12" y1="19" x2="12" y2="22"></line>
-            </svg>
         </div>
     </div>
 
@@ -357,6 +288,9 @@
         let activeTag = null; 
         let activeBotMessageDiv = null; 
 
+        // SOFTWARE MUTE SWITCH (Fixes mobile beeps)
+        let isMicSoftwareMuted = true; 
+
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist. Add your details and we will reach out to you soon.' },
@@ -374,47 +308,44 @@
             }
         };
 
-        let lastScrollY = window.scrollY || 0;
-        let scrollTimeout = null;
+        function updateState(newState, statusText = null) {
+            currentAgentState = newState;
+            const statusBox = document.getElementById('usd-status-box');
+            const visualizer = document.getElementById('usd-visualizer');
+            const micText = document.getElementById('usd-interim-text');
 
-        window.addEventListener('scroll', () => {
-            const currentScrollY = window.scrollY || document.documentElement.scrollTop;
-            const tooltip = document.getElementById('usd-tooltip');
-            const bubble = document.getElementById('usd-bubble');
-            
-            if (currentScrollY > 30) {
-                tooltip.style.opacity = '0';
-                tooltip.style.pointerEvents = 'none';
-            } else {
-                tooltip.style.opacity = '1';
-                tooltip.style.pointerEvents = 'auto';
+            if (statusBox) {
+                if (newState === 'connecting' || newState === 'off') {
+                    if (statusText) statusBox.innerText = statusText;
+                } else if (isVoiceMode) {
+                    statusBox.innerText = "Connected 🟢"; 
+                } else {
+                    statusBox.innerText = "Chat Mode Active";
+                }
             }
 
-            let scrollSpeed = Math.abs(currentScrollY - lastScrollY);
-            lastScrollY = currentScrollY;
+            if (newState === 'speaking') {
+                if (isVoiceMode) visualizer.classList.add('active');
+            } else {
+                if (isVoiceMode) visualizer.classList.remove('active');
+            }
 
-            let dynamicPulseSize = Math.min(20 + (scrollSpeed * 1.5), 80);
-            bubble.style.setProperty('--pulse-max', `${dynamicPulseSize}px`);
-
-            clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(() => {
-                bubble.style.setProperty('--pulse-max', '20px');
-            }, 150);
-        });
-
-        function saveSessionState() {
-            sessionStorage.setItem('usd_chat_active', 'true');
-            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
-            sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
+            // MUTE SWITCH LOGIC: The mic is only 'live' when state is exactly 'listening'
+            if (newState === 'listening' && isVoiceMode) {
+                isMicSoftwareMuted = false;
+            } else {
+                isMicSoftwareMuted = true;
+            }
         }
 
-        function unlockMobileAudio() {
+        async function initChat() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             }
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
+            // Silent ping to unlock Apple Autoplay policies
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
             gainNode.gain.value = 0; 
@@ -422,13 +353,19 @@
             gainNode.connect(audioCtx.destination);
             oscillator.start(0);
             oscillator.stop(audioCtx.currentTime + 0.001);
+
+            document.getElementById('usd-start-btn').style.display = 'none';
+            document.getElementById('usd-chat-container').style.display = 'flex';
+
+            updateState('connecting', "Connecting... 🟡");
+            await startWebSocket();
         }
 
         async function playAudioChunk(base64) {
             return new Promise(async (resolve) => {
                 if (!base64) { resolve(); return; } 
                 
-                unlockMobileAudio();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
                 updateState('speaking');
 
                 const binaryString = window.atob(base64);
@@ -502,123 +439,26 @@
             }
         }
 
-        function updateState(newState, statusText = null) {
-            currentAgentState = newState;
-            const statusBox = document.getElementById('usd-status-box');
-            const visualizer = document.getElementById('usd-visualizer');
-
-            if (statusBox) {
-                if (newState === 'connecting' || newState === 'off') {
-                    if (statusText) statusBox.innerText = statusText;
-                } else if (isVoiceMode) {
-                    statusBox.innerText = "Connected 🟢"; 
-                } else {
-                    statusBox.innerText = "Chat Mode Active. Type below.";
-                }
-            }
-
-            if (newState === 'speaking') {
-                if (isVoiceMode) visualizer.classList.add('active');
-            } else {
-                if (isVoiceMode) visualizer.classList.remove('active');
-            }
-        }
-
         function toggleChatMode() {
-            unlockMobileAudio();
             isVoiceMode = !isVoiceMode;
             const toggleBtn = document.getElementById('usd-mode-toggle');
             const visualizer = document.getElementById('usd-visualizer');
+            const textControls = document.getElementById('usd-input-container');
+            const micText = document.getElementById('usd-interim-text');
             
             if (isVoiceMode) {
-                toggleBtn.innerText = "🎙️ Voice";
+                toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "flex";
+                textControls.style.display = "none";
+                micText.style.display = "block";
                 updateState('listening');
             } else {
-                toggleBtn.innerText = "💬 Text";
+                toggleBtn.innerText = "🎙️ Voice";
                 visualizer.style.display = "none";
+                textControls.style.display = "flex";
+                micText.style.display = "none";
                 interruptBot();
                 updateState('listening');
-            }
-            sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
-        }
-
-        async function openChat(isRestore = false) {
-            unlockMobileAudio();
-            const container = document.getElementById('usd-chat-container');
-            const tooltip = document.getElementById('usd-tooltip');
-            const bubble = document.getElementById('usd-bubble');
-            
-            if (currentAgentState === 'off' || isRestore) {
-                bubble.style.display = 'none'; 
-                container.style.display = 'flex';
-                tooltip.style.opacity = '0'; 
-                tooltip.style.pointerEvents = 'none';
-                
-                document.getElementById('usd-input-container').style.display = 'flex';
-                document.getElementById('usd-inline-rating').style.display = 'none';
-                document.getElementById('usd-mode-toggle').style.display = 'block';
-                
-                if (isRestore) {
-                    chatHistory = JSON.parse(sessionStorage.getItem('usd_chat_history') || '[]');
-                    isVoiceMode = sessionStorage.getItem('usd_is_voice_mode') !== 'false';
-                    
-                    const toggleBtn = document.getElementById('usd-mode-toggle');
-                    toggleBtn.innerText = isVoiceMode ? "🎙️ Voice" : "💬 Text";
-                    if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
-                    else document.getElementById('usd-visualizer').style.display = 'none';
-                    
-                    document.getElementById('usd-chat-log').innerHTML = ""; 
-                    chatHistory.forEach(turn => {
-                        const sender = turn.role === 'model' ? 'bot' : 'user';
-                        let cleanText = turn.parts[0].text.replace(/\[.*?\]/g, '').trim();
-                        let foundTag = null;
-                        if (turn.role === 'model') {
-                            for (const tag in usdLinks) {
-                                if (turn.parts[0].text.includes(tag)) { foundTag = tag; break; }
-                            }
-                        }
-                        logMessage(sender, cleanText, foundTag);
-                    });
-
-                    updateState('thinking');
-                    await startWebSocket();
-                } else {
-                    if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
-                    document.getElementById('usd-chat-log').innerHTML = ""; 
-                    chatHistory = [];
-                    
-                    updateState('connecting', "Calling assistant... 🟡");
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    
-                    updateState('connecting', "Connected 🟢");
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    const greeting = "Namaste! How can we assist you today?";
-                    logMessage('bot', greeting);
-                    
-                    if (isVoiceMode) {
-                        try {
-                            const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ text: greeting })
-                            });
-                            const data = await response.json();
-                            await playAudioChunk(data.audioBase64);
-                            
-                            updateState('cooldown');
-                            setTimeout(() => { 
-                                if(currentAgentState === 'cooldown') {
-                                    updateState('listening'); 
-                                }
-                            }, 800);
-                        } catch(e) {}
-                    }
-                    
-                    sessionStorage.setItem('usd_chat_active', 'true');
-                    await startWebSocket();
-                }
             }
         }
 
@@ -651,8 +491,8 @@
                     let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
-                        // DO NOT record if bot is speaking to prevent infinite echo loop
-                        if (!isVoiceMode || currentAgentState === 'off' || currentAgentState === 'connecting' || currentAgentState === 'thinking' || currentAgentState === 'speaking' || currentAgentState === 'cooldown' || !isRecording) return;
+                        // MUTE SWITCH: If muted, dump audio data completely. Prevents echos & Infinite Loops.
+                        if (isMicSoftwareMuted) return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
                         const pcm16 = new Int16Array(inputData.length);
@@ -660,13 +500,13 @@
                             pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
                         }
                         
-                        if (socket && socket.readyState === WebSocket.OPEN) {
+                        if (socket && socket.readyState === WebSocket.OPEN && isRecording) {
                             socket.send(pcm16.buffer); 
                         }
                     };
 
                     function detectVoice() {
-                        if (!isVoiceMode || currentAgentState === 'off' || currentAgentState === 'connecting') {
+                        if (isMicSoftwareMuted) {
                             requestAnimationFrame(detectVoice); return;
                         }
 
@@ -677,36 +517,13 @@
                         for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
                         let humanVolume = voiceSum / voiceBins;
 
-                        if (currentAgentState === 'thinking' || currentAgentState === 'cooldown') {
-                            isRecording = false;
-                            clearTimeout(shortPauseTimer);
-                            clearTimeout(longPauseTimer);
-                            clearTimeout(maxRecordingTimer);
-                            requestAnimationFrame(detectVoice); return;
-                        }
-
-                        if (currentAgentState === 'speaking') {
-                            if (humanVolume > 60) { 
-                                consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames > 25) {
-                                    interruptBot();
-                                    updateState('listening');
-                                    isRecording = true;
-                                    
-                                    if (socket && socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                    }
-                                }
-                            } else {
-                                consecutiveLoudFrames = 0; 
-                            }
-                            requestAnimationFrame(detectVoice); return;
-                        }
-
+                        // NORMAL LISTENING FOR AUDIO STREAMING
                         if (currentAgentState === 'listening') {
                             if (humanVolume > 35) { 
                                 if (!isRecording) {
                                     isRecording = true;
+                                    document.getElementById('usd-interim-text').innerText = "Listening...";
+                                    
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
@@ -749,7 +566,26 @@
                     }
                     
                     detectVoice();
-                    if(currentAgentState === 'listening') updateState('listening');
+
+                    updateState('connected', "Connected 🟢");
+                    
+                    const greeting = "Namaste! How can we assist you today?";
+                    logMessage('bot', greeting);
+                    
+                    if (isVoiceMode) {
+                        try {
+                            const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ text: greeting, lang: 'en-IN' })
+                            });
+                            const data = await response.json();
+                            await playAudioChunk(data.audioBase64);
+                            updateState('listening');
+                        } catch(e) { updateState('listening'); }
+                    } else {
+                        updateState('listening');
+                    }
                 };
 
                 socket.onmessage = async (event) => {
@@ -834,7 +670,7 @@
                         const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: goodbyeText })
+                            body: JSON.stringify({ text: goodbyeText, lang: 'en-IN' })
                         });
                         const data = await response.json();
                         await playAudioChunk(data.audioBase64);
@@ -852,49 +688,8 @@
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
-            sessionStorage.removeItem('usd_chat_active');
-            sessionStorage.removeItem('usd_chat_history');
-            
-            if (showRating) {
-                document.getElementById('usd-input-container').style.display = 'none';
-                document.getElementById('usd-mode-toggle').style.display = 'none';
-                document.getElementById('usd-visualizer').style.display = 'none';
-                document.getElementById('usd-inline-rating').style.display = 'block';
-                logMessage('system', 'The chat has ended. Please rate your experience below.');
-            } else {
-                document.getElementById('usd-chat-container').style.display = 'none';
-                document.getElementById('usd-bubble').style.display = 'flex'; 
-            }
-        }
-
-        async function submitRating(stars) {
-            const starElements = document.querySelectorAll('.usd-star');
-            starElements.forEach((s, index) => {
-                s.style.color = index < stars ? '#FFD700' : '#444';
-                s.style.textShadow = index < stars ? '0 0 10px rgba(255, 215, 0, 0.6)' : '0 2px 4px rgba(0,0,0,0.5)';
-            });
-            document.getElementById('usd-rating-thanks').style.display = 'block';
-
-            try {
-                let transcript = "No chat history recorded.";
-                if (chatHistory && chatHistory.length > 0) {
-                    transcript = chatHistory.map(turn => `${turn.role === 'user' ? 'User' : 'Agent'}: ${turn.parts[0].text}`).join('\n\n');
-                }
-
-                await fetch('https://api.web3forms.com/submit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ 
-                        access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
-                        subject: `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`, 
-                        from_name: "Ultimate Smile Voice Agent", 
-                        email: "noreply@ultimatesmiledesign.com",
-                        message: `Transcript:\n\n${transcript}` 
-                    })
-                });
-            } catch(e) { }
-
-            setTimeout(() => { closeChat(false); }, 3000);
+            document.getElementById('usd-start-btn').style.display = 'block';
+            document.getElementById('usd-chat-container').style.display = 'none';
         }
 
         async function submitTextMessage() {
@@ -932,7 +727,6 @@
             const linkInfo = usdLinks[tag];
             logMessage('bot', linkInfo.voice);
             chatHistory.push({ role: "model", parts: [{ text: linkInfo.voice }] });
-            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
             if (isVoiceMode) {
                 interruptBot();
@@ -942,7 +736,7 @@
                     const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: linkInfo.voice })
+                        body: JSON.stringify({ text: linkInfo.voice, lang: 'en-IN' })
                     });
                     const data = await response.json();
                     await playAudioChunk(data.audioBase64);
