@@ -341,6 +341,10 @@
         let isAudioPlaying = false;
         let activeAudioSource = null;
         let activeTag = null; 
+        let activeBotMessageDiv = null; // Holds the live-typing text bubble
+        
+        let recognition = null;
+        let silenceTimer = null;
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
@@ -358,6 +362,46 @@
                 await openChat(true);
             }
         };
+
+        let lastScrollY = window.scrollY || 0;
+        let scrollTimeout = null;
+
+        window.addEventListener('scroll', () => {
+            const currentScrollY = window.scrollY || document.documentElement.scrollTop;
+            const tooltip = document.getElementById('usd-tooltip');
+            const bubble = document.getElementById('usd-bubble');
+            
+            if (currentScrollY > 30) {
+                tooltip.style.opacity = '0';
+                tooltip.style.pointerEvents = 'none';
+            } else {
+                tooltip.style.opacity = '1';
+                tooltip.style.pointerEvents = 'auto';
+            }
+
+            let scrollSpeed = Math.abs(currentScrollY - lastScrollY);
+            lastScrollY = currentScrollY;
+
+            let dynamicPulseSize = Math.min(20 + (scrollSpeed * 1.5), 80);
+            bubble.style.setProperty('--pulse-max', `${dynamicPulseSize}px`);
+
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(() => {
+                bubble.style.setProperty('--pulse-max', '20px');
+            }, 150);
+        });
+
+        function saveSessionState() {
+            sessionStorage.setItem('usd_chat_active', 'true');
+            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
+            sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
+        }
+
+        function clearSessionState() {
+            sessionStorage.removeItem('usd_chat_active');
+            sessionStorage.removeItem('usd_chat_history');
+            sessionStorage.removeItem('usd_is_voice_mode');
+        }
 
         function initAudio() {
             if (!audioCtx) {
@@ -424,7 +468,10 @@
                     } else {
                         updateState('cooldown');
                         setTimeout(() => {
-                            if (currentAgentState === 'cooldown') updateState('listening');
+                            if (currentAgentState === 'cooldown') {
+                                updateState('listening');
+                                if (recognition && isVoiceMode) { try { recognition.start(); } catch(e){} }
+                            }
                         }, 800);
                     }
                     activeTag = null; 
@@ -442,6 +489,7 @@
                 try { activeAudioSource.stop(); } catch(e) {}
                 activeAudioSource = null;
             }
+            if (recognition) { try { recognition.stop(); } catch(e){} }
         }
 
         function updateState(newState, statusText = null) {
@@ -475,6 +523,7 @@
                 toggleBtn.innerText = "🎙️ Voice";
                 visualizer.style.display = "flex";
                 updateState('listening');
+                if (recognition) { try { recognition.start(); } catch(e){} }
             } else {
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "none";
@@ -549,7 +598,12 @@
                             await playAudioChunk(data.audioBase64);
                             
                             updateState('cooldown');
-                            setTimeout(() => { if(currentAgentState === 'cooldown') updateState('listening'); }, 800);
+                            setTimeout(() => { 
+                                if(currentAgentState === 'cooldown') {
+                                    updateState('listening'); 
+                                    if (recognition && isVoiceMode) { try { recognition.start(); } catch(e){} }
+                                }
+                            }, 800);
                         } catch(e) {}
                     }
                     
@@ -570,151 +624,129 @@
 
                     const streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
                     const source = streamCtx.createMediaStreamSource(globalStream);
-                    
-                    const bufferSize = 4096;
-                    const processor = streamCtx.createScriptProcessor(bufferSize, 1, 1);
-                    
                     const analyser = streamCtx.createAnalyser();
                     analyser.fftSize = 512;
-
                     source.connect(analyser);
-                    source.connect(processor);
-                    processor.connect(streamCtx.destination); 
 
-                    let isRecording = false;
-                    let shortPauseTimer = null; 
-                    let longPauseTimer = null; 
-                    let maxRecordingTimer = null;
                     let consecutiveLoudFrames = 0; 
 
-                    processor.onaudioprocess = (e) => {
-                        if (!isVoiceMode || currentAgentState !== 'listening' || !isRecording) return;
-                        
-                        const inputData = e.inputBuffer.getChannelData(0);
-                        const pcm16 = new Int16Array(inputData.length);
-                        for (let i = 0; i < inputData.length; i++) {
-                            pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
-                        }
-                        
-                        if (socket && socket.readyState === WebSocket.OPEN) {
-                            socket.send(pcm16.buffer); 
-                        }
-                    };
-
-                    function detectVoice() {
-                        if (!isVoiceMode || currentAgentState === 'off' || currentAgentState === 'connecting') {
-                            requestAnimationFrame(detectVoice); return;
-                        }
-
-                        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                        analyser.getByteFrequencyData(dataArray);
-                        
-                        let voiceSum = 0; let voiceBins = 0;
-                        for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
-                        let humanVolume = voiceSum / voiceBins;
-
-                        if (currentAgentState === 'thinking' || currentAgentState === 'cooldown') {
-                            isRecording = false;
-                            clearTimeout(shortPauseTimer);
-                            clearTimeout(longPauseTimer);
-                            clearTimeout(maxRecordingTimer);
-                            requestAnimationFrame(detectVoice); return;
-                        }
-
+                    // ==========================================
+                    // 1. BARGE-IN ENGINE (Listens only while bot speaks)
+                    // ==========================================
+                    function detectBargeIn() {
                         if (currentAgentState === 'speaking') {
-                            if (humanVolume > 60) { 
+                            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                            analyser.getByteFrequencyData(dataArray);
+                            
+                            let voiceSum = 0; let voiceBins = 0;
+                            for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
+                            let humanVolume = voiceSum / voiceBins;
+
+                            if (humanVolume > 65) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames > 25) {
+                                if (consecutiveLoudFrames > 20) {
                                     interruptBot();
                                     updateState('listening');
-                                    isRecording = true;
-                                    
-                                    if (socket && socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                    }
+                                    consecutiveLoudFrames = 0;
+                                    if (recognition && isVoiceMode) { try { recognition.start(); } catch(e){} }
                                 }
                             } else {
                                 consecutiveLoudFrames = 0; 
                             }
-                            requestAnimationFrame(detectVoice); return;
                         }
-
-                        if (currentAgentState === 'listening') {
-                            // INCREASED TO 40: Ignores AC hum and office chat 15 feet away
-                            if (humanVolume > 40) { 
-                                if (!isRecording) {
-                                    isRecording = true;
-                                    if (socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                    }
-                                    
-                                    maxRecordingTimer = setTimeout(() => {
-                                        if (isRecording) {
-                                            isRecording = false;
-                                            updateState('thinking');
-                                            document.getElementById('usd-interim-text').innerText = ""; 
-                                            if (socket.readyState === WebSocket.OPEN) {
-                                                socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
-                                            }
-                                        }
-                                    }, 10000); // Failsafe cutoff
-                                }
-                                
-                                clearTimeout(shortPauseTimer);
-                                clearTimeout(longPauseTimer);
-                                
-                                shortPauseTimer = setTimeout(() => {
-                                    if (isRecording && socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'process_interim' }));
-                                    }
-                                }, 450); 
-
-                                longPauseTimer = setTimeout(() => {
-                                    if (isRecording) {
-                                        isRecording = false;
-                                        clearTimeout(maxRecordingTimer);
-                                        updateState('thinking');
-                                        document.getElementById('usd-interim-text').innerText = ""; 
-                                        if (socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
-                                        }
-                                    }
-                                }, 1500); 
-                            }
-                        }
-                        requestAnimationFrame(detectVoice);
+                        requestAnimationFrame(detectBargeIn);
                     }
-                    
-                    detectVoice();
-                    if(currentAgentState === 'listening') updateState('listening');
+                    detectBargeIn();
+
+                    // ==========================================
+                    // 2. LIVE STT ENGINE (Zero Latency Browser Transcription)
+                    // ==========================================
+                    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+                        recognition = new SpeechRec();
+                        recognition.continuous = true;
+                        recognition.interimResults = true;
+                        recognition.lang = 'en-IN'; 
+
+                        recognition.onstart = () => {};
+
+                        recognition.onresult = (event) => {
+                            if (currentAgentState !== 'listening') return;
+                            
+                            let interim = '';
+                            let finalStr = '';
+
+                            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                                if (event.results[i].isFinal) finalStr += event.results[i][0].transcript;
+                                else interim += event.results[i][0].transcript;
+                            }
+
+                            let displayStr = finalStr + interim;
+                            document.getElementById('usd-interim-text').innerText = displayStr;
+
+                            clearTimeout(silenceTimer);
+                            silenceTimer = setTimeout(() => {
+                                if (displayStr.trim().length > 0) {
+                                    recognition.stop();
+                                    submitVoiceText(displayStr.trim());
+                                }
+                            }, 1200); // 1.2s pause triggers the instant AI response
+                        };
+
+                        recognition.onend = () => {
+                            if (currentAgentState === 'listening' && isVoiceMode) {
+                                try { recognition.start(); } catch(e){}
+                            }
+                        };
+                        
+                        if(currentAgentState === 'listening') {
+                            try { recognition.start(); } catch(e){}
+                        }
+                    }
                 };
 
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    if (data.type === 'idle') {
-                        document.getElementById('usd-interim-text').innerText = "";
-                        updateState('listening');
+                    // ==========================================
+                    // 3. LIVE TYPING ENGINE (Streams LLM Text visually)
+                    // ==========================================
+                    if (data.type === 'text_stream') {
+                        if (!activeBotMessageDiv) {
+                            const log = document.getElementById('usd-chat-log');
+                            activeBotMessageDiv = document.createElement('div');
+                            activeBotMessageDiv.className = `msg msg-bot`;
+                            activeBotMessageDiv.innerText = "Assistant: ";
+                            log.appendChild(activeBotMessageDiv);
+                        }
+                        activeBotMessageDiv.innerText = "Assistant: " + data.text;
+                        const log = document.getElementById('usd-chat-log');
+                        log.scrollTop = log.scrollHeight;
                     }
-                    else if (data.type === 'interim_transcript' || data.type === 'transcript') {
-                        document.getElementById('usd-interim-text').innerText = data.text;
-                    } 
                     else if (data.type === 'audio_chunk') {
                         audioChunkQueue.push(data);
                         processAudioQueue();
                     }
                     else if (data.type === 'reply_complete') {
-                        document.getElementById('usd-interim-text').innerText = "";
-                        logMessage('user', data.userText);
+                        activeBotMessageDiv = null; // Release the div
                         
-                        chatHistory.push({ role: "user", parts: [{ text: data.userText }] });
                         chatHistory.push({ role: "model", parts: [{ text: data.botText }] });
                         sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
                         activeTag = data.tag;
-                        logMessage('bot', data.botText, data.tag);
-                        
                         totalExpectedChunks = data.totalChunks;
+                        
+                        // Append Link buttons if necessary
+                        if (activeTag && usdLinks[activeTag]) {
+                            const log = document.getElementById('usd-chat-log');
+                            const lastBotMsg = log.lastElementChild;
+                            const btn = document.createElement('button');
+                            btn.className = 'usd-link-card';
+                            btn.innerText = usdLinks[activeTag].label;
+                            btn.onclick = () => handleLinkClick(activeTag);
+                            lastBotMsg.appendChild(btn);
+                            log.scrollTop = log.scrollHeight;
+                        }
                         
                         if (!isVoiceMode || totalExpectedChunks === 0) {
                             updateState('listening');
@@ -722,16 +754,32 @@
                         }
                     }
                     else if (data.type === 'error') {
-                        if(data.message !== "No speech detected.") logMessage('error', data.message);
                         document.getElementById('usd-interim-text').innerText = "";
                         updateState('listening');
+                        if (recognition && isVoiceMode) { try { recognition.start(); } catch(e){} }
                     }
                 };
 
-                socket.onerror = () => updateState('listening');
+                socket.onerror = () => { updateState('listening'); };
 
             } catch (err) {
                 updateState('listening');
+            }
+        }
+
+        function submitVoiceText(text) {
+            updateState('thinking');
+            document.getElementById('usd-interim-text').innerText = ""; 
+            logMessage('user', text);
+            chatHistory.push({ role: "user", parts: [{ text: text }] });
+            
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ 
+                    type: 'text_input', 
+                    text: text, 
+                    history: chatHistory,
+                    isVoiceMode: isVoiceMode 
+                }));
             }
         }
 
@@ -824,17 +872,7 @@
             inputEl.value = ''; 
             interruptBot();
 
-            updateState('thinking');
-            document.getElementById('usd-interim-text').innerText = ""; 
-
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ 
-                    type: 'text_input', 
-                    text: userText, 
-                    history: chatHistory,
-                    isVoiceMode: isVoiceMode 
-                }));
-            }
+            submitVoiceText(userText);
         }
 
         function handleKeyPress(event) {
@@ -863,7 +901,12 @@
                     const data = await response.json();
                     await playAudioChunk(data.audioBase64);
                     updateState('cooldown'); 
-                    setTimeout(() => { if(currentAgentState === 'cooldown') updateState('listening'); }, 800);
+                    setTimeout(() => { 
+                        if(currentAgentState === 'cooldown') {
+                            updateState('listening');
+                            if (recognition) { try { recognition.start(); } catch(e){} }
+                        }
+                    }, 800);
                 } catch(e) { updateState('listening'); }
             }
             
