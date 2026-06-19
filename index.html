@@ -148,7 +148,6 @@
         .msg-user { color: #ffffff; text-align: right; }
         .msg-bot { color: #D4AF37; text-align: left; }
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
-        .msg-system { color: #888; font-style: italic; text-align: center; font-size: 11px; margin-top: 15px; }
         .usd-link-card {
             display: block;
             width: 100%;
@@ -259,25 +258,9 @@
         .usd-confirm-btns { display: flex; gap: 15px; }
         .usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        @media (max-width: 480px) {
-            #usd-voice-widget { bottom: 15px; right: 15px; }
-            #usd-bubble { width: 50px; height: 50px; } 
-            #usd-bubble svg { width: 24px; height: 24px; }
-            #usd-chat-container { 
-                width: calc(100vw - 40px); 
-                max-height: 300px; 
-                padding: 12px; 
-                margin-bottom: 10px; 
-            }
-            #usd-chat-log { max-height: 140px; } 
-            #usd-tooltip { font-size: 12px; padding: 8px 12px; margin-bottom: 10px; }
-            #usd-tooltip::after { right: 20px; }
-        }
     </style>
 </head>
 <body>
-
-    <audio id="usd-html-player" preload="auto"></audio>
 
     <div id="usd-voice-widget">
         <div id="usd-tooltip" onclick="openChat(false)">
@@ -297,7 +280,7 @@
                 <div id="usd-chat-header">
                     <div id="usd-header-left">
                         <img src="https://raw.githubusercontent.com/teeth-vton/sd-voice-backend/dab01d9f2e96be2fcda278af63db62dfef9e1559/Gemini_Generated_Image_67gd1767gd1767gd.png" alt="USD Assistant" width="24" height="24" style="object-fit: contain;">
-                        <div id="usd-status-box">Initializing...</div>
+                        <div id="usd-status-box">Connected 🟢</div>
                     </div>
                     <div id="usd-header-right">
                         <button id="usd-mode-toggle" onclick="toggleChatMode()">🎙️ Voice</button>
@@ -345,10 +328,18 @@
 
         let currentAgentState = 'off'; 
         let chatHistory = [];
-        let audioPlayer;
         let socket = null;
         let globalStream = null;
         let isVoiceMode = true; 
+        
+        // Custom Audio Engine Variables
+        let audioCtx = null;
+        let audioChunkQueue = [];
+        let nextExpectedChunkIndex = 0;
+        let totalExpectedChunks = -1;
+        let isAudioPlaying = false;
+        let activeAudioSource = null;
+        let activeTag = null; // Holds the [LINK_X] tag while streaming
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
@@ -362,50 +353,125 @@
         };
 
         window.onload = async () => {
-            audioPlayer = document.getElementById('usd-html-player');
             if (sessionStorage.getItem('usd_chat_active') === 'true') {
                 await openChat(true);
             }
         };
 
-        let lastScrollY = window.scrollY || 0;
-        let scrollTimeout = null;
-
-        window.addEventListener('scroll', () => {
-            const currentScrollY = window.scrollY || document.documentElement.scrollTop;
-            const tooltip = document.getElementById('usd-tooltip');
-            const bubble = document.getElementById('usd-bubble');
-            
-            if (currentScrollY > 30) {
-                tooltip.style.opacity = '0';
-                tooltip.style.pointerEvents = 'none';
-            } else {
-                tooltip.style.opacity = '1';
-                tooltip.style.pointerEvents = 'auto';
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             }
-
-            let scrollSpeed = Math.abs(currentScrollY - lastScrollY);
-            lastScrollY = currentScrollY;
-
-            let dynamicPulseSize = Math.min(20 + (scrollSpeed * 1.5), 80);
-            bubble.style.setProperty('--pulse-max', `${dynamicPulseSize}px`);
-
-            clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(() => {
-                bubble.style.setProperty('--pulse-max', '20px');
-            }, 150);
-        });
-
-        function saveSessionState() {
-            sessionStorage.setItem('usd_chat_active', 'true');
-            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
-            sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
         }
 
-        function clearSessionState() {
-            sessionStorage.removeItem('usd_chat_active');
-            sessionStorage.removeItem('usd_chat_history');
-            sessionStorage.removeItem('usd_is_voice_mode');
+        // ==========================================
+        // THE WEB-AUDIO ENGINE (Gapless Playback)
+        // ==========================================
+        async function playAudioChunk(base64) {
+            return new Promise(async (resolve) => {
+                if (!base64) { resolve(); return; } // Handle missing chunks safely
+                
+                initAudio();
+                updateState('speaking');
+
+                const binaryString = window.atob(base64);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                
+                try {
+                    const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+                    activeAudioSource = audioCtx.createBufferSource();
+                    activeAudioSource.buffer = audioBuffer;
+                    activeAudioSource.connect(audioCtx.destination);
+                    
+                    activeAudioSource.onended = () => {
+                        activeAudioSource = null;
+                        resolve();
+                    };
+                    
+                    activeAudioSource.start(0);
+                } catch(e) { 
+                    console.error("Audio block failed to play", e); 
+                    activeAudioSource = null;
+                    resolve(); 
+                }
+            });
+        }
+
+        async function processAudioQueue() {
+            if (isAudioPlaying) return;
+            
+            // Re-order chunks in case they arrived out of sequence
+            audioChunkQueue.sort((a, b) => a.index - b.index);
+
+            // Play the exact next chunk in the sequence
+            if (audioChunkQueue.length > 0 && audioChunkQueue[0].index === nextExpectedChunkIndex) {
+                isAudioPlaying = true;
+                const chunk = audioChunkQueue.shift();
+                nextExpectedChunkIndex++;
+                
+                await playAudioChunk(chunk.audioBase64);
+                
+                isAudioPlaying = false;
+                
+                // Are we done playing the final chunk of the response?
+                if (nextExpectedChunkIndex === totalExpectedChunks && audioChunkQueue.length === 0) {
+                    totalExpectedChunks = -1;
+                    nextExpectedChunkIndex = 0;
+                    
+                    // Final Logic
+                    if (activeTag === '[END_CHAT]') {
+                        setTimeout(() => closeChat(true), 2000);
+                    } else {
+                        updateState('cooldown');
+                        setTimeout(() => {
+                            if (currentAgentState === 'cooldown') updateState('listening');
+                        }, 800);
+                    }
+                    activeTag = null; 
+                } else {
+                    processAudioQueue(); 
+                }
+            }
+        }
+
+        // Stops all audio instantly and dumps the queue (For Barge-ins)
+        function interruptBot() {
+            audioChunkQueue = [];
+            totalExpectedChunks = -1;
+            nextExpectedChunkIndex = 0;
+            if (activeAudioSource) {
+                try { activeAudioSource.stop(); } catch(e) {}
+                activeAudioSource = null;
+            }
+        }
+
+        function updateState(newState, statusText = null) {
+            currentAgentState = newState;
+            const statusBox = document.getElementById('usd-status-box');
+            const visualizer = document.getElementById('usd-visualizer');
+
+            if (statusBox) {
+                if (newState === 'connecting' || newState === 'off') {
+                    if (statusText) statusBox.innerText = statusText;
+                } else if (isVoiceMode) {
+                    statusBox.innerText = "Connected 🟢"; 
+                } else {
+                    statusBox.innerText = "Chat Mode Active. Type below.";
+                }
+            }
+
+            if (newState === 'speaking') {
+                if (isVoiceMode) visualizer.classList.add('active');
+            } else {
+                if (isVoiceMode) visualizer.classList.remove('active');
+            }
         }
 
         function toggleChatMode() {
@@ -420,67 +486,14 @@
             } else {
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "none";
-                audioPlayer.pause();
+                interruptBot();
                 updateState('listening');
             }
-            saveSessionState();
-        }
-
-        // ==========================================
-        // UI FIX: Remved all "Processing..." text injections
-        // ==========================================
-        function updateState(newState, statusText = null) {
-            currentAgentState = newState;
-            const statusBox = document.getElementById('usd-status-box');
-            const visualizer = document.getElementById('usd-visualizer');
-
-            if (statusBox) {
-                // Only explicitly change the top header for connecting or ending states
-                if (newState === 'connecting' || newState === 'off') {
-                    if (statusText) statusBox.innerText = statusText;
-                } else if (isVoiceMode) {
-                    statusBox.innerText = "Connected 🟢"; // Prevents user impatience!
-                } else {
-                    statusBox.innerText = "Chat Mode Active. Type below.";
-                }
-            }
-
-            if (newState === 'speaking') {
-                if (isVoiceMode) visualizer.classList.add('active');
-            } else {
-                if (isVoiceMode) visualizer.classList.remove('active');
-            }
-        }
-
-        async function playSarvamGreeting(text) {
-            if (!isVoiceMode) return; 
-            try {
-                updateState('speaking'); 
-                const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: text })
-                });
-                const data = await response.json();
-                audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-                await new Promise((resolve) => {
-                    audioPlayer.onended = () => { 
-                        updateState('cooldown'); 
-                        setTimeout(() => { 
-                            if(currentAgentState === 'cooldown') updateState('listening'); 
-                            resolve(); 
-                        }, 800); 
-                    };
-                    audioPlayer.onerror = resolve;
-                    audioPlayer.onpause = resolve;
-                    audioPlayer.play().catch(resolve);
-                });
-            } catch(e) {
-                updateState('listening');
-            }
+            sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
         }
 
         async function openChat(isRestore = false) {
+            initAudio();
             const container = document.getElementById('usd-chat-container');
             const tooltip = document.getElementById('usd-tooltip');
             const bubble = document.getElementById('usd-bubble');
@@ -524,20 +537,31 @@
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory = [];
                     
-                    audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
-                    audioPlayer.play().catch(() => {});
-
                     updateState('connecting', "Calling assistant... 🟡");
                     await new Promise(resolve => setTimeout(resolve, 2000));
-
+                    
                     updateState('connecting', "Connected 🟢");
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     
                     const greeting = "Namaste! How can we assist you today?";
                     logMessage('bot', greeting);
-                    saveSessionState();
-                    await playSarvamGreeting(greeting); 
                     
+                    if (isVoiceMode) {
+                        try {
+                            const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ text: greeting })
+                            });
+                            const data = await response.json();
+                            await playAudioChunk(data.audioBase64);
+                            
+                            updateState('cooldown');
+                            setTimeout(() => { if(currentAgentState === 'cooldown') updateState('listening'); }, 800);
+                        } catch(e) {}
+                    }
+                    
+                    sessionStorage.setItem('usd_chat_active', 'true');
                     await startWebSocket();
                 }
             }
@@ -549,25 +573,21 @@
 
                 socket.onopen = async () => {
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { 
-                            echoCancellation: true, 
-                            noiseSuppression: true, 
-                            autoGainControl: false 
-                        }
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false }
                     });
 
-                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-                    const source = audioCtx.createMediaStreamSource(globalStream);
+                    const streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                    const source = streamCtx.createMediaStreamSource(globalStream);
                     
                     const bufferSize = 4096;
-                    const processor = audioCtx.createScriptProcessor(bufferSize, 1, 1);
+                    const processor = streamCtx.createScriptProcessor(bufferSize, 1, 1);
                     
-                    const analyser = audioCtx.createAnalyser();
+                    const analyser = streamCtx.createAnalyser();
                     analyser.fftSize = 512;
 
                     source.connect(analyser);
                     source.connect(processor);
-                    processor.connect(audioCtx.destination); 
+                    processor.connect(streamCtx.destination); 
 
                     let isRecording = false;
                     let shortPauseTimer = null; 
@@ -591,19 +611,14 @@
 
                     function detectVoice() {
                         if (!isVoiceMode || currentAgentState === 'off' || currentAgentState === 'connecting') {
-                            requestAnimationFrame(detectVoice);
-                            return;
+                            requestAnimationFrame(detectVoice); return;
                         }
 
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
                         analyser.getByteFrequencyData(dataArray);
                         
-                        let voiceSum = 0;
-                        let voiceBins = 0;
-                        for (let i = 10; i < 96; i++) {
-                            voiceSum += dataArray[i];
-                            voiceBins++;
-                        }
+                        let voiceSum = 0; let voiceBins = 0;
+                        for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
                         let humanVolume = voiceSum / voiceBins;
 
                         if (currentAgentState === 'thinking' || currentAgentState === 'cooldown') {
@@ -611,17 +626,15 @@
                             clearTimeout(shortPauseTimer);
                             clearTimeout(longPauseTimer);
                             clearTimeout(maxRecordingTimer);
-                            requestAnimationFrame(detectVoice);
-                            return;
+                            requestAnimationFrame(detectVoice); return;
                         }
 
+                        // LOUD BARGE-IN
                         if (currentAgentState === 'speaking') {
                             if (humanVolume > 60) { 
                                 consecutiveLoudFrames++;
                                 if (consecutiveLoudFrames > 25) {
-                                    audioPlayer.pause(); 
-                                    consecutiveLoudFrames = 0;
-                                    
+                                    interruptBot();
                                     updateState('listening');
                                     isRecording = true;
                                     
@@ -632,8 +645,7 @@
                             } else {
                                 consecutiveLoudFrames = 0; 
                             }
-                            requestAnimationFrame(detectVoice);
-                            return;
+                            requestAnimationFrame(detectVoice); return;
                         }
 
                         if (currentAgentState === 'listening') {
@@ -660,10 +672,8 @@
                                 clearTimeout(longPauseTimer);
                                 
                                 shortPauseTimer = setTimeout(() => {
-                                    if (isRecording) {
-                                        if (socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ type: 'process_interim' }));
-                                        }
+                                    if (isRecording && socket.readyState === WebSocket.OPEN) {
+                                        socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
                                 }, 450); 
 
@@ -693,60 +703,32 @@
                     if (data.type === 'idle') {
                         document.getElementById('usd-interim-text').innerText = "";
                         updateState('listening');
-                        return;
                     }
-
-                    if (data.type === 'interim_transcript') {
-                        document.getElementById('usd-interim-text').innerText = data.text;
-                    }
-                    else if (data.type === 'transcript') {
+                    else if (data.type === 'interim_transcript' || data.type === 'transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
                     } 
-                    else if (data.type === 'reply') {
+                    // STREAMING QUEUE MANAGER
+                    else if (data.type === 'audio_chunk') {
+                        audioChunkQueue.push(data);
+                        processAudioQueue();
+                    }
+                    else if (data.type === 'reply_complete') {
                         document.getElementById('usd-interim-text').innerText = "";
                         logMessage('user', data.userText);
                         
                         chatHistory.push({ role: "user", parts: [{ text: data.userText }] });
                         chatHistory.push({ role: "model", parts: [{ text: data.botText }] });
-                        saveSessionState();
+                        sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
-                        let finalBotReply = data.botText;
-                        let isEnding = false;
-                        let foundTag = null;
+                        activeTag = data.tag;
+                        logMessage('bot', data.botText, data.tag);
                         
-                        if (finalBotReply.includes('[END_CHAT]')) {
-                            isEnding = true;
-                        }
+                        totalExpectedChunks = data.totalChunks;
                         
-                        for (const tag in usdLinks) {
-                            if (finalBotReply.includes(tag)) {
-                                foundTag = tag;
-                                break; 
-                            }
-                        }
-
-                        finalBotReply = finalBotReply.replace(/\[.*?\]/g, '').trim();
-                        logMessage('bot', finalBotReply, foundTag);
-
-                        if (isVoiceMode && data.audioBase64) {
-                            updateState('speaking');
-                            audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-                            audioPlayer.onended = () => {
-                                updateState('cooldown'); 
-                                setTimeout(() => {
-                                    if (currentAgentState === 'cooldown') {
-                                        updateState('listening');
-                                        if (isEnding) closeChat(true); 
-                                    }
-                                }, 800); 
-                            };
-                            audioPlayer.play().catch(() => { updateState('listening'); });
-                        } else {
-                            if (isEnding) {
-                                setTimeout(() => closeChat(true), 2000);
-                            } else {
-                                updateState('listening');
-                            }
+                        // If it's a text chat, or the bot somehow sent 0 chunks, transition instantly
+                        if (!isVoiceMode || totalExpectedChunks === 0) {
+                            updateState('listening');
+                            if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
                         }
                     }
                     else if (data.type === 'error') {
@@ -771,37 +753,36 @@
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
                 updateState('thinking');
-                audioPlayer.pause();
+                interruptBot();
                 
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
+                logMessage('bot', goodbyeText);
                 
                 if (isVoiceMode) {
                     try {
-                        updateState('speaking');
                         const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ text: goodbyeText })
                         });
                         const data = await response.json();
-                        audioPlayer.src = "data:audio/wav;base64," + data.audioBase64;
-                        audioPlayer.onended = () => { closeChat(true); };
-                        audioPlayer.play();
+                        await playAudioChunk(data.audioBase64);
+                        closeChat(true);
                     } catch(e) { closeChat(true); }
                 } else {
-                    logMessage('bot', goodbyeText);
                     setTimeout(() => closeChat(true), 2000);
                 }
             }
         }
 
         function closeChat(showRating = false) {
-            updateState('off', "Chat Ended");
-            audioPlayer.pause();
+            updateState('off');
+            interruptBot();
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
-            clearSessionState();
+            sessionStorage.removeItem('usd_chat_active');
+            sessionStorage.removeItem('usd_chat_history');
             
             if (showRating) {
                 document.getElementById('usd-input-container').style.display = 'none';
@@ -812,12 +793,6 @@
             } else {
                 document.getElementById('usd-chat-container').style.display = 'none';
                 document.getElementById('usd-bubble').style.display = 'flex'; 
-                
-                if (window.scrollY <= 30) {
-                    const tooltip = document.getElementById('usd-tooltip');
-                    tooltip.style.opacity = '1';
-                    tooltip.style.pointerEvents = 'auto';
-                }
             }
         }
 
@@ -857,7 +832,7 @@
             if (!userText || currentAgentState === 'thinking' || currentAgentState === 'connecting') return;
 
             inputEl.value = ''; 
-            audioPlayer.pause(); 
+            interruptBot();
 
             updateState('thinking');
             document.getElementById('usd-interim-text').innerText = ""; 
@@ -881,15 +856,25 @@
 
         async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
-            
             logMessage('bot', linkInfo.voice);
             chatHistory.push({ role: "model", parts: [{ text: linkInfo.voice }] });
-            saveSessionState();
+            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
             if (isVoiceMode) {
-                audioPlayer.pause();
+                interruptBot();
                 updateState('speaking');
-                await playSarvamGreeting(linkInfo.voice);
+                
+                try {
+                    const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: linkInfo.voice })
+                    });
+                    const data = await response.json();
+                    await playAudioChunk(data.audioBase64);
+                    updateState('cooldown'); 
+                    setTimeout(() => { if(currentAgentState === 'cooldown') updateState('listening'); }, 800);
+                } catch(e) { updateState('listening'); }
             }
             
             window.location.href = linkInfo.url;
