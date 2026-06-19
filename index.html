@@ -262,6 +262,8 @@
 </head>
 <body>
 
+    <audio id="usd-html-player" preload="auto" playsinline style="display:none;"></audio>
+
     <div id="usd-voice-widget">
         <div id="usd-tooltip" onclick="openChat(false)">
             Namaste! Tap here to talk about your new smile!
@@ -332,12 +334,12 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        let audioCtx = null;
+        // Custom Audio Engine Variables
+        let audioPlayer; 
         let audioChunkQueue = [];
         let nextExpectedChunkIndex = 0;
         let totalExpectedChunks = -1;
         let isAudioPlaying = false;
-        let activeAudioSource = null;
         let activeTag = null; 
         let activeBotMessageDiv = null; 
         
@@ -356,6 +358,7 @@
         };
 
         window.onload = async () => {
+            audioPlayer = document.getElementById('usd-html-player');
             if (sessionStorage.getItem('usd_chat_active') === 'true') {
                 await openChat(true);
             }
@@ -396,55 +399,32 @@
         }
 
         // ==========================================
-        // THE MOBILE AUDIO UNLOCKER
+        // THE MOBILE HTML5 AUDIO ENGINE
         // ==========================================
         function unlockMobileAudio() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
-            // Play a completely silent 1-millisecond beep to unlock mobile Safari/Chrome Autoplay rules
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            gainNode.gain.value = 0; 
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.start(0);
-            oscillator.stop(audioCtx.currentTime + 0.001);
+            // Play a completely silent, tiny blank audio to unlock mobile Safari/Chrome Autoplay rules
+            audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAAAD";
+            audioPlayer.play().catch(() => {});
         }
 
         async function playAudioChunk(base64) {
-            return new Promise(async (resolve) => {
+            return new Promise((resolve) => {
                 if (!base64) { resolve(); return; } 
-                
-                unlockMobileAudio();
                 updateState('speaking');
 
-                const binaryString = window.atob(base64);
-                const len = binaryString.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
+                audioPlayer.src = "data:audio/wav;base64," + base64;
                 
-                try {
-                    const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
-                    activeAudioSource = audioCtx.createBufferSource();
-                    activeAudioSource.buffer = audioBuffer;
-                    activeAudioSource.connect(audioCtx.destination);
-                    
-                    activeAudioSource.onended = () => {
-                        activeAudioSource = null;
-                        resolve();
-                    };
-                    
-                    activeAudioSource.start(0);
-                } catch(e) { 
-                    activeAudioSource = null;
+                audioPlayer.onended = () => {
+                    resolve();
+                };
+                
+                audioPlayer.onerror = () => {
                     resolve(); 
-                }
+                };
+
+                audioPlayer.play().catch(() => {
+                    resolve();
+                });
             });
         }
 
@@ -488,10 +468,7 @@
             audioChunkQueue = [];
             totalExpectedChunks = -1;
             nextExpectedChunkIndex = 0;
-            if (activeAudioSource) {
-                try { activeAudioSource.stop(); } catch(e) {}
-                activeAudioSource = null;
-            }
+            audioPlayer.pause();
             if (recognition) { try { recognition.stop(); } catch(e){} }
         }
 
