@@ -262,8 +262,6 @@
 </head>
 <body>
 
-    <audio id="usd-html-player" preload="auto"></audio>
-
     <div id="usd-voice-widget">
         <div id="usd-tooltip" onclick="openChat(false)">
             Namaste! Tap here to talk about your new smile!
@@ -341,7 +339,7 @@
         let isAudioPlaying = false;
         let activeAudioSource = null;
         let activeTag = null; 
-        let activeBotMessageDiv = null; // Holds the live-typing text bubble
+        let activeBotMessageDiv = null; 
         
         let recognition = null;
         let silenceTimer = null;
@@ -397,26 +395,31 @@
             sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
         }
 
-        function clearSessionState() {
-            sessionStorage.removeItem('usd_chat_active');
-            sessionStorage.removeItem('usd_chat_history');
-            sessionStorage.removeItem('usd_is_voice_mode');
-        }
-
-        function initAudio() {
+        // ==========================================
+        // THE MOBILE AUDIO UNLOCKER
+        // ==========================================
+        function unlockMobileAudio() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             }
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
+            // Play a completely silent 1-millisecond beep to unlock mobile Safari/Chrome Autoplay rules
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0; 
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start(0);
+            oscillator.stop(audioCtx.currentTime + 0.001);
         }
 
         async function playAudioChunk(base64) {
             return new Promise(async (resolve) => {
                 if (!base64) { resolve(); return; } 
                 
-                initAudio();
+                unlockMobileAudio();
                 updateState('speaking');
 
                 const binaryString = window.atob(base64);
@@ -515,6 +518,7 @@
         }
 
         function toggleChatMode() {
+            unlockMobileAudio();
             isVoiceMode = !isVoiceMode;
             const toggleBtn = document.getElementById('usd-mode-toggle');
             const visualizer = document.getElementById('usd-visualizer');
@@ -534,7 +538,7 @@
         }
 
         async function openChat(isRestore = false) {
-            initAudio();
+            unlockMobileAudio();
             const container = document.getElementById('usd-chat-container');
             const tooltip = document.getElementById('usd-tooltip');
             const bubble = document.getElementById('usd-bubble');
@@ -630,9 +634,6 @@
 
                     let consecutiveLoudFrames = 0; 
 
-                    // ==========================================
-                    // 1. BARGE-IN ENGINE (Listens only while bot speaks)
-                    // ==========================================
                     function detectBargeIn() {
                         if (currentAgentState === 'speaking') {
                             const dataArray = new Uint8Array(analyser.frequencyBinCount);
@@ -658,9 +659,6 @@
                     }
                     detectBargeIn();
 
-                    // ==========================================
-                    // 2. LIVE STT ENGINE (Zero Latency Browser Transcription)
-                    // ==========================================
                     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
                         recognition = new SpeechRec();
@@ -690,7 +688,7 @@
                                     recognition.stop();
                                     submitVoiceText(displayStr.trim());
                                 }
-                            }, 1200); // 1.2s pause triggers the instant AI response
+                            }, 1200); 
                         };
 
                         recognition.onend = () => {
@@ -708,10 +706,11 @@
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    // ==========================================
-                    // 3. LIVE TYPING ENGINE (Streams LLM Text visually)
-                    // ==========================================
-                    if (data.type === 'text_stream') {
+                    if (data.type === 'idle') {
+                        document.getElementById('usd-interim-text').innerText = "";
+                        updateState('listening');
+                    }
+                    else if (data.type === 'text_stream') {
                         if (!activeBotMessageDiv) {
                             const log = document.getElementById('usd-chat-log');
                             activeBotMessageDiv = document.createElement('div');
@@ -728,7 +727,7 @@
                         processAudioQueue();
                     }
                     else if (data.type === 'reply_complete') {
-                        activeBotMessageDiv = null; // Release the div
+                        activeBotMessageDiv = null; 
                         
                         chatHistory.push({ role: "model", parts: [{ text: data.botText }] });
                         sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
@@ -736,7 +735,6 @@
                         activeTag = data.tag;
                         totalExpectedChunks = data.totalChunks;
                         
-                        // Append Link buttons if necessary
                         if (activeTag && usdLinks[activeTag]) {
                             const log = document.getElementById('usd-chat-log');
                             const lastBotMsg = log.lastElementChild;
