@@ -640,7 +640,8 @@
                         }
 
                         if (currentAgentState === 'listening') {
-                            if (humanVolume > 25) { 
+                            // INCREASED TO 40: Ignores AC hum and office chat 15 feet away
+                            if (humanVolume > 40) { 
                                 if (!isRecording) {
                                     isRecording = true;
                                     if (socket.readyState === WebSocket.OPEN) {
@@ -656,7 +657,7 @@
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                             }
                                         }
-                                    }, 14000); 
+                                    }, 10000); // Failsafe cutoff
                                 }
                                 
                                 clearTimeout(shortPauseTimer);
