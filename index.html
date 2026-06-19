@@ -262,6 +262,8 @@
 </head>
 <body>
 
+    <audio id="usd-html-player" preload="auto"></audio>
+
     <div id="usd-voice-widget">
         <div id="usd-tooltip" onclick="openChat(false)">
             Namaste! Tap here to talk about your new smile!
@@ -332,14 +334,13 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        // Custom Audio Engine Variables
         let audioCtx = null;
         let audioChunkQueue = [];
         let nextExpectedChunkIndex = 0;
         let totalExpectedChunks = -1;
         let isAudioPlaying = false;
         let activeAudioSource = null;
-        let activeTag = null; // Holds the [LINK_X] tag while streaming
+        let activeTag = null; 
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
@@ -367,12 +368,9 @@
             }
         }
 
-        // ==========================================
-        // THE WEB-AUDIO ENGINE (Gapless Playback)
-        // ==========================================
         async function playAudioChunk(base64) {
             return new Promise(async (resolve) => {
-                if (!base64) { resolve(); return; } // Handle missing chunks safely
+                if (!base64) { resolve(); return; } 
                 
                 initAudio();
                 updateState('speaking');
@@ -397,7 +395,6 @@
                     
                     activeAudioSource.start(0);
                 } catch(e) { 
-                    console.error("Audio block failed to play", e); 
                     activeAudioSource = null;
                     resolve(); 
                 }
@@ -407,10 +404,8 @@
         async function processAudioQueue() {
             if (isAudioPlaying) return;
             
-            // Re-order chunks in case they arrived out of sequence
             audioChunkQueue.sort((a, b) => a.index - b.index);
 
-            // Play the exact next chunk in the sequence
             if (audioChunkQueue.length > 0 && audioChunkQueue[0].index === nextExpectedChunkIndex) {
                 isAudioPlaying = true;
                 const chunk = audioChunkQueue.shift();
@@ -420,12 +415,10 @@
                 
                 isAudioPlaying = false;
                 
-                // Are we done playing the final chunk of the response?
                 if (nextExpectedChunkIndex === totalExpectedChunks && audioChunkQueue.length === 0) {
                     totalExpectedChunks = -1;
                     nextExpectedChunkIndex = 0;
                     
-                    // Final Logic
                     if (activeTag === '[END_CHAT]') {
                         setTimeout(() => closeChat(true), 2000);
                     } else {
@@ -441,7 +434,6 @@
             }
         }
 
-        // Stops all audio instantly and dumps the queue (For Barge-ins)
         function interruptBot() {
             audioChunkQueue = [];
             totalExpectedChunks = -1;
@@ -629,7 +621,6 @@
                             requestAnimationFrame(detectVoice); return;
                         }
 
-                        // LOUD BARGE-IN
                         if (currentAgentState === 'speaking') {
                             if (humanVolume > 60) { 
                                 consecutiveLoudFrames++;
@@ -707,7 +698,6 @@
                     else if (data.type === 'interim_transcript' || data.type === 'transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
                     } 
-                    // STREAMING QUEUE MANAGER
                     else if (data.type === 'audio_chunk') {
                         audioChunkQueue.push(data);
                         processAudioQueue();
@@ -725,7 +715,6 @@
                         
                         totalExpectedChunks = data.totalChunks;
                         
-                        // If it's a text chat, or the bot somehow sent 0 chunks, transition instantly
                         if (!isVoiceMode || totalExpectedChunks === 0) {
                             updateState('listening');
                             if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
