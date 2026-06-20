@@ -773,9 +773,16 @@
                         document.getElementById('usd-interim-text').innerText = "";
                         updateState('listening');
                     }
+                    // 👇 PAASTE THIS BLOCK RIGHT HERE 👇
+                    else if (data.type === 'user_spoken_text') {
+                        document.getElementById('usd-interim-text').innerText = ""; 
+                        logMessage('user', data.text);
+                    }
+                    // 👆 END PASTE 👆
                     else if (data.type === 'interim_transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
                     }
+                    // ... the rest remains exactly the same
                     else if (data.type === 'text_stream') {
                         if (!activeBotMessageDiv) {
                             const log = document.getElementById('usd-chat-log');
