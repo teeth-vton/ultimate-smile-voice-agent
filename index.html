@@ -366,7 +366,7 @@
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist. Add your details and we will reach out to you soon.' },
-            '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On', voice: 'Click design my smile now to know how your beautiful smile looks after treatment.' }, // UPDATED TEXT
+            '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On', voice: 'Click design my smile now to know how your beautiful smile looks after treatment.' }, 
             '[LINK_BLOGS]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '📰 Read Our Blogs', voice: 'Now you are on our blogs page.' }, 
             '[LINK_GALLERY]': { url: 'https://ultimatesmiledesign.com/gallery/', label: '🖼️ Check Out Gallery', voice: 'Now you are on our gallery page.' },
             '[LINK_CONSULT]': { url: 'https://ultimatesmiledesign.com/consult-with-dentist/', label: '👨‍⚕️ Consult Expert Dentist', voice: 'Please fill the answers to get a response from our expert dentist.' },
@@ -773,16 +773,13 @@
                         document.getElementById('usd-interim-text').innerText = "";
                         updateState('listening');
                     }
-                    // 👇 PAASTE THIS BLOCK RIGHT HERE 👇
                     else if (data.type === 'user_spoken_text') {
                         document.getElementById('usd-interim-text').innerText = ""; 
                         logMessage('user', data.text);
                     }
-                    // 👆 END PASTE 👆
                     else if (data.type === 'interim_transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
                     }
-                    // ... the rest remains exactly the same
                     else if (data.type === 'text_stream') {
                         if (!activeBotMessageDiv) {
                             const log = document.getElementById('usd-chat-log');
@@ -949,13 +946,10 @@
             }
         }
 
-     async function handleLinkClick(tag) {
+        async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
             logMessage('bot', linkInfo.voice);
             chatHistory.push({ role: "model", parts: [{ text: linkInfo.voice }] });
-
-            // BUG FIXED: Open the tab IMMEDIATELY so the browser doesn't block it as a popup!
-            window.open(linkInfo.url, '_blank');
 
             if (isVoiceMode) {
                 interruptBot();
@@ -977,9 +971,7 @@
                     }, 800);
                 } catch(e) { updateState('listening'); }
             }
-        }
             
-            // BUG FIXED: window.open opens the link in a new tab so the chat DOES NOT close!
             window.open(linkInfo.url, '_blank');
         }
 
