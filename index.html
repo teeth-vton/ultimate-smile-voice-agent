@@ -949,10 +949,13 @@
             }
         }
 
-        async function handleLinkClick(tag) {
+     async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
             logMessage('bot', linkInfo.voice);
             chatHistory.push({ role: "model", parts: [{ text: linkInfo.voice }] });
+
+            // BUG FIXED: Open the tab IMMEDIATELY so the browser doesn't block it as a popup!
+            window.open(linkInfo.url, '_blank');
 
             if (isVoiceMode) {
                 interruptBot();
@@ -974,6 +977,7 @@
                     }, 800);
                 } catch(e) { updateState('listening'); }
             }
+        }
             
             // BUG FIXED: window.open opens the link in a new tab so the chat DOES NOT close!
             window.open(linkInfo.url, '_blank');
