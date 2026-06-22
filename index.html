@@ -464,38 +464,32 @@
             oscillator.stop(audioCtx.currentTime + 0.001);
         }
 
-        async function playAudioChunk(base64) {
-            return new Promise(async (resolve) => {
+       async function playAudioChunk(base64) {
+            return new Promise((resolve) => {
                 if (!base64) { resolve(); return; } 
                 
-                if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
                 updateState('speaking');
 
-                const binaryString = window.atob(base64);
-                const len = binaryString.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
+                const audioEl = document.getElementById('usd-html-player');
+                audioEl.src = "data:audio/wav;base64," + base64;
                 
-                try {
-                    const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
-                    activeAudioSource = audioCtx.createBufferSource();
-                    activeAudioSource.buffer = audioBuffer;
-                    activeAudioSource.playbackRate.value = 1.15;
-                    activeAudioSource.preservesPitch = true;
-                    activeAudioSource.connect(audioCtx.destination);
-                    
-                    activeAudioSource.onended = () => {
-                        activeAudioSource = null;
-                        resolve();
-                    };
-                    
-                    activeAudioSource.start(0);
-                } catch(e) { 
-                    activeAudioSource = null;
-                    resolve(); 
-                }
+                // ⚡ THE PERFECT FIX: HTML5 natively preserves pitch flawlessly!
+                audioEl.playbackRate = 1.15;
+                audioEl.preservesPitch = true;
+                audioEl.mozPreservesPitch = true; // For Firefox
+                audioEl.webkitPreservesPitch = true; // For Safari/Chrome
+
+                audioEl.onended = () => {
+                    resolve();
+                };
+                
+                audioEl.onerror = () => {
+                    resolve();
+                };
+                
+                audioEl.play().catch(e => {
+                    resolve();
+                });
             });
         }
 
@@ -538,6 +532,14 @@
             audioChunkQueue = [];
             totalExpectedChunks = -1;
             nextExpectedChunkIndex = 0;
+            
+            // Instantly stop the HTML5 Audio Player if the user speaks
+            const audioEl = document.getElementById('usd-html-player');
+            if (audioEl) {
+                audioEl.pause();
+                audioEl.currentTime = 0;
+            }
+
             if (activeAudioSource) {
                 try { activeAudioSource.stop(); } catch(e) {}
                 activeAudioSource = null;
