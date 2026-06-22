@@ -757,7 +757,7 @@
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 700); 
+                                }, 400); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
