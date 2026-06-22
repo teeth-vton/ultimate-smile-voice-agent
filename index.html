@@ -946,35 +946,20 @@
             }
         }
 
-        async function handleLinkClick(tag) {
+       async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
-            logMessage('bot', linkInfo.voice);
-            chatHistory.push({ role: "model", parts: [{ text: linkInfo.voice }] });
-
-            if (isVoiceMode) {
-                interruptBot();
-                updateState('speaking');
-                
-                try {
-                    const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: linkInfo.voice, lang: 'en-IN' })
-                    });
-                    const data = await response.json();
-                    await playAudioChunk(data.audioBase64);
-                    updateState('cooldown'); 
-                    setTimeout(() => { 
-                        if(currentAgentState === 'cooldown') {
-                            updateState('listening');
-                        }
-                    }, 800);
-                } catch(e) { updateState('listening'); }
-            }
             
-            window.open(linkInfo.url, '_blank');
-        }
+            // Only add a text message to the screen (do NOT make the bot speak it out loud)
+            logMessage('bot', "Redirecting you now...");
+            chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
 
+            // Open the link in a new tab without interrupting the voice flow
+            window.open(linkInfo.url, '_blank');
+            
+            // Put the bot immediately back into listening mode
+            updateState('listening');
+        }
+        
         function logMessage(sender, text, tag = null) {
             const log = document.getElementById('usd-chat-log');
             const msgDiv = document.createElement('div');
