@@ -482,7 +482,8 @@
                     const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
                     activeAudioSource = audioCtx.createBufferSource();
                     activeAudioSource.buffer = audioBuffer;
-                    activeAudioSource.playbackRate.value = 1.20;
+                    activeAudioSource.playbackRate.value = 1.15;
+                    activeAudioSource.preservesPitch = true;
                     activeAudioSource.connect(audioCtx.destination);
                     
                     activeAudioSource.onended = () => {
