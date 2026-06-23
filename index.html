@@ -362,7 +362,6 @@
 
         // SOFTWARE MUTE SWITCH (Fixes mobile beeps)
         let isMicSoftwareMuted = true; 
-        let backgroundNoise = 15;
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
@@ -474,14 +473,23 @@
                 const audioEl = document.getElementById('usd-html-player');
                 audioEl.src = "data:audio/wav;base64," + base64;
                 
+                // ⚡ THE PERFECT FIX: HTML5 natively preserves pitch flawlessly!
                 audioEl.playbackRate = 1.15;
                 audioEl.preservesPitch = true;
-                audioEl.mozPreservesPitch = true;
-                audioEl.webkitPreservesPitch = true;
+                audioEl.mozPreservesPitch = true; // For Firefox
+                audioEl.webkitPreservesPitch = true; // For Safari/Chrome
 
-                audioEl.onended = () => { resolve(); };
-                audioEl.onerror = () => { resolve(); };
-                audioEl.play().catch(e => { resolve(); });
+                audioEl.onended = () => {
+                    resolve();
+                };
+                
+                audioEl.onerror = () => {
+                    resolve();
+                };
+                
+                audioEl.play().catch(e => {
+                    resolve();
+                });
             });
         }
 
@@ -525,6 +533,7 @@
             totalExpectedChunks = -1;
             nextExpectedChunkIndex = 0;
             
+            // Instantly stop the HTML5 Audio Player if the user speaks
             const audioEl = document.getElementById('usd-html-player');
             if (audioEl) {
                 audioEl.pause();
@@ -663,7 +672,7 @@
                     processor.connect(streamCtx.destination); 
 
                     let isRecording = false;
-                    let interimInterval = null; 
+                    let shortPauseTimer = null; 
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
                     let consecutiveLoudFrames = 0; 
@@ -694,21 +703,15 @@
                         for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
                         let humanVolume = voiceSum / voiceBins;
 
-                        if (humanVolume < backgroundNoise * 2) {
-                            backgroundNoise = (backgroundNoise * 0.98) + (humanVolume * 0.02);
-                        }
-                        let dynamicThreshold = Math.max(25, backgroundNoise + 15);
-
                         if (currentAgentState === 'speaking') {
-                            if (humanVolume > dynamicThreshold + 10) { 
+                            if (humanVolume > 65) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames > 10) { 
+                                if (consecutiveLoudFrames > 25) {
                                     interruptBot();
                                     updateState('listening');
                                     isRecording = true;
                                     
                                     if (socket && socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'interrupt' }));
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
                                 }
@@ -718,27 +721,18 @@
                             requestAnimationFrame(detectVoice); return;
                         }
 
-                        // FIXED: TRUE STREAMING INTERIM INTERVAL
                         if (currentAgentState === 'listening') {
-                            if (humanVolume > dynamicThreshold) { 
+                            if (humanVolume > 35) { 
                                 if (!isRecording) {
                                     isRecording = true;
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
-
-                                    // ⚡ FIX: Steady Heartbeat Interval for Interim Processing (800ms)
-                                    interimInterval = setInterval(() => {
-                                        if (isRecording && socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ type: 'process_interim' }));
-                                        }
-                                    }, 800); 
                                     
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
-                                            clearInterval(interimInterval); // Clear the interval
                                             updateState('thinking');
                                             document.getElementById('usd-interim-text').innerText = ""; 
                                             if (socket.readyState === WebSocket.OPEN) {
@@ -748,13 +742,18 @@
                                     }, 14000); 
                                 }
                                 
+                                clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
+                                
+                                shortPauseTimer = setTimeout(() => {
+                                    if (isRecording && socket.readyState === WebSocket.OPEN) {
+                                        socket.send(JSON.stringify({ type: 'process_interim' }));
+                                    }
+                                }, 600); 
 
-                                // Silence Detector (600ms of pure silence to cut off)
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
-                                        clearInterval(interimInterval); // Clear the interval
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking');
                                         document.getElementById('usd-interim-text').innerText = ""; 
@@ -762,7 +761,7 @@
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 600); 
+                                }, 400); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
@@ -954,10 +953,14 @@
        async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
             
+            // Only add a text message to the screen (do NOT make the bot speak it out loud)
             logMessage('bot', "Redirecting you now...");
             chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
 
+            // Open the link in a new tab without interrupting the voice flow
             window.open(linkInfo.url, '_blank');
+            
+            // Put the bot immediately back into listening mode
             updateState('listening');
         }
         
