@@ -749,7 +749,7 @@
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
-                                }, 600); 
+                                }, 150); 
 
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
@@ -761,7 +761,7 @@
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 400); 
+                                }, 500); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
