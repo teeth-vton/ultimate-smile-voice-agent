@@ -360,7 +360,7 @@
         let activeTag = null; 
         let activeBotMessageDiv = null; 
 
-        // SOFTWARE MUTE SWITCH (Fixes mobile beeps)
+        // SOFTWARE MUTE SWITCH
         let isMicSoftwareMuted = true; 
 
         const usdLinks = {
@@ -414,12 +414,6 @@
             sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
         }
 
-        function clearSessionState() {
-            sessionStorage.removeItem('usd_chat_active');
-            sessionStorage.removeItem('usd_chat_history');
-            sessionStorage.removeItem('usd_is_voice_mode');
-        }
-
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
@@ -441,6 +435,7 @@
                 if (isVoiceMode) visualizer.classList.remove('active');
             }
 
+            // Audio gatekeeper
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
             } else {
@@ -473,23 +468,15 @@
                 const audioEl = document.getElementById('usd-html-player');
                 audioEl.src = "data:audio/wav;base64," + base64;
                 
-                // ⚡ THE PERFECT FIX: HTML5 natively preserves pitch flawlessly!
                 audioEl.playbackRate = 1.15;
                 audioEl.preservesPitch = true;
-                audioEl.mozPreservesPitch = true; // For Firefox
-                audioEl.webkitPreservesPitch = true; // For Safari/Chrome
+                audioEl.mozPreservesPitch = true;
+                audioEl.webkitPreservesPitch = true; 
 
-                audioEl.onended = () => {
-                    resolve();
-                };
+                audioEl.onended = () => { resolve(); };
+                audioEl.onerror = () => { resolve(); };
                 
-                audioEl.onerror = () => {
-                    resolve();
-                };
-                
-                audioEl.play().catch(e => {
-                    resolve();
-                });
+                audioEl.play().catch(e => { resolve(); });
             });
         }
 
@@ -533,7 +520,6 @@
             totalExpectedChunks = -1;
             nextExpectedChunkIndex = 0;
             
-            // Instantly stop the HTML5 Audio Player if the user speaks
             const audioEl = document.getElementById('usd-html-player');
             if (audioEl) {
                 audioEl.pause();
@@ -543,6 +529,10 @@
             if (activeAudioSource) {
                 try { activeAudioSource.stop(); } catch(e) {}
                 activeAudioSource = null;
+            }
+            
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'interrupt' }));
             }
         }
 
@@ -608,7 +598,7 @@
                         logMessage(sender, cleanText, foundTag);
                     });
 
-                    updateState('thinking');
+                    updateState('listening');
                     await startWebSocket();
                 } else {
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
@@ -671,14 +661,10 @@
                     source.connect(processor);
                     processor.connect(streamCtx.destination); 
 
-                    let isRecording = false;
-                    let shortPauseTimer = null; 
-                    let longPauseTimer = null; 
-                    let maxRecordingTimer = null;
-                    let consecutiveLoudFrames = 0; 
-
+                    // ⚡ FIX: Continuous Audio Streaming
                     processor.onaudioprocess = (e) => {
-                        if (isMicSoftwareMuted) return;
+                        // Do not capture if muted by system (e.g., bot is speaking) or if in Text Mode
+                        if (isMicSoftwareMuted || !isVoiceMode) return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
                         const pcm16 = new Int16Array(inputData.length);
@@ -686,16 +672,14 @@
                             pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
                         }
                         
-                        if (socket && socket.readyState === WebSocket.OPEN && isRecording) {
+                        // Send audio blindly and continuously to the backend. Gemini's native AI handles the rest!
+                        if (socket && socket.readyState === WebSocket.OPEN) {
                             socket.send(pcm16.buffer); 
                         }
                     };
 
-                    function detectVoice() {
-                        if (isMicSoftwareMuted) {
-                            requestAnimationFrame(detectVoice); return;
-                        }
-
+                    // Kept for purely visual UI purposes (bouncing bars) and interruption
+                    function detectVisualVolume() {
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
                         analyser.getByteFrequencyData(dataArray);
                         
@@ -703,88 +687,22 @@
                         for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
                         let humanVolume = voiceSum / voiceBins;
 
-                        if (currentAgentState === 'speaking') {
-                            if (humanVolume > 65) { 
-                                consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames > 25) {
-                                    interruptBot();
-                                    updateState('listening');
-                                    isRecording = true;
-                                    
-                                    if (socket && socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                    }
-                                }
-                            } else {
-                                consecutiveLoudFrames = 0; 
-                            }
-                            requestAnimationFrame(detectVoice); return;
+                        // Interrupt logic if user speaks over the bot
+                        if (currentAgentState === 'speaking' && humanVolume > 65) {
+                            interruptBot();
+                            updateState('listening');
                         }
-
-                        if (currentAgentState === 'listening') {
-                            if (humanVolume > 35) { 
-                                if (!isRecording) {
-                                    isRecording = true;
-                                    
-                                    if (socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                    }
-                                    
-                                    maxRecordingTimer = setTimeout(() => {
-                                        if (isRecording) {
-                                            isRecording = false;
-                                            updateState('thinking');
-                                            document.getElementById('usd-interim-text').innerText = ""; 
-                                            if (socket.readyState === WebSocket.OPEN) {
-                                                socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
-                                            }
-                                        }
-                                    }, 14000); 
-                                }
-                                
-                                clearTimeout(shortPauseTimer);
-                                clearTimeout(longPauseTimer);
-                                
-                                shortPauseTimer = setTimeout(() => {
-                                    if (isRecording && socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'process_interim' }));
-                                    }
-                                }, 600); 
-
-                                longPauseTimer = setTimeout(() => {
-                                    if (isRecording) {
-                                        isRecording = false;
-                                        clearTimeout(maxRecordingTimer);
-                                        updateState('thinking');
-                                        document.getElementById('usd-interim-text').innerText = ""; 
-                                        if (socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
-                                        }
-                                    }
-                                }, 400); 
-                            }
-                        }
-                        requestAnimationFrame(detectVoice);
+                        
+                        requestAnimationFrame(detectVisualVolume);
                     }
                     
-                    detectVoice();
+                    detectVisualVolume();
                 };
 
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    if (data.type === 'idle') {
-                        document.getElementById('usd-interim-text').innerText = "";
-                        updateState('listening');
-                    }
-                    else if (data.type === 'user_spoken_text') {
-                        document.getElementById('usd-interim-text').innerText = ""; 
-                        logMessage('user', data.text);
-                    }
-                    else if (data.type === 'interim_transcript') {
-                        document.getElementById('usd-interim-text').innerText = data.text;
-                    }
-                    else if (data.type === 'text_stream') {
+                    if (data.type === 'text_stream') {
                         if (!activeBotMessageDiv) {
                             const log = document.getElementById('usd-chat-log');
                             activeBotMessageDiv = document.createElement('div');
@@ -824,10 +742,6 @@
                             updateState('listening');
                             if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
                         }
-                    }
-                    else if (data.type === 'error') {
-                        document.getElementById('usd-interim-text').innerText = "";
-                        updateState('listening');
                     }
                 };
 
@@ -953,14 +867,11 @@
        async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
             
-            // Only add a text message to the screen (do NOT make the bot speak it out loud)
             logMessage('bot', "Redirecting you now...");
             chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
 
-            // Open the link in a new tab without interrupting the voice flow
             window.open(linkInfo.url, '_blank');
             
-            // Put the bot immediately back into listening mode
             updateState('listening');
         }
         
