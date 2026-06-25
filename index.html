@@ -210,6 +210,15 @@
             max-height: 70px;
             overflow-y: auto;
         }
+        #usd-live-transcript-link-wrap {
+            display: none;
+            margin-top: 8px;
+        }
+        #usd-live-transcript-link-wrap .usd-link-card {
+            margin-top: 0;
+            font-size: 11px;
+            padding: 9px 10px;
+        }
 
         #usd-input-container {
             display: none; 
@@ -352,6 +361,7 @@
                 <div id="usd-live-transcript-popup">
                     <div id="usd-live-transcript-label">Assistant speaking</div>
                     <div id="usd-live-transcript-text"></div>
+                    <div id="usd-live-transcript-link-wrap"></div>
                 </div>
 
                 <div id="usd-chat-log"></div>
@@ -491,7 +501,117 @@
             }
         }
 
-        function showLiveTranscript(text) {
+        function detectLocalTagFromText(input = '') {
+            const text = String(input || "").toLowerCase();
+
+            if (
+                text.includes("end chat") ||
+                text.includes("goodbye") ||
+                text.includes("bye") ||
+                text.includes("take care") ||
+                text.includes("see you")
+            ) {
+                return "[END_CHAT]";
+            }
+
+            if (
+                text.includes("virtual smile") ||
+                text.includes("try on") ||
+                text.includes("try-on") ||
+                text.includes("smile try") ||
+                text.includes("smile makeover") ||
+                text.includes("design my smile") ||
+                text.includes("see how your smile") ||
+                text.includes("before and after") ||
+                text.includes("before/after")
+            ) {
+                return "[LINK_VTRYON]";
+            }
+
+            if (
+                text.includes("certified dentist") ||
+                text.includes("nearest dentist") ||
+                text.includes("find dentist") ||
+                text.includes("find a dentist") ||
+                text.includes("nearby dentist") ||
+                text.includes("locate dentist") ||
+                text.includes("dentist near")
+            ) {
+                return "[LINK_DENTISTS]";
+            }
+
+            if (
+                text.includes("consultation") ||
+                text.includes("consult") ||
+                text.includes("schedule") ||
+                text.includes("appointment") ||
+                text.includes("book") ||
+                text.includes("visit the clinic")
+            ) {
+                return "[LINK_CONSULT]";
+            }
+
+            if (
+                text.includes("contact") ||
+                text.includes("reach out") ||
+                text.includes("get in touch") ||
+                text.includes("call us") ||
+                text.includes("phone number")
+            ) {
+                return "[LINK_CONTACT]";
+            }
+
+            if (
+                text.includes("dentist connect") ||
+                text.includes("become certified dentist") ||
+                text.includes("collaborate") ||
+                text.includes("partner") ||
+                text.includes("join our network")
+            ) {
+                return "[LINK_CONNECT]";
+            }
+
+            if (
+                text.includes("gallery") ||
+                text.includes("results") ||
+                text.includes("before and after") ||
+                text.includes("before/after")
+            ) {
+                return "[LINK_GALLERY]";
+            }
+
+            return null;
+        }
+
+        function renderPopupLink(tag) {
+            const wrap = document.getElementById('usd-live-transcript-link-wrap');
+            if (!wrap) return;
+
+            wrap.innerHTML = '';
+
+            if (!tag || !usdLinks[tag]) {
+                wrap.style.display = 'none';
+                return;
+            }
+
+            const label = document.createElement('div');
+            label.style.color = '#D4AF37';
+            label.style.fontSize = '11px';
+            label.style.fontWeight = 'bold';
+            label.style.marginBottom = '6px';
+            label.innerText = 'Suggested action';
+
+            const btn = document.createElement('button');
+            btn.className = 'usd-link-card';
+            btn.innerText = usdLinks[tag].label;
+            btn.onclick = () => handleLinkClick(tag);
+
+            wrap.appendChild(label);
+            wrap.appendChild(btn);
+            wrap.style.display = 'block';
+        }
+
+        function showLiveTranscript(text, tag = null) {
             const popup = document.getElementById('usd-live-transcript-popup');
             const popupText = document.getElementById('usd-live-transcript-text');
             if (!popup || !popupText) return;
@@ -499,6 +619,7 @@
             if (text && text.trim()) {
                 popupText.textContent = text.trim();
                 popup.style.display = 'block';
+                renderPopupLink(tag);
                 clearTimeout(liveTranscriptHideTimer);
             }
         }
@@ -507,19 +628,15 @@
             clearTimeout(liveTranscriptHideTimer);
             liveTranscriptHideTimer = setTimeout(() => {
                 const popup = document.getElementById('usd-live-transcript-popup');
+                const popupText = document.getElementById('usd-live-transcript-text');
+                const popupLinkWrap = document.getElementById('usd-live-transcript-link-wrap');
                 if (popup) popup.style.display = 'none';
+                if (popupText) popupText.textContent = '';
+                if (popupLinkWrap) {
+                    popupLinkWrap.innerHTML = '';
+                    popupLinkWrap.style.display = 'none';
+                }
             }, delay);
-        }
-
-        function appendLinkButton(targetEl, tag) {
-            if (!targetEl || !tag || !usdLinks[tag]) return;
-
-            const tagToOpen = tag;
-            const btn = document.createElement('button');
-            btn.className = 'usd-link-card';
-            btn.innerText = usdLinks[tagToOpen].label;
-            btn.onclick = () => handleLinkClick(tagToOpen);
-            targetEl.appendChild(btn);
         }
 
         function createMessageDiv(sender, text) {
@@ -535,6 +652,16 @@
 
             msgDiv.appendChild(span);
             return msgDiv;
+        }
+
+        function appendLinkButton(targetEl, tag) {
+            if (!targetEl || !tag || !usdLinks[tag]) return;
+
+            const btn = document.createElement('button');
+            btn.className = 'usd-link-card';
+            btn.innerText = usdLinks[tag].label;
+            btn.onclick = () => handleLinkClick(tag);
+            targetEl.appendChild(btn);
         }
 
         function checkBotFinishedSpeaking() {
@@ -659,8 +786,7 @@
                 document.getElementById('usd-input-container').style.display = 'flex';
                 document.getElementById('usd-inline-rating').style.display = 'none';
                 document.getElementById('usd-mode-toggle').style.display = 'block';
-                document.getElementById('usd-live-transcript-popup').style.display = 'none';
-                document.getElementById('usd-live-transcript-text').textContent = '';
+                hideLiveTranscript(0);
                 
                 if (isRestore) {
                     chatHistory = JSON.parse(sessionStorage.getItem('usd_chat_history') || '[]');
@@ -690,9 +816,6 @@
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory = [];
-                    activeBotMessageDiv = null;
-                    activeBotTextSpan = null;
-                    lastBotMessageDiv = null;
                     
                     updateState('connecting', "Calling assistant... 🟡");
                     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -878,7 +1001,9 @@
                             activeBotTextSpan.textContent = "Assistant: " + data.text;
                         }
 
-                        showLiveTranscript(data.text);
+                        const previewTag = detectLocalTagFromText(data.text);
+                        showLiveTranscript(data.text, previewTag);
+
                         const log = document.getElementById('usd-chat-log');
                         log.scrollTop = log.scrollHeight;
                     }
@@ -890,6 +1015,8 @@
                         const botTarget = activeBotMessageDiv || lastBotMessageDiv;
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
+
+                        const finalTag = data.tag || detectLocalTagFromText(data.botText || '');
                         
                         if (botTarget && data.botText) {
                             const span = botTarget.querySelector('.usd-msg-text');
@@ -905,7 +1032,7 @@
                         chatHistory.push({ role: "model", parts: [{ text: data.botText }] });
                         sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
-                        activeTag = data.tag;
+                        activeTag = finalTag;
                         isReplyComplete = true; 
                         
                         const finalBotTarget = botTarget || lastBotMessageDiv;
@@ -913,6 +1040,12 @@
                             appendLinkButton(finalBotTarget, activeTag);
                             const log = document.getElementById('usd-chat-log');
                             log.scrollTop = log.scrollHeight;
+                        }
+
+                        if (activeTag && usdLinks[activeTag]) {
+                            showLiveTranscript(data.botText, activeTag);
+                        } else {
+                            showLiveTranscript(data.botText, null);
                         }
                         
                         if (!isVoiceMode) {
@@ -922,7 +1055,7 @@
                             checkBotFinishedSpeaking(); 
                         }
 
-                        hideLiveTranscript(1800);
+                        hideLiveTranscript(2500);
                     }
                     else if (data.type === 'error') {
                         document.getElementById('usd-interim-text').innerText = "";
