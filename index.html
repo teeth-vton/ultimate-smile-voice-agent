@@ -349,10 +349,10 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        // ⚡ THE NEW WEB AUDIO API ENGINE ⚡
+        // ⚡ BULLETPROOF WEB AUDIO QUEUE ENGINE ⚡
         let audioCtx = null;
         let audioChunkQueue = [];
-        let nextExpectedChunkIndex = 0;
+        let chunksPlayed = 0; 
         let totalExpectedChunks = -1;
         let isAudioPlaying = false;
         let activeSources = []; 
@@ -447,7 +447,6 @@
             }
         }
 
-        // ⚡ GAPLESS PLAYBACK LOGIC START ⚡
         async function initAudio() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -457,12 +456,12 @@
             }
         }
 
+        // ⚡ UPDATED: RELIABLE FIFO QUEUE LOGIC ⚡
         async function playAudioChunk(base64) {
             if (!base64) return;
             updateState('speaking');
 
             try {
-                // Decode the base64 WAV payload
                 const binaryString = window.atob(base64);
                 const bytes = new Uint8Array(binaryString.length);
                 for (let i = 0; i < binaryString.length; i++) {
@@ -474,15 +473,14 @@
                 source.buffer = audioBuffer;
                 source.connect(audioCtx.destination);
                 
-                // You mentioned keeping the speed snappy. Here it is:
                 source.playbackRate.value = 1.15; 
                 
-                // Ensure we don't schedule back in time
-                if (nextPlayTime < audioCtx.currentTime) {
+                // DEADLOCK / SILENT BUG FIX: Prevent nextPlayTime from drifting off into the future
+                const timeDiff = nextPlayTime - audioCtx.currentTime;
+                if (timeDiff < 0 || timeDiff > 1.5) {
                     nextPlayTime = audioCtx.currentTime;
                 }
                 
-                // Tell the audio API exactly when to play this chunk to snap it perfectly to the end of the last one.
                 source.start(nextPlayTime);
                 nextPlayTime += audioBuffer.duration / 1.15; 
                 
@@ -500,21 +498,14 @@
             isAudioPlaying = true;
             
             while (audioChunkQueue.length > 0) {
-                 audioChunkQueue.sort((a, b) => a.index - b.index);
-                 if (audioChunkQueue[0].index !== nextExpectedChunkIndex) {
-                     break; 
-                 }
-                 
-                 const chunk = audioChunkQueue.shift();
-                 nextExpectedChunkIndex++;
-                 
+                 const chunk = audioChunkQueue.shift(); 
                  await playAudioChunk(chunk.audioBase64);
+                 chunksPlayed++; 
                  
-                 if (nextExpectedChunkIndex === totalExpectedChunks && audioChunkQueue.length === 0) {
+                 if (chunksPlayed === totalExpectedChunks && audioChunkQueue.length === 0) {
                      totalExpectedChunks = -1;
-                     nextExpectedChunkIndex = 0;
+                     chunksPlayed = 0; 
                      
-                     // We calculate when the whole batch actually finishes playing
                      const delayMs = Math.max(0, (nextPlayTime - audioCtx.currentTime) * 1000);
                      
                      setTimeout(() => {
@@ -538,16 +529,14 @@
         function interruptBot() {
             audioChunkQueue = [];
             totalExpectedChunks = -1;
-            nextExpectedChunkIndex = 0;
-            nextPlayTime = 0; // Wipe the future schedule slate clean
+            chunksPlayed = 0; 
+            nextPlayTime = 0; 
             
-            // Kill all running audio nodes immediately
             activeSources.forEach(s => {
                 try { s.stop(); } catch(e) {}
             });
             activeSources = [];
         }
-        // ⚡ GAPLESS PLAYBACK LOGIC END ⚡
 
         function toggleChatMode() {
             isVoiceMode = !isVoiceMode;
@@ -826,6 +815,9 @@
                         if (!isVoiceMode || totalExpectedChunks === 0) {
                             updateState('listening');
                             if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
+                        } else {
+                            // Ensure queue resolves if it got stuck waiting for this packet
+                            processAudioQueue();
                         }
                     }
                     else if (data.type === 'error') {
