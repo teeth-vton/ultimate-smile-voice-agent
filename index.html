@@ -349,7 +349,7 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        // ⚡ BULLETPROOF QUEUE ENGINE: NO OVERLAP POSSIBLE ⚡
+        // ⚡ RAW PCM AUDIO ENGINE (NO GLITCHES, NO CHIPMUNK PITCH) ⚡
         let audioCtx = null;
         let audioChunkQueue = [];
         let chunksPlayed = 0; 
@@ -444,44 +444,51 @@
             }
         }
 
-        // ⚡ THE FIX: PERFECT SEQUENTIAL TIMING WITH NO OVERLAPS ⚡
+        // ⚡ RAW PCM MATH (No WAV decoders to break, perfect speed/pitch) ⚡
         async function playAudioChunk(base64) {
             if (!base64) return;
             updateState('speaking');
 
             try {
+                // Decode Base64 to Raw Binary
                 const binaryString = window.atob(base64);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
                     bytes[i] = binaryString.charCodeAt(i);
                 }
                 
-                const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+                // Convert 16-bit PCM to 32-bit Float (Required for Web Audio API)
+                const pcm16 = new Int16Array(bytes.buffer);
+                const float32 = new Float32Array(pcm16.length);
+                for (let i = 0; i < pcm16.length; i++) {
+                    float32[i] = pcm16[i] / 32768.0;
+                }
+                
+                // Create Buffer directly (Gemini audio is 24kHz)
+                const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000);
+                audioBuffer.copyToChannel(float32, 0);
+
                 const source = audioCtx.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioCtx.destination);
                 
-                const playbackSpeed = 1.15;
-                source.playbackRate.value = playbackSpeed; 
+                // NO MORE SPEED HACKS. Play at exactly 1.0 to keep the "Kore" pitch deep and professional.
+                source.playbackRate.value = 1.0; 
                 
-                // If the nextPlayTime is in the past, it means the queue was empty. 
-                // We add a tiny 50ms padding to prevent pop sounds.
                 if (nextPlayTime < audioCtx.currentTime) {
                     nextPlayTime = audioCtx.currentTime + 0.05; 
                 }
                 
-                // Start exactly where the last one finished. No more "> 1.5" resets causing overlaps!
                 source.start(nextPlayTime);
-                
-                // Advance the playhead based on exactly how long this chunk takes to play.
-                nextPlayTime += (audioBuffer.duration / playbackSpeed); 
+                nextPlayTime += audioBuffer.duration; 
                 
                 activeSources.push(source);
                 source.onended = () => {
                     activeSources = activeSources.filter(s => s !== source);
                 };
             } catch (e) {
-                console.error("Audio decode error:", e);
+                console.error("PCM Decode error:", e);
             }
         }
 
@@ -494,15 +501,12 @@
                  await playAudioChunk(chunk.audioBase64);
                  chunksPlayed++; 
                  
-                 // If we have pushed all chunks to the audio card for playback...
                  if (chunksPlayed === totalExpectedChunks && audioChunkQueue.length === 0) {
                      totalExpectedChunks = -1;
                      chunksPlayed = 0; 
                      
-                     // Calculate exactly how many milliseconds until the audio physically finishes playing
                      const delayMs = Math.max(0, (nextPlayTime - audioCtx.currentTime) * 1000);
                      
-                     // Wait until the audio is 100% finished (+ 300ms safety pad) before unmuting the mic
                      setTimeout(() => {
                          if (activeTag === '[END_CHAT]') {
                              setTimeout(() => closeChat(true), 2000);
@@ -515,7 +519,7 @@
                              }, 600);
                          }
                          activeTag = null; 
-                     }, delayMs + 300); // <-- This pad ensures your mic doesn't pick up the end of the sentence
+                     }, delayMs + 300); 
                  }
             }
             isAudioPlaying = false;
@@ -691,10 +695,9 @@
                         let humanVolume = voiceSum / voiceBins;
 
                         if (currentAgentState === 'speaking') {
-                            // If user explicitly interrupts while the bot is talking (takes a louder voice to prevent echo triggers)
-                            if (humanVolume > 80) { 
+                            if (humanVolume > 85) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames > 35) {
+                                if (consecutiveLoudFrames > 40) { // Slightly longer volume requirement to avoid echo interruption
                                     interruptBot();
                                     updateState('listening');
                                     isRecording = true;
