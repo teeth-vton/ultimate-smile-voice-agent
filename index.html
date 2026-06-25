@@ -464,34 +464,73 @@
             oscillator.stop(audioCtx.currentTime + 0.001);
         }
 
-       async function playAudioChunk(base64) {
-            return new Promise((resolve) => {
-                if (!base64) { resolve(); return; } 
-                
-                updateState('speaking');
+     let nextPlayTime = 0; // Tracks perfect gapless scheduling
 
-                const audioEl = document.getElementById('usd-html-player');
-                audioEl.src = "data:audio/wav;base64," + base64;
-                
-                // ⚡ THE PERFECT FIX: HTML5 natively preserves pitch flawlessly!
-                audioEl.playbackRate = 1.15;
-                audioEl.preservesPitch = true;
-                audioEl.mozPreservesPitch = true; // For Firefox
-                audioEl.webkitPreservesPitch = true; // For Safari/Chrome
+async function playAudioChunk(base64) {
+    return new Promise(async (resolve) => {
+        if (!base64) { resolve(); return; } 
+        updateState('speaking');
 
-                audioEl.onended = () => {
-                    resolve();
-                };
-                
-                audioEl.onerror = () => {
-                    resolve();
-                };
-                
-                audioEl.play().catch(e => {
-                    resolve();
-                });
-            });
+        try {
+            // 1. Convert base64 into a binary buffer
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            // 2. Decode the raw audio using Web Audio API (This is how AI Studio does it!)
+            const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+            const source = audioCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.playbackRate.value = 1.15; // Keeps your pitch setting
+            source.connect(audioCtx.destination);
+            
+            // 3. Seamless gapless scheduling (No HTML5 gaps!)
+            const currentTime = audioCtx.currentTime;
+            if (currentTime < nextPlayTime) {
+                source.start(nextPlayTime);
+                nextPlayTime += (audioBuffer.duration / 1.15);
+            } else {
+                source.start(currentTime);
+                nextPlayTime = currentTime + (audioBuffer.duration / 1.15);
+            }
+
+            activeAudioSource = source;
+
+            // Resolve only when this exact chunk finishes playing
+            source.onended = () => {
+                resolve();
+            };
+        } catch (e) {
+            console.error("Audio playback error:", e);
+            resolve();
         }
+    });
+}
+
+function interruptBot() {
+    audioChunkQueue = [];
+    totalExpectedChunks = -1;
+    nextExpectedChunkIndex = 0;
+    
+    // Wipe the HTML player just in case
+    const audioEl = document.getElementById('usd-html-player');
+    if (audioEl) {
+        audioEl.pause();
+        audioEl.currentTime = 0;
+    }
+
+    // Instantly stop the Web Audio API
+    if (activeAudioSource) {
+        try { activeAudioSource.stop(); } catch(e) {}
+        activeAudioSource = null;
+    }
+    
+    // Reset scheduling time so it doesn't wait to play the next audio
+    nextPlayTime = 0; 
+}
 
         async function processAudioQueue() {
             if (isAudioPlaying) return;
@@ -525,24 +564,6 @@
                 } else {
                     processAudioQueue(); 
                 }
-            }
-        }
-
-        function interruptBot() {
-            audioChunkQueue = [];
-            totalExpectedChunks = -1;
-            nextExpectedChunkIndex = 0;
-            
-            // Instantly stop the HTML5 Audio Player if the user speaks
-            const audioEl = document.getElementById('usd-html-player');
-            if (audioEl) {
-                audioEl.pause();
-                audioEl.currentTime = 0;
-            }
-
-            if (activeAudioSource) {
-                try { activeAudioSource.stop(); } catch(e) {}
-                activeAudioSource = null;
             }
         }
 
