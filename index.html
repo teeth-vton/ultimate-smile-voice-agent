@@ -256,10 +256,6 @@
     </style>
 </head>
 <body>
-
-    <audio id="usd-webrtc-player" autoplay playsinline style="display: none;"></audio>
-    <audio id="usd-html-player" preload="auto" style="display: none;"></audio>
-
     <div id="usd-voice-widget">
         <div id="usd-tooltip" onclick="openChat(false)">
             Namaste! Tap here to talk about your new smile!
@@ -316,10 +312,16 @@
 
     <script>
         const RENDER_BACKEND_URL = "https://nikjoshi123-usd-voice-backend.hf.space";
+        const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
+
+        let socket = null;
+        let globalStream = null;
+        let currentAgentState = 'off';
         
-        let peerConnection = null;
-        let dataChannel = null;
-        let localStream = null;
+        // ⚡ WEB AUDIO API ENGINE (Replaces the glitchy HTML <audio> player)
+        let audioCtx = null;
+        let nextPlayTime = 0;
+        let activeAudioSource = null;
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
@@ -333,6 +335,7 @@
         };
 
         function updateState(newState, statusText = null) {
+            currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
             const visualizer = document.getElementById('usd-visualizer');
             if (statusBox && statusText) statusBox.innerText = statusText;
@@ -346,7 +349,13 @@
             document.getElementById('usd-tooltip').style.opacity = '0';
             updateState('connecting', "Calling assistant... 🟡");
 
-            // 1. Play the static TTS greeting while WebRTC loads in background
+            // Initialize Audio Engine on first click to satisfy browser policies
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+            // 1. Fetch and Play Greeting via Web Audio API
             const greeting = "Namaste! How can we assist you today?";
             logMessage('bot', greeting);
             try {
@@ -356,71 +365,144 @@
                     body: JSON.stringify({ text: greeting })
                 });
                 const data = await response.json();
-                const audioEl = document.getElementById('usd-html-player');
-                audioEl.src = "data:audio/wav;base64," + data.audioBase64;
-                audioEl.play();
+                await playAudioChunk(data.audioBase64);
             } catch(e) {}
 
-            // 2. Start the Zero-Latency WebRTC Connection
-            await startWebRTC();
+            // 2. Start WebSocket
+            await startWebSocket();
         }
 
-        async function startWebRTC() {
+        // ⚡ THE MAGIC FIX: Seamless Web Audio API Playback
+        async function playAudioChunk(base64) {
+            if (!base64) return;
+            updateState('speaking');
+
             try {
-                // Get Microphone Access
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+                // Decode base64 string to ArrayBuffer
+                const binaryString = window.atob(base64);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+
+                // Decode audio data
+                const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+                const source = audioCtx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioCtx.destination);
                 
-                // Initialize WebRTC Peer Connection
-                peerConnection = new RTCPeerConnection();
+                // Gapless Scheduling: Stitch it exactly at the end of the last audio chunk!
+                const currentTime = audioCtx.currentTime;
+                if (nextPlayTime < currentTime) {
+                    nextPlayTime = currentTime;
+                }
+                
+                source.start(nextPlayTime);
+                nextPlayTime += audioBuffer.duration;
+                activeAudioSource = source;
 
-                // Add microphone audio track to the connection
-                localStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, localStream);
-                });
+            } catch (e) {
+                console.error("Audio decoding error:", e);
+            }
+        }
 
-                // Listen for Gemini's audio track coming back
-                peerConnection.ontrack = (event) => {
-                    const webrtcPlayer = document.getElementById('usd-webrtc-player');
-                    webrtcPlayer.srcObject = event.streams[0];
-                    updateState('speaking', "Connected 🟢");
-                };
+        function interruptBot() {
+            // Instantly stop Web Audio playback
+            if (activeAudioSource) {
+                try { activeAudioSource.stop(); } catch(e) {}
+                activeAudioSource = null;
+            }
+            nextPlayTime = 0; // Reset scheduling timeline
+            
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'interrupt' }));
+            }
+        }
 
-                // Create Data Channel for Text/Tags (Optional depending on Gemini setup)
-                dataChannel = peerConnection.createDataChannel("gemini-data");
-                dataChannel.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.serverContent && data.serverContent.modelTurn) {
-                            const text = data.serverContent.modelTurn.parts[0].text;
-                            if (text) logMessage('bot', text);
+        async function startWebSocket() {
+            try {
+                socket = new WebSocket(WS_URL);
+
+                socket.onopen = async () => {
+                    updateState('listening', "Connected 🟢");
+
+                    // Setup Microphone
+                    globalStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false }
+                    });
+
+                    const streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                    const source = streamCtx.createMediaStreamSource(globalStream);
+                    const processor = streamCtx.createScriptProcessor(4096, 1, 1);
+                    const analyser = streamCtx.createAnalyser();
+
+                    source.connect(analyser);
+                    source.connect(processor);
+                    processor.connect(streamCtx.destination); 
+
+                    let isRecording = false;
+
+                    // Send raw PCM bytes to WebSocket continuously
+                    processor.onaudioprocess = (e) => {
+                        const inputData = e.inputBuffer.getChannelData(0);
+                        const pcm16 = new Int16Array(inputData.length);
+                        for (let i = 0; i < inputData.length; i++) {
+                            pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
                         }
-                    } catch(e) {}
+                        if (socket && socket.readyState === WebSocket.OPEN && isRecording) {
+                            socket.send(pcm16.buffer); 
+                        }
+                    };
+
+                    // Simple Voice Activity Detection (VAD) for interruption
+                    function detectVoice() {
+                        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                        analyser.getByteFrequencyData(dataArray);
+                        let voiceSum = 0; let voiceBins = 0;
+                        for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
+                        let humanVolume = voiceSum / voiceBins;
+
+                        // Barge-in trigger
+                        if (currentAgentState === 'speaking' && humanVolume > 65) { 
+                            interruptBot();
+                            updateState('listening');
+                            isRecording = true;
+                        }
+                        // Start recording trigger
+                        else if (currentAgentState === 'listening' && humanVolume > 35) { 
+                            if (!isRecording) {
+                                isRecording = true;
+                                if (socket.readyState === WebSocket.OPEN) {
+                                    socket.send(JSON.stringify({ type: 'start_of_speech' }));
+                                }
+                            }
+                        }
+                        requestAnimationFrame(detectVoice);
+                    }
+                    detectVoice();
                 };
 
-                // Create SDP Offer
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
+                // Receive messages from Backend
+                socket.onmessage = async (event) => {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'audio_chunk') {
+                        await playAudioChunk(data.audioBase64);
+                    }
+                    else if (data.type === 'text_stream') {
+                        // Optional: Append text to UI here if needed
+                    }
+                    else if (data.type === 'reply_complete') {
+                        if (data.botText) logMessage('bot', data.botText, data.tag);
+                        updateState('listening');
+                    }
+                };
 
-                // Send Offer to Backend to handshake with Google
-                const response = await fetch(`${RENDER_BACKEND_URL}/api/webrtc/connect`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sdp: peerConnection.localDescription.sdp })
-                });
-
-                const data = await response.json();
-
-                // Accept Gemini's Answer
-                await peerConnection.setRemoteDescription(new RTCSessionDescription({
-                    type: 'answer',
-                    sdp: data.sdp
-                }));
-
-                updateState('listening', "Connected 🟢");
-                console.log("WebRTC Zero-Latency Stream Active!");
-
-            } catch (error) {
-                console.error("WebRTC Error:", error);
+            } catch (err) {
+                console.error("WS Start Error", err);
                 updateState('error', "Connection Failed 🔴");
             }
         }
@@ -453,8 +535,9 @@
         function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
-                if (peerConnection) peerConnection.close();
-                if (localStream) localStream.getTracks().forEach(t => t.stop());
+                interruptBot();
+                if (socket) socket.close();
+                if (globalStream) globalStream.getTracks().forEach(t => t.stop());
                 document.getElementById('usd-chat-container').style.display = 'none';
                 document.getElementById('usd-bubble').style.display = 'flex';
             }
