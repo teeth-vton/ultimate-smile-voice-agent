@@ -419,7 +419,7 @@
         let activeBotTextSpan = null;
         let lastBotMessageDiv = null;
         let isMicSoftwareMuted = true; 
-        let interruptCooldownUntil = 0;
+        let interruptRestartHoldUntil = 0;
         let liveTranscriptHideTimer = null;
         let currentLiveAssistantText = "";
         let currentLiveAssistantTag = null;
@@ -504,6 +504,12 @@
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
+        }
+
+        function syncTranscriptLabel() {
+            const label = document.getElementById('usd-live-transcript-label');
+            if (!label) return;
+            label.innerText = isVoiceMode ? 'Assistant speaking' : 'Assistant typing';
         }
 
         function detectLocalTagFromText(input = '') {
@@ -634,7 +640,7 @@
             // medium sensitivity:
             // - close human speech should pass
             // - distant noise / far speech should not
-            // - mobile echo/self voice is reduced by cooldown below
+            // - mobile echo/self voice is reduced by short hold below
             const isNearHumanSpeech =
                 rms > 0.045 &&
                 speechAvg > 28 &&
@@ -685,6 +691,8 @@
             const popup = document.getElementById('usd-live-transcript-popup');
             const popupText = document.getElementById('usd-live-transcript-text');
             if (!popup || !popupText) return;
+
+            syncTranscriptLabel();
 
             const clean = String(text || '').trim();
 
@@ -821,6 +829,9 @@
             isReplyComplete = false; 
             nextPlayTime = 0; 
             
+            // short hold to stop mobile speaker echo/self-voice loops
+            interruptRestartHoldUntil = performance.now() + 180;
+
             activeSources.forEach(s => {
                 try { s.stop(); } catch(e) {}
             });
@@ -842,6 +853,7 @@
                 textControls.style.display = "none";
                 micText.style.display = "block";
                 if (liveTranscript) liveTranscript.style.display = "none";
+                syncTranscriptLabel();
                 updateState('listening');
             } else {
                 toggleBtn.innerText = "🎙️ Voice";
@@ -850,6 +862,7 @@
                 micText.style.display = "none";
                 if (liveTranscript) liveTranscript.style.display = "none";
                 interruptBot();
+                syncTranscriptLabel();
                 updateState('listening');
             }
             sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
@@ -857,7 +870,7 @@
 
         async function openChat(isRestore = false) {
             initAudio();
-            interruptCooldownUntil = 0;
+            interruptRestartHoldUntil = 0;
             const container = document.getElementById('usd-chat-container');
             const tooltip = document.getElementById('usd-tooltip');
             const bubble = document.getElementById('usd-bubble');
@@ -872,6 +885,7 @@
                 document.getElementById('usd-inline-rating').style.display = 'none';
                 document.getElementById('usd-mode-toggle').style.display = 'block';
                 hideLiveTranscript(0);
+                syncTranscriptLabel();
                 
                 if (isRestore) {
                     chatHistory = JSON.parse(sessionStorage.getItem('usd_chat_history') || '[]');
@@ -881,6 +895,7 @@
                     toggleBtn.innerText = isVoiceMode ? "🎙️ Voice" : "💬 Text";
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
                     else document.getElementById('usd-visualizer').style.display = 'none';
+                    syncTranscriptLabel();
                     
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory.forEach(turn => {
@@ -901,6 +916,9 @@
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory = [];
+                    activeBotMessageDiv = null;
+                    activeBotTextSpan = null;
+                    lastBotMessageDiv = null;
                     
                     updateState('connecting', "Calling assistant... 🟡");
                     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -978,14 +996,6 @@
                     function detectVoice() {
                         const isSpeakingNow = currentAgentState === 'speaking';
 
-                        // Cooldown blocks re-trigger loops from mobile speaker echo after interrupt
-                        if (performance.now() < interruptCooldownUntil) {
-                            requestAnimationFrame(detectVoice);
-                            return;
-                        }
-
-                        // Normal mute behavior stays the same,
-                        // but while bot is speaking we still analyze for interrupt only
                         if (isMicSoftwareMuted && !isSpeakingNow) {
                             requestAnimationFrame(detectVoice);
                             return;
@@ -1000,7 +1010,7 @@
                         // Existing overall volume logic for normal listening mode
                         let voiceSum = 0; let voiceBins = 0;
                         for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
-                        let humanVolume = voiceSum / voiceBins;
+                        let humanVolume = voiceSum / Math.max(1, voiceBins);
 
                         // Human-speech-only profile for interrupting the bot
                         const speechProfile = getHumanSpeechProfile(
@@ -1016,15 +1026,17 @@
                                 consecutiveLoudFrames++;
                                 if (consecutiveLoudFrames >= 5) { 
                                     consecutiveLoudFrames = 0;
-                                    interruptCooldownUntil = performance.now() + 800;
+
+                                    clearTimeout(shortPauseTimer);
+                                    clearTimeout(longPauseTimer);
+                                    clearTimeout(maxRecordingTimer);
+                                    shortPauseTimer = null;
+                                    longPauseTimer = null;
+                                    maxRecordingTimer = null;
 
                                     interruptBot();
                                     updateState('listening');
-                                    isRecording = true;
-                                    
-                                    if (socket && socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                    }
+                                    isRecording = false;
                                 }
                             } else {
                                 consecutiveLoudFrames = 0; 
@@ -1033,7 +1045,20 @@
                         }
 
                         if (currentAgentState === 'listening') {
-                            if (humanVolume > 50) { 
+                            const inRestartHold = performance.now() < interruptRestartHoldUntil;
+
+                            // Normal mode: same as before
+                            // After interrupt: use stricter condition to prevent self-voice loop
+                            const canStartRecording = inRestartHold
+                                ? (
+                                    speechProfile.isNearHumanSpeech &&
+                                    humanVolume > 66 &&
+                                    speechProfile.speechRatio > 0.60 &&
+                                    speechProfile.coreVsNoise > 1.18
+                                )
+                                : (humanVolume > 50);
+
+                            if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
                                     
@@ -1120,8 +1145,10 @@
                         log.scrollTop = log.scrollHeight;
                     }
                     else if (data.type === 'audio_chunk') {
-                        audioChunkQueue.push(data);
-                        processAudioQueue();
+                        if (isVoiceMode) {
+                            audioChunkQueue.push(data);
+                            processAudioQueue();
+                        }
                     }
                     else if (data.type === 'reply_complete') {
                         const botTarget = activeBotMessageDiv || lastBotMessageDiv;
@@ -1299,6 +1326,7 @@
 
        async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
+            if (!linkInfo) return;
             
             logMessage('bot', "Redirecting you now...");
             chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
