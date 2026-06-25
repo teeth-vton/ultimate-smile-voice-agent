@@ -192,6 +192,8 @@
             background: rgba(212, 175, 55, 0.10);
             border: 1px solid rgba(212, 175, 55, 0.35);
             box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            position: relative;
+            z-index: 5;
         }
         #usd-live-transcript-label {
             color: #D4AF37;
@@ -418,6 +420,8 @@
         let lastBotMessageDiv = null;
         let isMicSoftwareMuted = true; 
         let liveTranscriptHideTimer = null;
+        let currentLiveAssistantText = "";
+        let currentLiveAssistantTag = null;
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
@@ -611,16 +615,28 @@
             wrap.style.display = 'block';
         }
 
-        function showLiveTranscript(text, tag = null) {
+        function updateLiveTranscript(text, tag = null, force = false) {
             const popup = document.getElementById('usd-live-transcript-popup');
             const popupText = document.getElementById('usd-live-transcript-text');
             if (!popup || !popupText) return;
 
-            if (text && text.trim()) {
-                popupText.textContent = text.trim();
+            const clean = String(text || '').trim();
+
+            if (clean) {
+                currentLiveAssistantText = clean;
+            } else if (force && currentLiveAssistantText) {
+                text = currentLiveAssistantText;
+            }
+
+            const finalText = String(text || currentLiveAssistantText || '').trim();
+            const finalTag = tag || detectLocalTagFromText(finalText) || currentLiveAssistantTag;
+
+            currentLiveAssistantTag = finalTag || null;
+            popupText.textContent = finalText;
+
+            if (finalText) {
                 popup.style.display = 'block';
-                renderPopupLink(tag);
-                clearTimeout(liveTranscriptHideTimer);
+                renderPopupLink(finalTag);
             }
         }
 
@@ -636,6 +652,8 @@
                     popupLinkWrap.innerHTML = '';
                     popupLinkWrap.style.display = 'none';
                 }
+                currentLiveAssistantText = "";
+                currentLiveAssistantTag = null;
             }, delay);
         }
 
@@ -680,7 +698,7 @@
                     }, 400); 
                 }
                 activeTag = null;
-                hideLiveTranscript(1200);
+                hideLiveTranscript(2500);
             }
         }
 
@@ -816,6 +834,9 @@
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory = [];
+                    activeBotMessageDiv = null;
+                    activeBotTextSpan = null;
+                    lastBotMessageDiv = null;
                     
                     updateState('connecting', "Calling assistant... 🟡");
                     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1002,7 +1023,7 @@
                         }
 
                         const previewTag = detectLocalTagFromText(data.text);
-                        showLiveTranscript(data.text, previewTag);
+                        updateLiveTranscript(data.text, previewTag);
 
                         const log = document.getElementById('usd-chat-log');
                         log.scrollTop = log.scrollHeight;
@@ -1016,20 +1037,21 @@
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
 
-                        const finalTag = data.tag || detectLocalTagFromText(data.botText || '');
-                        
-                        if (botTarget && data.botText) {
+                        const finalText = String(data.botText || currentLiveAssistantText || '').trim();
+                        const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
+
+                        if (botTarget && finalText) {
                             const span = botTarget.querySelector('.usd-msg-text');
                             if (span) {
-                                span.textContent = "Assistant: " + data.botText;
+                                span.textContent = "Assistant: " + finalText;
                             }
                         }
 
-                        if (!botTarget && data.botText) {
-                            lastBotMessageDiv = logMessage('bot', data.botText);
+                        if (!botTarget && finalText) {
+                            lastBotMessageDiv = logMessage('bot', finalText);
                         }
                         
-                        chatHistory.push({ role: "model", parts: [{ text: data.botText }] });
+                        chatHistory.push({ role: "model", parts: [{ text: finalText }] });
                         sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
                         activeTag = finalTag;
@@ -1042,12 +1064,8 @@
                             log.scrollTop = log.scrollHeight;
                         }
 
-                        if (activeTag && usdLinks[activeTag]) {
-                            showLiveTranscript(data.botText, activeTag);
-                        } else {
-                            showLiveTranscript(data.botText, null);
-                        }
-                        
+                        updateLiveTranscript(finalText, activeTag, true);
+
                         if (!isVoiceMode) {
                             updateState('listening');
                             if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
@@ -1055,7 +1073,7 @@
                             checkBotFinishedSpeaking(); 
                         }
 
-                        hideLiveTranscript(2500);
+                        hideLiveTranscript(3500);
                     }
                     else if (data.type === 'error') {
                         document.getElementById('usd-interim-text').innerText = "";
