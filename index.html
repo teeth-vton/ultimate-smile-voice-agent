@@ -93,18 +93,6 @@
             align-items: center;
             gap: 10px;
         }
-        #usd-mode-toggle {
-            background: #222;
-            color: #D4AF37;
-            border: 1px solid #D4AF37;
-            border-radius: 20px;
-            padding: 4px 10px;
-            font-size: 11px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        #usd-mode-toggle:hover { background: #D4AF37; color: #111; }
         #usd-visualizer {
             display: flex;
             gap: 3px;
@@ -168,35 +156,7 @@
             color: #111111;
             transform: translateY(-2px);
         }
-        #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
         
-        #usd-input-container {
-            display: none; 
-            border-top: 1px solid rgba(255,255,255,0.1);
-            padding-top: 10px;
-        }
-        #usd-text-input {
-            flex-grow: 1;
-            background: #222;
-            border: 1px solid #444;
-            color: #fff;
-            border-radius: 4px;
-            padding: 6px 10px;
-            font-size: 13px;
-            outline: none;
-        }
-        #usd-text-input:focus { border-color: #D4AF37; }
-        #usd-send-btn {
-            background: #D4AF37;
-            color: #111;
-            border: none;
-            border-radius: 4px;
-            padding: 6px 12px;
-            margin-left: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 13px;
-        }
         #usd-bubble {
             width: 80px;
             height: 80px;
@@ -220,22 +180,6 @@
             70% { transform: scale(1); box-shadow: 0 0 0 var(--pulse-max) rgba(212, 175, 55, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
         }
-        #usd-inline-rating {
-            display: none;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            padding-top: 15px;
-            text-align: center;
-        }
-        #usd-rating-title { color: #fff; font-size: 15px; margin-bottom: 12px; font-weight: bold; letter-spacing: 0.5px;}
-        .usd-stars { display: flex; justify-content: center; gap: 12px; cursor: pointer; }
-        .usd-star { 
-            font-size: 28px; 
-            color: #333333; 
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-            transition: transform 0.2s, color 0.2s, text-shadow 0.2s; 
-        }
-        .usd-star:hover, .usd-star.active { color: #FFD700; transform: scale(1.2); }
-        #usd-rating-thanks { display: none; color: #D4AF37; font-size: 13px; margin-top: 12px; font-weight: bold; }
         #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -256,8 +200,9 @@
     </style>
 </head>
 <body>
+
     <div id="usd-voice-widget">
-        <div id="usd-tooltip" onclick="openChat(false)">
+        <div id="usd-tooltip" onclick="openChat()">
             Namaste! Tap here to talk about your new smile!
         </div>
 
@@ -285,23 +230,10 @@
                 </div>
 
                 <div id="usd-chat-log"></div>
-                <div id="usd-interim-text"></div>
-                
-                <div id="usd-inline-rating">
-                    <div id="usd-rating-title">Rate your experience</div>
-                    <div class="usd-stars">
-                        <span class="usd-star" onclick="submitRating(1)">★</span>
-                        <span class="usd-star" onclick="submitRating(2)">★</span>
-                        <span class="usd-star" onclick="submitRating(3)">★</span>
-                        <span class="usd-star" onclick="submitRating(4)">★</span>
-                        <span class="usd-star" onclick="submitRating(5)">★</span>
-                    </div>
-                    <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
-                </div>
             </div>
         </div>
         
-        <div id="usd-bubble" onclick="openChat(false)">
+        <div id="usd-bubble" onclick="openChat()">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -318,8 +250,9 @@
         let globalStream = null;
         let currentAgentState = 'off';
         
-        // ⚡ WEB AUDIO API ENGINE (Replaces the glitchy HTML <audio> player)
+        // ⚡ THE MAGIC: Web Audio API handles everything completely glitch-free
         let audioCtx = null;
+        let micCtx = null;
         let nextPlayTime = 0;
         let activeAudioSource = null;
 
@@ -327,11 +260,8 @@
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist' },
             '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On' }, 
-            '[LINK_BLOGS]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '📰 Read Our Blogs' }, 
-            '[LINK_GALLERY]': { url: 'https://ultimatesmiledesign.com/gallery/', label: '🖼️ Check Out Gallery' },
             '[LINK_CONSULT]': { url: 'https://ultimatesmiledesign.com/consult-with-dentist/', label: '👨‍⚕️ Consult Expert Dentist' },
-            '[LINK_CONTACT]': { url: 'https://ultimatesmiledesign.com/contact/', label: '📞 Contact Us' },
-            '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist' }
+            '[LINK_CONTACT]': { url: 'https://ultimatesmiledesign.com/contact/', label: '📞 Contact Us' }
         };
 
         function updateState(newState, statusText = null) {
@@ -349,13 +279,16 @@
             document.getElementById('usd-tooltip').style.opacity = '0';
             updateState('connecting', "Calling assistant... 🟡");
 
-            // Initialize Audio Engine on first click to satisfy browser policies
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            if (audioCtx.state === 'suspended') await audioCtx.resume();
+            // 1. Force Audio Engine to Start on Click (Bypasses Browser Mute)
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            await audioCtx.resume();
+            await micCtx.resume();
 
-            // 1. Fetch and Play Greeting via Web Audio API
+            // 2. Start WebSocket & Microphone immediately
+            await startWebSocket();
+
+            // 3. Play greeting natively
             const greeting = "Namaste! How can we assist you today?";
             logMessage('bot', greeting);
             try {
@@ -367,55 +300,41 @@
                 const data = await response.json();
                 await playAudioChunk(data.audioBase64);
             } catch(e) {}
-
-            // 2. Start WebSocket
-            await startWebSocket();
         }
 
-        // ⚡ THE MAGIC FIX: Seamless Web Audio API Playback
+        // ⚡ GAPLESS PLAYBACK FIX
         async function playAudioChunk(base64) {
-            if (!base64) return;
+            if (!base64 || !audioCtx) return;
             updateState('speaking');
 
             try {
-                if (audioCtx.state === 'suspended') await audioCtx.resume();
-
-                // Decode base64 string to ArrayBuffer
                 const binaryString = window.atob(base64);
-                const len = binaryString.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) {
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
                     bytes[i] = binaryString.charCodeAt(i);
                 }
 
-                // Decode audio data
                 const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
                 const source = audioCtx.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioCtx.destination);
                 
-                // Gapless Scheduling: Stitch it exactly at the end of the last audio chunk!
-                const currentTime = audioCtx.currentTime;
-                if (nextPlayTime < currentTime) {
-                    nextPlayTime = currentTime;
-                }
+                let currentTime = audioCtx.currentTime;
+                if (nextPlayTime < currentTime) nextPlayTime = currentTime;
                 
                 source.start(nextPlayTime);
                 nextPlayTime += audioBuffer.duration;
                 activeAudioSource = source;
 
-            } catch (e) {
-                console.error("Audio decoding error:", e);
-            }
+            } catch (e) { console.error("Audio decoding error:", e); }
         }
 
         function interruptBot() {
-            // Instantly stop Web Audio playback
             if (activeAudioSource) {
                 try { activeAudioSource.stop(); } catch(e) {}
                 activeAudioSource = null;
             }
-            nextPlayTime = 0; // Reset scheduling timeline
+            nextPlayTime = 0; 
             
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: 'interrupt' }));
@@ -429,71 +348,47 @@
                 socket.onopen = async () => {
                     updateState('listening', "Connected 🟢");
 
-                    // Setup Microphone
-                    globalStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false }
-                    });
-
-                    const streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-                    const source = streamCtx.createMediaStreamSource(globalStream);
-                    const processor = streamCtx.createScriptProcessor(4096, 1, 1);
-                    const analyser = streamCtx.createAnalyser();
-
-                    source.connect(analyser);
+                    // Start Mic
+                    globalStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+                    
+                    const source = micCtx.createMediaStreamSource(globalStream);
+                    const processor = micCtx.createScriptProcessor(4096, 1, 1);
+                    
+                    // Connect mic to processor, but prevent echo by routing to a silent node
+                    const silentNode = micCtx.createGain();
+                    silentNode.gain.value = 0;
                     source.connect(processor);
-                    processor.connect(streamCtx.destination); 
+                    processor.connect(silentNode);
+                    silentNode.connect(micCtx.destination);
 
-                    let isRecording = false;
-
-                    // Send raw PCM bytes to WebSocket continuously
                     processor.onaudioprocess = (e) => {
                         const inputData = e.inputBuffer.getChannelData(0);
                         const pcm16 = new Int16Array(inputData.length);
+                        let sum = 0;
                         for (let i = 0; i < inputData.length; i++) {
                             pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+                            sum += Math.abs(inputData[i]);
                         }
-                        if (socket && socket.readyState === WebSocket.OPEN && isRecording) {
+                        
+                        // ALWAYS send audio to Gemini natively
+                        if (socket && socket.readyState === WebSocket.OPEN) {
                             socket.send(pcm16.buffer); 
                         }
-                    };
 
-                    // Simple Voice Activity Detection (VAD) for interruption
-                    function detectVoice() {
-                        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                        analyser.getByteFrequencyData(dataArray);
-                        let voiceSum = 0; let voiceBins = 0;
-                        for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
-                        let humanVolume = voiceSum / voiceBins;
-
-                        // Barge-in trigger
-                        if (currentAgentState === 'speaking' && humanVolume > 65) { 
+                        // ⚡ Instant Barge-in Detection
+                        let volume = sum / inputData.length;
+                        if (volume > 0.05 && currentAgentState === 'speaking') { 
                             interruptBot();
                             updateState('listening');
-                            isRecording = true;
                         }
-                        // Start recording trigger
-                        else if (currentAgentState === 'listening' && humanVolume > 35) { 
-                            if (!isRecording) {
-                                isRecording = true;
-                                if (socket.readyState === WebSocket.OPEN) {
-                                    socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                }
-                            }
-                        }
-                        requestAnimationFrame(detectVoice);
-                    }
-                    detectVoice();
+                    };
                 };
 
-                // Receive messages from Backend
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
                     if (data.type === 'audio_chunk') {
                         await playAudioChunk(data.audioBase64);
-                    }
-                    else if (data.type === 'text_stream') {
-                        // Optional: Append text to UI here if needed
                     }
                     else if (data.type === 'reply_complete') {
                         if (data.botText) logMessage('bot', data.botText, data.tag);
@@ -502,14 +397,11 @@
                 };
 
             } catch (err) {
-                console.error("WS Start Error", err);
                 updateState('error', "Connection Failed 🔴");
             }
         }
 
-        function handleLinkClick(tag) {
-            window.open(usdLinks[tag].url, '_blank');
-        }
+        function handleLinkClick(tag) { window.open(usdLinks[tag].url, '_blank'); }
         
         function logMessage(sender, text, tag = null) {
             const log = document.getElementById('usd-chat-log');
@@ -528,9 +420,7 @@
             log.scrollTop = log.scrollHeight;
         }
 
-        function closeChatBtnClicked() {
-            document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
-        }
+        function closeChatBtnClicked() { document.getElementById('usd-end-confirm-overlay').style.display = 'flex'; }
 
         function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
@@ -541,11 +431,6 @@
                 document.getElementById('usd-chat-container').style.display = 'none';
                 document.getElementById('usd-bubble').style.display = 'flex';
             }
-        }
-
-        function submitRating(stars) {
-            document.getElementById('usd-rating-thanks').style.display = 'block';
-            setTimeout(() => { document.getElementById('usd-chat-container').style.display = 'none'; }, 2000);
         }
     </script>
 </body>
