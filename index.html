@@ -349,14 +349,13 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        // ⚡ ROCK-SOLID QUEUE ENGINE WITH WAV DECODER ⚡
+        // ⚡ HARDWARE-DRIVEN QUEUE (NO MORE MATH TIMEOUTS) ⚡
         let audioCtx = null;
         let audioChunkQueue = [];
-        let chunksPlayed = 0; 
-        let totalExpectedChunks = -1;
         let isAudioPlaying = false;
         let activeSources = []; 
         let nextPlayTime = 0;   
+        let isReplyComplete = false; // Tracks if backend said "I'm done sending"
         
         let activeTag = null; 
         let activeBotMessageDiv = null; 
@@ -444,13 +443,32 @@
             }
         }
 
-        // ⚡ PERFECT GAPLESS WAV DECODING (NO SILENT BARS) ⚡
+        // ⚡ THE FIX: TRIGGERS EXACTLY WHEN THE HARDWARE FINISHES ⚡
+        function checkBotFinishedSpeaking() {
+            // Only trigger if: backend is done sending AND queue is empty AND speaker physically stopped vibrating
+            if (isReplyComplete && audioChunkQueue.length === 0 && activeSources.length === 0) {
+                isReplyComplete = false;
+                nextPlayTime = 0; 
+                
+                if (activeTag === '[END_CHAT]') {
+                    setTimeout(() => closeChat(true), 2000);
+                } else {
+                    updateState('cooldown');
+                    setTimeout(() => {
+                        if (currentAgentState === 'cooldown') {
+                            updateState('listening');
+                        }
+                    }, 400); // Tiny pad before opening mic
+                }
+                activeTag = null;
+            }
+        }
+
         async function playAudioChunk(base64) {
             if (!base64) return;
             updateState('speaking');
 
             try {
-                // Decode perfectly wrapped WAV files
                 const binaryString = window.atob(base64);
                 const bytes = new Uint8Array(binaryString.length);
                 for (let i = 0; i < binaryString.length; i++) {
@@ -461,8 +479,6 @@
                 const source = audioCtx.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioCtx.destination);
-                
-                // Playback perfectly at 1.0 to preserve "Aoede" pitch
                 source.playbackRate.value = 1.0; 
                 
                 if (nextPlayTime < audioCtx.currentTime) {
@@ -473,8 +489,11 @@
                 nextPlayTime += audioBuffer.duration; 
                 
                 activeSources.push(source);
+                
+                // ⚡ THIS IS THE HARDWARE EVENT ⚡
                 source.onended = () => {
                     activeSources = activeSources.filter(s => s !== source);
+                    checkBotFinishedSpeaking(); 
                 };
             } catch (e) {
                 console.error("Audio Decode error:", e);
@@ -488,38 +507,19 @@
             while (audioChunkQueue.length > 0) {
                  const chunk = audioChunkQueue.shift(); 
                  await playAudioChunk(chunk.audioBase64);
-                 chunksPlayed++; 
-                 
-                 if (chunksPlayed === totalExpectedChunks && audioChunkQueue.length === 0) {
-                     totalExpectedChunks = -1;
-                     chunksPlayed = 0; 
-                     
-                     const delayMs = Math.max(0, (nextPlayTime - audioCtx.currentTime) * 1000);
-                     
-                     setTimeout(() => {
-                         if (activeTag === '[END_CHAT]') {
-                             setTimeout(() => closeChat(true), 2000);
-                         } else {
-                             updateState('cooldown');
-                             setTimeout(() => {
-                                 if (currentAgentState === 'cooldown') {
-                                     updateState('listening');
-                                 }
-                             }, 600);
-                         }
-                         activeTag = null; 
-                     }, delayMs + 300); 
-                 }
             }
+            
             isAudioPlaying = false;
+            checkBotFinishedSpeaking(); // Check just in case the queue ran dry incredibly fast
         }
 
         function interruptBot() {
             audioChunkQueue = [];
-            totalExpectedChunks = -1;
-            chunksPlayed = 0; 
+            isReplyComplete = false; 
             nextPlayTime = 0; 
             
+            // Stopping sources triggers their onended event. 
+            // Setting isReplyComplete = false above prevents checkBotFinishedSpeaking from firing falsely.
             activeSources.forEach(s => {
                 try { s.stop(); } catch(e) {}
             });
@@ -612,14 +612,12 @@
                                 body: JSON.stringify({ text: greeting, lang: 'en-IN' })
                             });
                             const data = await response.json();
-                            await playAudioChunk(data.audioBase64);
                             
-                            updateState('cooldown');
-                            setTimeout(() => { 
-                                if(currentAgentState === 'cooldown') {
-                                    updateState('listening');
-                                }
-                            }, 800);
+                            // Emulate standard playback flow for the greeting
+                            isReplyComplete = true; 
+                            audioChunkQueue.push(data);
+                            processAudioQueue();
+                            
                         } catch(e) {}
                     }
                     
@@ -684,9 +682,11 @@
                         let humanVolume = voiceSum / voiceBins;
 
                         if (currentAgentState === 'speaking') {
-                            if (humanVolume > 85) { 
+                            // ⚡ SUPERCHARGED BARGE-IN FEATURE ⚡
+                            // Much more sensitive (60 volume limit, only 15 frames needed to trigger)
+                            if (humanVolume > 60) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames > 40) { 
+                                if (consecutiveLoudFrames > 15) { 
                                     interruptBot();
                                     updateState('listening');
                                     isRecording = true;
@@ -702,8 +702,7 @@
                         }
 
                         if (currentAgentState === 'listening') {
-                            // ⚡ THE "HUGE DELAY" FIX: Increased starting sensitivity threshold to ignore background noise
-                            if (humanVolume > 50) { 
+                            if (humanVolume > 40) { 
                                 if (!isRecording) {
                                     isRecording = true;
                                     
@@ -723,7 +722,6 @@
                                     }, 14000); 
                                 }
                                 
-                                // You are actively speaking loudly, clear the silence timers
                                 clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
                                 
@@ -743,7 +741,7 @@
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 800); // ⚡ Send message instantly after 800ms of silence
+                                }, 800); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
@@ -789,7 +787,7 @@
                         sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
                         activeTag = data.tag;
-                        totalExpectedChunks = data.totalChunks;
+                        isReplyComplete = true; // Signals the queue checking function it is clear to transition
                         
                         if (activeTag && usdLinks[activeTag]) {
                             const log = document.getElementById('usd-chat-log');
@@ -802,11 +800,11 @@
                             log.scrollTop = log.scrollHeight;
                         }
                         
-                        if (!isVoiceMode || totalExpectedChunks === 0) {
+                        if (!isVoiceMode) {
                             updateState('listening');
                             if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
                         } else {
-                            processAudioQueue();
+                            checkBotFinishedSpeaking(); // If audio finished fast, trigger transition
                         }
                     }
                     else if (data.type === 'error') {
@@ -843,8 +841,12 @@
                             body: JSON.stringify({ text: goodbyeText, lang: 'en-IN' })
                         });
                         const data = await response.json();
-                        await playAudioChunk(data.audioBase64);
-                        closeChat(true);
+                        
+                        isReplyComplete = true; 
+                        audioChunkQueue.push(data);
+                        processAudioQueue();
+                        
+                        setTimeout(() => closeChat(true), 4000);
                     } catch(e) { closeChat(true); }
                 } else {
                     setTimeout(() => closeChat(true), 2000);
