@@ -675,8 +675,6 @@
                         let humanVolume = voiceSum / voiceBins;
 
                         if (currentAgentState === 'speaking') {
-                            // ⚡ THE NEW BARGE-IN TRIGGER ⚡
-                            // Much more sensitive: only requires 60 volume for a tiny fraction of a second (15 frames)
                             if (humanVolume > 60) { 
                                 consecutiveLoudFrames++;
                                 if (consecutiveLoudFrames > 15) { 
