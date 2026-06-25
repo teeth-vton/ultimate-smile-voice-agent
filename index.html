@@ -156,7 +156,6 @@
             color: #111111;
             transform: translateY(-2px);
         }
-        
         #usd-bubble {
             width: 80px;
             height: 80px;
@@ -250,11 +249,11 @@
         let globalStream = null;
         let currentAgentState = 'off';
         
-        // ⚡ THE MAGIC: Web Audio API handles everything completely glitch-free
+        // Gapless Audio API Contexts
         let audioCtx = null;
-        let micCtx = null;
+        let streamCtx = null;
         let nextPlayTime = 0;
-        let activeAudioSource = null;
+        let activeAudioSources = [];
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
@@ -279,16 +278,14 @@
             document.getElementById('usd-tooltip').style.opacity = '0';
             updateState('connecting', "Calling assistant... 🟡");
 
-            // 1. Force Audio Engine to Start on Click (Bypasses Browser Mute)
+            // ⚡ FORCE BROWSER TO UNLOCK AUDIO ON CLICK
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            await audioCtx.resume();
-            await micCtx.resume();
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-            // 2. Start WebSocket & Microphone immediately
+            // Start everything instantly
             await startWebSocket();
 
-            // 3. Play greeting natively
+            // Fetch TTS greeting immediately
             const greeting = "Namaste! How can we assist you today?";
             logMessage('bot', greeting);
             try {
@@ -302,7 +299,7 @@
             } catch(e) {}
         }
 
-        // ⚡ GAPLESS PLAYBACK FIX
+        // ⚡ GAPLESS PLAYBACK
         async function playAudioChunk(base64) {
             if (!base64 || !audioCtx) return;
             updateState('speaking');
@@ -319,21 +316,24 @@
                 source.buffer = audioBuffer;
                 source.connect(audioCtx.destination);
                 
-                let currentTime = audioCtx.currentTime;
-                if (nextPlayTime < currentTime) nextPlayTime = currentTime;
+                // Gapless scheduling magic
+                if (nextPlayTime < audioCtx.currentTime) {
+                    nextPlayTime = audioCtx.currentTime;
+                }
                 
                 source.start(nextPlayTime);
                 nextPlayTime += audioBuffer.duration;
-                activeAudioSource = source;
+                activeAudioSources.push(source);
 
             } catch (e) { console.error("Audio decoding error:", e); }
         }
 
         function interruptBot() {
-            if (activeAudioSource) {
-                try { activeAudioSource.stop(); } catch(e) {}
-                activeAudioSource = null;
-            }
+            // Stop all currently queued audio chunks
+            activeAudioSources.forEach(source => {
+                try { source.stop(); } catch(e) {}
+            });
+            activeAudioSources = [];
             nextPlayTime = 0; 
             
             if (socket && socket.readyState === WebSocket.OPEN) {
@@ -341,38 +341,33 @@
             }
         }
 
-async function startWebSocket() {
+        async function startWebSocket() {
             try {
-                // 1. Ensure Audio Context is active
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-                if (audioCtx.state === 'suspended') await audioCtx.resume();
-
                 socket = new WebSocket(WS_URL);
 
                 socket.onopen = async () => {
                     updateState('listening', "Connected 🟢");
-                    console.log("WebSocket Open. Starting Microphone...");
 
-                    // 2. Setup Mic
+                    // ⚡ FORCE BROWSER TO UNLOCK MICROPHONE
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { 
-                            echoCancellation: true, 
-                            noiseSuppression: true, 
-                            autoGainControl: true 
-                        } 
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
                     });
-
-                    // 3. Create a clean audio stream for the WebSocket
-                    const source = audioCtx.createMediaStreamSource(globalStream);
-                    const processor = audioCtx.createScriptProcessor(4096, 1, 1);
                     
+                    streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                    if (streamCtx.state === 'suspended') await streamCtx.resume();
+
+                    const source = streamCtx.createMediaStreamSource(globalStream);
+                    const processor = streamCtx.createScriptProcessor(4096, 1, 1);
+                    
+                    // Route mic to a silent node so we don't hear our own echo, but processor still fires
+                    const silentNode = streamCtx.createGain();
+                    silentNode.gain.value = 0;
                     source.connect(processor);
-                    processor.connect(audioCtx.destination);
+                    processor.connect(silentNode);
+                    silentNode.connect(streamCtx.destination);
 
                     processor.onaudioprocess = (e) => {
                         const inputData = e.inputBuffer.getChannelData(0);
-                        
-                        // Convert float32 to Int16 for Gemini PCM
                         const pcm16 = new Int16Array(inputData.length);
                         let sum = 0;
                         for (let i = 0; i < inputData.length; i++) {
@@ -380,14 +375,14 @@ async function startWebSocket() {
                             sum += Math.abs(inputData[i]);
                         }
                         
-                        // Send binary PCM data
+                        // Send raw audio to backend
                         if (socket && socket.readyState === WebSocket.OPEN) {
                             socket.send(pcm16.buffer); 
                         }
 
-                        // Barge-in trigger
+                        // ⚡ Instant Barge-In detection
                         let volume = sum / inputData.length;
-                        if (volume > 0.05 && currentAgentState === 'speaking') { 
+                        if (volume > 0.02 && currentAgentState === 'speaking') { 
                             interruptBot();
                             updateState('listening');
                         }
@@ -396,15 +391,18 @@ async function startWebSocket() {
 
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
+                    
                     if (data.type === 'audio_chunk') {
                         await playAudioChunk(data.audioBase64);
-                    } else if (data.type === 'reply_complete') {
+                    }
+                    else if (data.type === 'reply_complete') {
                         if (data.botText) logMessage('bot', data.botText, data.tag);
                         updateState('listening');
                     }
                 };
+
             } catch (err) {
-                console.error("WS Start Error", err);
+                console.error("WS Error:", err);
                 updateState('error', "Connection Failed 🔴");
             }
         }
@@ -436,6 +434,8 @@ async function startWebSocket() {
                 interruptBot();
                 if (socket) socket.close();
                 if (globalStream) globalStream.getTracks().forEach(t => t.stop());
+                if (audioCtx) audioCtx.close();
+                if (streamCtx) streamCtx.close();
                 document.getElementById('usd-chat-container').style.display = 'none';
                 document.getElementById('usd-bubble').style.display = 'flex';
             }
