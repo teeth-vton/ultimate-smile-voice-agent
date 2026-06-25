@@ -341,28 +341,38 @@
             }
         }
 
-        async function startWebSocket() {
+async function startWebSocket() {
             try {
+                // 1. Ensure Audio Context is active
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                if (audioCtx.state === 'suspended') await audioCtx.resume();
+
                 socket = new WebSocket(WS_URL);
 
                 socket.onopen = async () => {
                     updateState('listening', "Connected 🟢");
+                    console.log("WebSocket Open. Starting Microphone...");
 
-                    // Start Mic
-                    globalStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+                    // 2. Setup Mic
+                    globalStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { 
+                            echoCancellation: true, 
+                            noiseSuppression: true, 
+                            autoGainControl: true 
+                        } 
+                    });
+
+                    // 3. Create a clean audio stream for the WebSocket
+                    const source = audioCtx.createMediaStreamSource(globalStream);
+                    const processor = audioCtx.createScriptProcessor(4096, 1, 1);
                     
-                    const source = micCtx.createMediaStreamSource(globalStream);
-                    const processor = micCtx.createScriptProcessor(4096, 1, 1);
-                    
-                    // Connect mic to processor, but prevent echo by routing to a silent node
-                    const silentNode = micCtx.createGain();
-                    silentNode.gain.value = 0;
                     source.connect(processor);
-                    processor.connect(silentNode);
-                    silentNode.connect(micCtx.destination);
+                    processor.connect(audioCtx.destination);
 
                     processor.onaudioprocess = (e) => {
                         const inputData = e.inputBuffer.getChannelData(0);
+                        
+                        // Convert float32 to Int16 for Gemini PCM
                         const pcm16 = new Int16Array(inputData.length);
                         let sum = 0;
                         for (let i = 0; i < inputData.length; i++) {
@@ -370,12 +380,12 @@
                             sum += Math.abs(inputData[i]);
                         }
                         
-                        // ALWAYS send audio to Gemini natively
+                        // Send binary PCM data
                         if (socket && socket.readyState === WebSocket.OPEN) {
                             socket.send(pcm16.buffer); 
                         }
 
-                        // ⚡ Instant Barge-in Detection
+                        // Barge-in trigger
                         let volume = sum / inputData.length;
                         if (volume > 0.05 && currentAgentState === 'speaking') { 
                             interruptBot();
@@ -386,17 +396,15 @@
 
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
-                    
                     if (data.type === 'audio_chunk') {
                         await playAudioChunk(data.audioBase64);
-                    }
-                    else if (data.type === 'reply_complete') {
+                    } else if (data.type === 'reply_complete') {
                         if (data.botText) logMessage('bot', data.botText, data.tag);
                         updateState('listening');
                     }
                 };
-
             } catch (err) {
+                console.error("WS Start Error", err);
                 updateState('error', "Connection Failed 🔴");
             }
         }
