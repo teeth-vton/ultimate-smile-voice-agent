@@ -349,7 +349,7 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        // ⚡ BULLETPROOF WEB AUDIO QUEUE ENGINE ⚡
+        // ⚡ BULLETPROOF QUEUE ENGINE: NO OVERLAP POSSIBLE ⚡
         let audioCtx = null;
         let audioChunkQueue = [];
         let chunksPlayed = 0; 
@@ -407,18 +407,6 @@
             }, 150);
         });
 
-        function saveSessionState() {
-            sessionStorage.setItem('usd_chat_active', 'true');
-            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
-            sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
-        }
-
-        function clearSessionState() {
-            sessionStorage.removeItem('usd_chat_active');
-            sessionStorage.removeItem('usd_chat_history');
-            sessionStorage.removeItem('usd_is_voice_mode');
-        }
-
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
@@ -456,7 +444,7 @@
             }
         }
 
-        // ⚡ UPDATED: RELIABLE FIFO QUEUE LOGIC ⚡
+        // ⚡ THE FIX: PERFECT SEQUENTIAL TIMING WITH NO OVERLAPS ⚡
         async function playAudioChunk(base64) {
             if (!base64) return;
             updateState('speaking');
@@ -473,16 +461,20 @@
                 source.buffer = audioBuffer;
                 source.connect(audioCtx.destination);
                 
-                source.playbackRate.value = 1.15; 
+                const playbackSpeed = 1.15;
+                source.playbackRate.value = playbackSpeed; 
                 
-                // DEADLOCK / SILENT BUG FIX: Prevent nextPlayTime from drifting off into the future
-                const timeDiff = nextPlayTime - audioCtx.currentTime;
-                if (timeDiff < 0 || timeDiff > 1.5) {
-                    nextPlayTime = audioCtx.currentTime;
+                // If the nextPlayTime is in the past, it means the queue was empty. 
+                // We add a tiny 50ms padding to prevent pop sounds.
+                if (nextPlayTime < audioCtx.currentTime) {
+                    nextPlayTime = audioCtx.currentTime + 0.05; 
                 }
                 
+                // Start exactly where the last one finished. No more "> 1.5" resets causing overlaps!
                 source.start(nextPlayTime);
-                nextPlayTime += audioBuffer.duration / 1.15; 
+                
+                // Advance the playhead based on exactly how long this chunk takes to play.
+                nextPlayTime += (audioBuffer.duration / playbackSpeed); 
                 
                 activeSources.push(source);
                 source.onended = () => {
@@ -502,12 +494,15 @@
                  await playAudioChunk(chunk.audioBase64);
                  chunksPlayed++; 
                  
+                 // If we have pushed all chunks to the audio card for playback...
                  if (chunksPlayed === totalExpectedChunks && audioChunkQueue.length === 0) {
                      totalExpectedChunks = -1;
                      chunksPlayed = 0; 
                      
+                     // Calculate exactly how many milliseconds until the audio physically finishes playing
                      const delayMs = Math.max(0, (nextPlayTime - audioCtx.currentTime) * 1000);
                      
+                     // Wait until the audio is 100% finished (+ 300ms safety pad) before unmuting the mic
                      setTimeout(() => {
                          if (activeTag === '[END_CHAT]') {
                              setTimeout(() => closeChat(true), 2000);
@@ -517,10 +512,10 @@
                                  if (currentAgentState === 'cooldown') {
                                      updateState('listening');
                                  }
-                             }, 800);
+                             }, 600);
                          }
                          activeTag = null; 
-                     }, delayMs);
+                     }, delayMs + 300); // <-- This pad ensures your mic doesn't pick up the end of the sentence
                  }
             }
             isAudioPlaying = false;
@@ -696,9 +691,10 @@
                         let humanVolume = voiceSum / voiceBins;
 
                         if (currentAgentState === 'speaking') {
-                            if (humanVolume > 65) { 
+                            // If user explicitly interrupts while the bot is talking (takes a louder voice to prevent echo triggers)
+                            if (humanVolume > 80) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames > 25) {
+                                if (consecutiveLoudFrames > 35) {
                                     interruptBot();
                                     updateState('listening');
                                     isRecording = true;
@@ -816,7 +812,6 @@
                             updateState('listening');
                             if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
                         } else {
-                            // Ensure queue resolves if it got stuck waiting for this packet
                             processAudioQueue();
                         }
                     }
