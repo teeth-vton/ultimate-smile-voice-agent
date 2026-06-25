@@ -587,6 +587,50 @@
             return null;
         }
 
+        function getHumanSpeechProfile(dataArray, sampleRate = 16000, fftSize = 512) {
+            const binHz = sampleRate / fftSize;
+            const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
+
+            const speechStart = idx(90);
+            const speechEnd = idx(3400);
+            const coreStart = idx(180);
+            const coreEnd = idx(1200);
+
+            let speechSum = 0, speechCount = 0;
+            let coreSum = 0, coreCount = 0;
+            let noiseSum = 0, noiseCount = 0;
+
+            for (let i = 0; i < dataArray.length; i++) {
+                const v = dataArray[i];
+                if (i >= speechStart && i <= speechEnd) {
+                    speechSum += v;
+                    speechCount++;
+                } else {
+                    noiseSum += v;
+                    noiseCount++;
+                }
+
+                if (i >= coreStart && i <= coreEnd) {
+                    coreSum += v;
+                    coreCount++;
+                }
+            }
+
+            const speechAvg = speechSum / Math.max(1, speechCount);
+            const coreAvg = coreSum / Math.max(1, coreCount);
+            const noiseAvg = noiseSum / Math.max(1, noiseCount);
+            const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
+            const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
+
+            const isHumanSpeech =
+                speechAvg > 20 &&
+                coreAvg > 24 &&
+                speechRatio > 0.52 &&
+                coreVsNoise > 1.12;
+
+            return { speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isHumanSpeech };
+        }
+
         function renderPopupLink(tag) {
             const wrap = document.getElementById('usd-live-transcript-link-wrap');
             if (!wrap) return;
@@ -918,13 +962,22 @@
 
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
                         analyser.getByteFrequencyData(dataArray);
-                        
+
+                        // Existing overall volume logic for normal listening mode
                         let voiceSum = 0; let voiceBins = 0;
                         for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
                         let humanVolume = voiceSum / voiceBins;
 
+                        // Human-speech-only profile for interrupting the bot
+                        const speechProfile = getHumanSpeechProfile(
+                            dataArray,
+                            streamCtx.sampleRate || 16000,
+                            analyser.fftSize || 512
+                        );
+
                         if (currentAgentState === 'speaking') {
-                            if (humanVolume > 60) { 
+                            // Interrupt only if it looks like actual human speech
+                            if (speechProfile.isHumanSpeech) { 
                                 consecutiveLoudFrames++;
                                 if (consecutiveLoudFrames > 15) { 
                                     interruptBot();
@@ -1238,3 +1291,4 @@
     </script>
 </body>
 </html>
+```
