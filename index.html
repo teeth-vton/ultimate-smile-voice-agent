@@ -148,6 +148,11 @@
         .msg-user { color: #ffffff; text-align: right; }
         .msg-bot { color: #D4AF37; text-align: left; }
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
+        .usd-msg-text {
+            white-space: pre-wrap;
+            word-break: break-word;
+            display: inline-block;
+        }
         .usd-link-card {
             display: block;
             width: 100%;
@@ -169,8 +174,43 @@
             color: #111111;
             transform: translateY(-2px);
         }
-        #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
-        
+        #usd-interim-text {
+            color: #888;
+            text-align: right;
+            font-style: italic;
+            font-size: 12px;
+            min-height: 16px;
+            margin-bottom: 5px;
+        }
+
+        /* LIVE TRANSCRIPT POPUP */
+        #usd-live-transcript-popup {
+            display: none;
+            margin-bottom: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(212, 175, 55, 0.10);
+            border: 1px solid rgba(212, 175, 55, 0.35);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        }
+        #usd-live-transcript-label {
+            color: #D4AF37;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-bottom: 4px;
+        }
+        #usd-live-transcript-text {
+            color: #ffffff;
+            font-size: 13px;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 70px;
+            overflow-y: auto;
+        }
+
         #usd-input-container {
             display: none; 
             border-top: 1px solid rgba(255,255,255,0.1);
@@ -308,6 +348,12 @@
                     </div>
                 </div>
 
+                <!-- LIVE TRANSCRIPT POPUP -->
+                <div id="usd-live-transcript-popup">
+                    <div id="usd-live-transcript-label">Assistant speaking</div>
+                    <div id="usd-live-transcript-text"></div>
+                </div>
+
                 <div id="usd-chat-log"></div>
                 <div id="usd-interim-text"></div>
                 
@@ -358,7 +404,10 @@
         
         let activeTag = null; 
         let activeBotMessageDiv = null; 
+        let activeBotTextSpan = null;
+        let lastBotMessageDiv = null;
         let isMicSoftwareMuted = true; 
+        let liveTranscriptHideTimer = null;
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
@@ -442,6 +491,52 @@
             }
         }
 
+        function showLiveTranscript(text) {
+            const popup = document.getElementById('usd-live-transcript-popup');
+            const popupText = document.getElementById('usd-live-transcript-text');
+            if (!popup || !popupText) return;
+
+            if (text && text.trim()) {
+                popupText.textContent = text.trim();
+                popup.style.display = 'block';
+                clearTimeout(liveTranscriptHideTimer);
+            }
+        }
+
+        function hideLiveTranscript(delay = 0) {
+            clearTimeout(liveTranscriptHideTimer);
+            liveTranscriptHideTimer = setTimeout(() => {
+                const popup = document.getElementById('usd-live-transcript-popup');
+                if (popup) popup.style.display = 'none';
+            }, delay);
+        }
+
+        function appendLinkButton(targetEl, tag) {
+            if (!targetEl || !tag || !usdLinks[tag]) return;
+
+            const tagToOpen = tag;
+            const btn = document.createElement('button');
+            btn.className = 'usd-link-card';
+            btn.innerText = usdLinks[tagToOpen].label;
+            btn.onclick = () => handleLinkClick(tagToOpen);
+            targetEl.appendChild(btn);
+        }
+
+        function createMessageDiv(sender, text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `msg msg-${sender}`;
+
+            const span = document.createElement('span');
+            span.className = 'usd-msg-text';
+
+            if (sender === 'user') span.textContent = "You: " + text;
+            else if (sender === 'bot') span.textContent = "Assistant: " + text;
+            else span.textContent = text;
+
+            msgDiv.appendChild(span);
+            return msgDiv;
+        }
+
         function checkBotFinishedSpeaking() {
             if (isReplyComplete && audioChunkQueue.length === 0 && activeSources.length === 0) {
                 isReplyComplete = false;
@@ -458,6 +553,7 @@
                     }, 400); 
                 }
                 activeTag = null;
+                hideLiveTranscript(1200);
             }
         }
 
@@ -518,6 +614,7 @@
                 try { s.stop(); } catch(e) {}
             });
             activeSources = [];
+            hideLiveTranscript(0);
         }
 
         function toggleChatMode() {
@@ -526,18 +623,21 @@
             const visualizer = document.getElementById('usd-visualizer');
             const textControls = document.getElementById('usd-input-container');
             const micText = document.getElementById('usd-interim-text');
+            const liveTranscript = document.getElementById('usd-live-transcript-popup');
             
             if (isVoiceMode) {
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "flex";
                 textControls.style.display = "none";
                 micText.style.display = "block";
+                if (liveTranscript) liveTranscript.style.display = "none";
                 updateState('listening');
             } else {
                 toggleBtn.innerText = "🎙️ Voice";
                 visualizer.style.display = "none";
                 textControls.style.display = "flex";
                 micText.style.display = "none";
+                if (liveTranscript) liveTranscript.style.display = "none";
                 interruptBot();
                 updateState('listening');
             }
@@ -559,6 +659,8 @@
                 document.getElementById('usd-input-container').style.display = 'flex';
                 document.getElementById('usd-inline-rating').style.display = 'none';
                 document.getElementById('usd-mode-toggle').style.display = 'block';
+                document.getElementById('usd-live-transcript-popup').style.display = 'none';
+                document.getElementById('usd-live-transcript-text').textContent = '';
                 
                 if (isRestore) {
                     chatHistory = JSON.parse(sessionStorage.getItem('usd_chat_history') || '[]');
@@ -588,6 +690,9 @@
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory = [];
+                    activeBotMessageDiv = null;
+                    activeBotTextSpan = null;
+                    lastBotMessageDiv = null;
                     
                     updateState('connecting', "Calling assistant... 🟡");
                     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -746,6 +851,7 @@
                     
                     if (data.type === 'idle') {
                         document.getElementById('usd-interim-text').innerText = "";
+                        hideLiveTranscript(0);
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
@@ -760,10 +866,19 @@
                             const log = document.getElementById('usd-chat-log');
                             activeBotMessageDiv = document.createElement('div');
                             activeBotMessageDiv.className = `msg msg-bot`;
-                            activeBotMessageDiv.innerText = "Assistant: ";
+                            
+                            activeBotTextSpan = document.createElement('span');
+                            activeBotTextSpan.className = 'usd-msg-text';
+                            activeBotTextSpan.textContent = "Assistant: " + data.text;
+                            
+                            activeBotMessageDiv.appendChild(activeBotTextSpan);
                             log.appendChild(activeBotMessageDiv);
+                            lastBotMessageDiv = activeBotMessageDiv;
+                        } else if (activeBotTextSpan) {
+                            activeBotTextSpan.textContent = "Assistant: " + data.text;
                         }
-                        activeBotMessageDiv.innerText = "Assistant: " + data.text;
+
+                        showLiveTranscript(data.text);
                         const log = document.getElementById('usd-chat-log');
                         log.scrollTop = log.scrollHeight;
                     }
@@ -772,7 +887,20 @@
                         processAudioQueue();
                     }
                     else if (data.type === 'reply_complete') {
-                        activeBotMessageDiv = null; 
+                        const botTarget = activeBotMessageDiv || lastBotMessageDiv;
+                        activeBotMessageDiv = null;
+                        activeBotTextSpan = null;
+                        
+                        if (botTarget && data.botText) {
+                            const span = botTarget.querySelector('.usd-msg-text');
+                            if (span) {
+                                span.textContent = "Assistant: " + data.botText;
+                            }
+                        }
+
+                        if (!botTarget && data.botText) {
+                            lastBotMessageDiv = logMessage('bot', data.botText);
+                        }
                         
                         chatHistory.push({ role: "model", parts: [{ text: data.botText }] });
                         sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
@@ -780,14 +908,10 @@
                         activeTag = data.tag;
                         isReplyComplete = true; 
                         
-                        if (activeTag && usdLinks[activeTag]) {
+                        const finalBotTarget = botTarget || lastBotMessageDiv;
+                        if (activeTag && usdLinks[activeTag] && finalBotTarget) {
+                            appendLinkButton(finalBotTarget, activeTag);
                             const log = document.getElementById('usd-chat-log');
-                            const lastBotMsg = log.lastElementChild;
-                            const btn = document.createElement('button');
-                            btn.className = 'usd-link-card';
-                            btn.innerText = usdLinks[activeTag].label;
-                            btn.onclick = () => handleLinkClick(activeTag);
-                            lastBotMsg.appendChild(btn);
                             log.scrollTop = log.scrollHeight;
                         }
                         
@@ -797,9 +921,12 @@
                         } else {
                             checkBotFinishedSpeaking(); 
                         }
+
+                        hideLiveTranscript(1800);
                     }
                     else if (data.type === 'error') {
                         document.getElementById('usd-interim-text').innerText = "";
+                        hideLiveTranscript(0);
                         updateState('listening');
                     }
                 };
@@ -848,6 +975,7 @@
         function closeChat(showRating = false) {
             updateState('off');
             interruptBot();
+            hideLiveTranscript(0);
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
@@ -927,8 +1055,9 @@
             }
         }
 
-       async function handleLinkClick(tag) {
+        async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
+            if (!linkInfo) return;
             
             logMessage('bot', "Redirecting you now...");
             chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
@@ -940,23 +1069,20 @@
         
         function logMessage(sender, text, tag = null) {
             const log = document.getElementById('usd-chat-log');
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `msg msg-${sender}`;
-            
-            if (sender === 'user') msgDiv.innerText = "You: " + text;
-            else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
-            else msgDiv.innerText = text; 
+            const msgDiv = createMessageDiv(sender, text);
             
             if (tag && usdLinks[tag]) {
-                const btn = document.createElement('button');
-                btn.className = 'usd-link-card';
-                btn.innerText = usdLinks[tag].label;
-                btn.onclick = () => handleLinkClick(tag);
-                msgDiv.appendChild(btn);
+                appendLinkButton(msgDiv, tag);
             }
 
             log.appendChild(msgDiv);
             log.scrollTop = log.scrollHeight;
+
+            if (sender === 'bot') {
+                lastBotMessageDiv = msgDiv;
+            }
+
+            return msgDiv;
         }
     </script>
 </body>
