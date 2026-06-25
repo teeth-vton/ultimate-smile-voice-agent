@@ -349,7 +349,7 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        // ⚡ RAW PCM AUDIO ENGINE (NO GLITCHES, NO CHIPMUNK PITCH) ⚡
+        // ⚡ ROCK-SOLID QUEUE ENGINE WITH WAV DECODER ⚡
         let audioCtx = null;
         let audioChunkQueue = [];
         let chunksPlayed = 0; 
@@ -444,36 +444,25 @@
             }
         }
 
-        // ⚡ RAW PCM MATH (No WAV decoders to break, perfect speed/pitch) ⚡
+        // ⚡ PERFECT GAPLESS WAV DECODING (NO SILENT BARS) ⚡
         async function playAudioChunk(base64) {
             if (!base64) return;
             updateState('speaking');
 
             try {
-                // Decode Base64 to Raw Binary
+                // Decode perfectly wrapped WAV files
                 const binaryString = window.atob(base64);
-                const len = binaryString.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) {
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
                     bytes[i] = binaryString.charCodeAt(i);
                 }
                 
-                // Convert 16-bit PCM to 32-bit Float (Required for Web Audio API)
-                const pcm16 = new Int16Array(bytes.buffer);
-                const float32 = new Float32Array(pcm16.length);
-                for (let i = 0; i < pcm16.length; i++) {
-                    float32[i] = pcm16[i] / 32768.0;
-                }
-                
-                // Create Buffer directly (Gemini audio is 24kHz)
-                const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000);
-                audioBuffer.copyToChannel(float32, 0);
-
+                const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
                 const source = audioCtx.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioCtx.destination);
                 
-                // NO MORE SPEED HACKS. Play at exactly 1.0 to keep the "Kore" pitch deep and professional.
+                // Playback perfectly at 1.0 to preserve "Aoede" pitch
                 source.playbackRate.value = 1.0; 
                 
                 if (nextPlayTime < audioCtx.currentTime) {
@@ -488,7 +477,7 @@
                     activeSources = activeSources.filter(s => s !== source);
                 };
             } catch (e) {
-                console.error("PCM Decode error:", e);
+                console.error("Audio Decode error:", e);
             }
         }
 
@@ -697,7 +686,7 @@
                         if (currentAgentState === 'speaking') {
                             if (humanVolume > 85) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames > 40) { // Slightly longer volume requirement to avoid echo interruption
+                                if (consecutiveLoudFrames > 40) { 
                                     interruptBot();
                                     updateState('listening');
                                     isRecording = true;
@@ -713,7 +702,8 @@
                         }
 
                         if (currentAgentState === 'listening') {
-                            if (humanVolume > 35) { 
+                            // ⚡ THE "HUGE DELAY" FIX: Increased starting sensitivity threshold to ignore background noise
+                            if (humanVolume > 50) { 
                                 if (!isRecording) {
                                     isRecording = true;
                                     
@@ -733,6 +723,7 @@
                                     }, 14000); 
                                 }
                                 
+                                // You are actively speaking loudly, clear the silence timers
                                 clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
                                 
@@ -752,7 +743,7 @@
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 400); 
+                                }, 800); // ⚡ Send message instantly after 800ms of silence
                             }
                         }
                         requestAnimationFrame(detectVoice);
