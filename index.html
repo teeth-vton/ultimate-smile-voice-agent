@@ -419,6 +419,7 @@
         let activeBotTextSpan = null;
         let lastBotMessageDiv = null;
         let isMicSoftwareMuted = true; 
+        let interruptCooldownUntil = 0;
         let liveTranscriptHideTimer = null;
         let currentLiveAssistantText = "";
         let currentLiveAssistantTag = null;
@@ -587,7 +588,7 @@
             return null;
         }
 
-        function getHumanSpeechProfile(dataArray, sampleRate = 16000, fftSize = 512) {
+        function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
 
@@ -602,6 +603,7 @@
 
             for (let i = 0; i < dataArray.length; i++) {
                 const v = dataArray[i];
+
                 if (i >= speechStart && i <= speechEnd) {
                     speechSum += v;
                     speechCount++;
@@ -616,19 +618,39 @@
                 }
             }
 
+            let energy = 0;
+            for (let i = 0; i < timeDomainArray.length; i++) {
+                const centered = (timeDomainArray[i] - 128) / 128;
+                energy += centered * centered;
+            }
+            const rms = Math.sqrt(energy / Math.max(1, timeDomainArray.length));
+
             const speechAvg = speechSum / Math.max(1, speechCount);
             const coreAvg = coreSum / Math.max(1, coreCount);
             const noiseAvg = noiseSum / Math.max(1, noiseCount);
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            const isHumanSpeech =
-                speechAvg > 20 &&
-                coreAvg > 24 &&
-                speechRatio > 0.52 &&
-                coreVsNoise > 1.12;
+            // medium sensitivity:
+            // - close human speech should pass
+            // - distant noise / far speech should not
+            // - mobile echo/self voice is reduced by cooldown below
+            const isNearHumanSpeech =
+                rms > 0.045 &&
+                speechAvg > 28 &&
+                coreAvg > 32 &&
+                speechRatio > 0.56 &&
+                coreVsNoise > 1.14;
 
-            return { speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isHumanSpeech };
+            return {
+                rms,
+                speechAvg,
+                coreAvg,
+                noiseAvg,
+                speechRatio,
+                coreVsNoise,
+                isNearHumanSpeech
+            };
         }
 
         function renderPopupLink(tag) {
@@ -835,6 +857,7 @@
 
         async function openChat(isRestore = false) {
             initAudio();
+            interruptCooldownUntil = 0;
             const container = document.getElementById('usd-chat-container');
             const tooltip = document.getElementById('usd-tooltip');
             const bubble = document.getElementById('usd-bubble');
@@ -878,9 +901,6 @@
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory = [];
-                    activeBotMessageDiv = null;
-                    activeBotTextSpan = null;
-                    lastBotMessageDiv = null;
                     
                     updateState('connecting', "Calling assistant... 🟡");
                     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -956,13 +976,27 @@
                     };
 
                     function detectVoice() {
-                        if (isMicSoftwareMuted) {
-                            requestAnimationFrame(detectVoice); return;
+                        const isSpeakingNow = currentAgentState === 'speaking';
+
+                        // Cooldown blocks re-trigger loops from mobile speaker echo after interrupt
+                        if (performance.now() < interruptCooldownUntil) {
+                            requestAnimationFrame(detectVoice);
+                            return;
+                        }
+
+                        // Normal mute behavior stays the same,
+                        // but while bot is speaking we still analyze for interrupt only
+                        if (isMicSoftwareMuted && !isSpeakingNow) {
+                            requestAnimationFrame(detectVoice);
+                            return;
                         }
 
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
                         analyser.getByteFrequencyData(dataArray);
 
+                        const timeDataArray = new Uint8Array(analyser.fftSize);
+                        analyser.getByteTimeDomainData(timeDataArray);
+                        
                         // Existing overall volume logic for normal listening mode
                         let voiceSum = 0; let voiceBins = 0;
                         for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
@@ -971,15 +1005,19 @@
                         // Human-speech-only profile for interrupting the bot
                         const speechProfile = getHumanSpeechProfile(
                             dataArray,
+                            timeDataArray,
                             streamCtx.sampleRate || 16000,
                             analyser.fftSize || 512
                         );
 
-                        if (currentAgentState === 'speaking') {
-                            // Interrupt only if it looks like actual human speech
-                            if (speechProfile.isHumanSpeech) { 
+                        if (isSpeakingNow) {
+                            // Interrupt only if it looks like actual near human speech
+                            if (speechProfile.isNearHumanSpeech) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames > 15) { 
+                                if (consecutiveLoudFrames >= 5) { 
+                                    consecutiveLoudFrames = 0;
+                                    interruptCooldownUntil = performance.now() + 800;
+
                                     interruptBot();
                                     updateState('listening');
                                     isRecording = true;
@@ -1259,9 +1297,8 @@
             }
         }
 
-        async function handleLinkClick(tag) {
+       async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
-            if (!linkInfo) return;
             
             logMessage('bot', "Redirecting you now...");
             chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
@@ -1273,22 +1310,24 @@
         
         function logMessage(sender, text, tag = null) {
             const log = document.getElementById('usd-chat-log');
-            const msgDiv = createMessageDiv(sender, text);
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `msg msg-${sender}`;
+            
+            if (sender === 'user') msgDiv.innerText = "You: " + text;
+            else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
+            else msgDiv.innerText = text; 
             
             if (tag && usdLinks[tag]) {
-                appendLinkButton(msgDiv, tag);
+                const btn = document.createElement('button');
+                btn.className = 'usd-link-card';
+                btn.innerText = usdLinks[tag].label;
+                btn.onclick = () => handleLinkClick(tag);
+                msgDiv.appendChild(btn);
             }
 
             log.appendChild(msgDiv);
             log.scrollTop = log.scrollHeight;
-
-            if (sender === 'bot') {
-                lastBotMessageDiv = msgDiv;
-            }
-
-            return msgDiv;
         }
     </script>
 </body>
 </html>
-```
