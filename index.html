@@ -1329,6 +1329,7 @@
             
             logMessage('bot', "Redirecting you now...");
             chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
+           if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6); // ⚡ ADD THIS LINE ⚡
 
             window.open(linkInfo.url, '_blank');
             
