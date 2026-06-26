@@ -423,6 +423,28 @@
         let liveTranscriptHideTimer = null;
         let currentLiveAssistantText = "";
         let currentLiveAssistantTag = null;
+        // ⚡ LIVE USER TRANSCRIPTION SETUP ⚡
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let finalUserTranscript = "";
+        
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-IN'; // Works great for Hinglish/Gujarati/English
+            
+            recognition.onresult = (event) => {
+                let interim = "";
+                let final = "";
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) final += event.results[i][0].transcript;
+                    else interim += event.results[i][0].transcript;
+                }
+                finalUserTranscript += final;
+                document.getElementById('usd-interim-text').innerText = (finalUserTranscript + " " + interim).trim();
+            };
+        }
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
