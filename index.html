@@ -1304,6 +1304,7 @@
             
             logMessage('user', userText);
             chatHistory.push({ role: "user", parts: [{ text: userText }] });
+            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6); // ⚡ ADD THIS LINE ⚡
 
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ 
