@@ -174,8 +174,15 @@
             color: #111111;
             transform: translateY(-2px);
         }
-        #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
-        
+        #usd-interim-text {
+            color: #888;
+            text-align: right;
+            font-style: italic;
+            font-size: 12px;
+            min-height: 16px;
+            margin-bottom: 5px;
+        }
+
         /* LIVE TRANSCRIPT POPUP */
         #usd-live-transcript-popup {
             display: none;
@@ -416,30 +423,93 @@
         let liveTranscriptHideTimer = null;
         let currentLiveAssistantText = "";
         let currentLiveAssistantTag = null;
+        let lastAssistantStreamingText = "";
 
-        // ⚡ LIVE USER TRANSCRIPTION SETUP ⚡
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let recognition = null;
-        let finalUserTranscript = "";
-        
-        if (SpeechRecognition) {
+        let isRecognitionActive = false;
+        let voiceInterimTranscript = "";
+        let voiceFinalTranscript = "";
+
+        function initSpeechRecognition() {
+            if (!SpeechRecognition || recognition) return;
+
             recognition = new SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'en-IN';
-            
+            recognition.maxAlternatives = 1;
+
             recognition.onresult = (event) => {
                 let interim = "";
-                let final = "";
+                let finalText = "";
+
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) final += event.results[i][0].transcript;
-                    else interim += event.results[i][0].transcript;
+                    const transcript = event.results[i][0].transcript || "";
+                    if (event.results[i].isFinal) {
+                        finalText += transcript;
+                    } else {
+                        interim += transcript;
+                    }
                 }
-                finalUserTranscript += final;
-                document.getElementById('usd-interim-text').innerText = (finalUserTranscript + " " + interim).trim();
+
+                if (finalText.trim()) {
+                    voiceFinalTranscript += " " + finalText.trim();
+                }
+
+                voiceInterimTranscript = (voiceFinalTranscript + " " + interim).trim();
+                const interimBox = document.getElementById('usd-interim-text');
+                if (interimBox) interimBox.innerText = voiceInterimTranscript;
             };
-            
-            recognition.onerror = (e) => { console.log("Mic transcribing error:", e.error); };
+
+            recognition.onend = () => {
+                isRecognitionActive = false;
+                if (isVoiceMode && currentAgentState === 'listening') {
+                    setTimeout(() => {
+                        startSpeechRecognition();
+                    }, 150);
+                }
+            };
+
+            recognition.onerror = () => {
+                isRecognitionActive = false;
+            };
+        }
+
+        function startSpeechRecognition() {
+            if (!recognition || !isVoiceMode || isRecognitionActive) return;
+            try {
+                recognition.start();
+                isRecognitionActive = true;
+            } catch (e) {}
+        }
+
+        function stopSpeechRecognition() {
+            if (!recognition || !isRecognitionActive) return;
+            try {
+                recognition.stop();
+            } catch (e) {}
+            isRecognitionActive = false;
+        }
+
+        function flushVoiceTranscript() {
+            const interimBox = document.getElementById('usd-interim-text');
+            const text = [
+                voiceFinalTranscript,
+                voiceInterimTranscript,
+                (interimBox ? interimBox.innerText : "")
+            ].join(" ").replace(/\s+/g, " ").trim();
+
+            if (text) {
+                logMessage('user', text);
+                chatHistory.push({ role: "user", parts: [{ text }] });
+                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+                sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
+            }
+
+            voiceInterimTranscript = "";
+            voiceFinalTranscript = "";
+            if (interimBox) interimBox.innerText = "";
         }
 
         const usdLinks = {
@@ -454,6 +524,7 @@
         };
 
         window.onload = async () => {
+            initSpeechRecognition();
             if (sessionStorage.getItem('usd_chat_active') === 'true') {
                 await openChat(true);
             }
@@ -504,14 +575,19 @@
 
             if (newState === 'speaking') {
                 if (isVoiceMode) visualizer.classList.add('active');
+                stopSpeechRecognition();
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
             }
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
+                startSpeechRecognition();
             } else {
                 isMicSoftwareMuted = true;
+                if (newState === 'thinking' || newState === 'connecting' || newState === 'cooldown' || newState === 'off') {
+                    stopSpeechRecognition();
+                }
             }
         }
 
@@ -533,14 +609,82 @@
         function detectLocalTagFromText(input = '') {
             const text = String(input || "").toLowerCase();
 
-            if (text.includes("end chat") || text.includes("goodbye") || text.includes("bye") || text.includes("take care") || text.includes("see you")) return "[END_CHAT]";
-            if (text.includes("virtual smile") || text.includes("try on") || text.includes("try-on") || text.includes("smile try") || text.includes("smile makeover") || text.includes("design my smile") || text.includes("see how your smile") || text.includes("before and after") || text.includes("before/after")) return "[LINK_VTRYON]";
-            if (text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist") || text.includes("find a dentist") || text.includes("nearby dentist") || text.includes("locate dentist") || text.includes("dentist near")) return "[LINK_DENTISTS]";
-            if (text.includes("consultation") || text.includes("consult") || text.includes("schedule") || text.includes("appointment") || text.includes("book") || text.includes("visit the clinic")) return "[LINK_CONSULT]";
-            if (text.includes("contact") || text.includes("reach out") || text.includes("get in touch") || text.includes("call us") || text.includes("phone number")) return "[LINK_CONTACT]";
-            if (text.includes("dentist connect") || text.includes("become certified dentist") || text.includes("collaborate") || text.includes("partner") || text.includes("join our network")) return "[LINK_CONNECT]";
-            if (text.includes("gallery") || text.includes("results") || text.includes("before and after") || text.includes("before/after")) return "[LINK_GALLERY]";
-            
+            if (
+                text.includes("end chat") ||
+                text.includes("goodbye") ||
+                text.includes("bye") ||
+                text.includes("take care") ||
+                text.includes("see you")
+            ) {
+                return "[END_CHAT]";
+            }
+
+            if (
+                text.includes("virtual smile") ||
+                text.includes("try on") ||
+                text.includes("try-on") ||
+                text.includes("smile try") ||
+                text.includes("smile makeover") ||
+                text.includes("design my smile") ||
+                text.includes("see how your smile") ||
+                text.includes("before and after") ||
+                text.includes("before/after")
+            ) {
+                return "[LINK_VTRYON]";
+            }
+
+            if (
+                text.includes("certified dentist") ||
+                text.includes("nearest dentist") ||
+                text.includes("find dentist") ||
+                text.includes("find a dentist") ||
+                text.includes("nearby dentist") ||
+                text.includes("locate dentist") ||
+                text.includes("dentist near")
+            ) {
+                return "[LINK_DENTISTS]";
+            }
+
+            if (
+                text.includes("consultation") ||
+                text.includes("consult") ||
+                text.includes("schedule") ||
+                text.includes("appointment") ||
+                text.includes("book") ||
+                text.includes("visit the clinic")
+            ) {
+                return "[LINK_CONSULT]";
+            }
+
+            if (
+                text.includes("contact") ||
+                text.includes("reach out") ||
+                text.includes("get in touch") ||
+                text.includes("call us") ||
+                text.includes("phone number")
+            ) {
+                return "[LINK_CONTACT]";
+            }
+
+            if (
+                text.includes("dentist connect") ||
+                text.includes("become certified dentist") ||
+                text.includes("collaborate") ||
+                text.includes("partner") ||
+                text.includes("join our network")
+            ) {
+                return "[LINK_CONNECT]";
+            }
+
+            if (
+                text.includes("gallery") ||
+                text.includes("results") ||
+                text.includes("before and after") ||
+                text.includes("before/after")
+            ) {
+                return "[LINK_GALLERY]";
+            }
+
             return null;
         }
 
@@ -594,7 +738,15 @@
                 speechRatio > 0.56 &&
                 coreVsNoise > 1.14;
 
-            return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
+            return {
+                rms,
+                speechAvg,
+                coreAvg,
+                noiseAvg,
+                speechRatio,
+                coreVsNoise,
+                isNearHumanSpeech
+            };
         }
 
         function renderPopupLink(tag) {
@@ -633,9 +785,9 @@
             syncTranscriptLabel();
 
             const clean = String(text || '').trim();
-
             if (clean) {
                 currentLiveAssistantText = clean;
+                lastAssistantStreamingText = clean;
             } else if (force && currentLiveAssistantText) {
                 text = currentLiveAssistantText;
             }
@@ -646,7 +798,7 @@
             currentLiveAssistantTag = finalTag || null;
             popupText.textContent = finalText;
 
-            if (finalText && isVoiceMode) {
+            if (finalText) {
                 popup.style.display = 'block';
                 renderPopupLink(finalTag);
             }
@@ -666,6 +818,7 @@
                 }
                 currentLiveAssistantText = "";
                 currentLiveAssistantTag = null;
+                lastAssistantStreamingText = "";
             }, delay);
         }
 
@@ -780,10 +933,6 @@
             });
             activeSources = [];
             hideLiveTranscript(0);
-
-            // Wipe transcriber if user cuts bot off
-            if (recognition) { try { recognition.abort(); } catch(e) {} }
-            document.getElementById('usd-interim-text').innerText = "";
         }
 
         function toggleChatMode() {
@@ -808,6 +957,7 @@
                 textControls.style.display = "flex";
                 micText.style.display = "none";
                 if (liveTranscript) liveTranscript.style.display = "none";
+                stopSpeechRecognition();
                 interruptBot();
                 syncTranscriptLabel();
                 updateState('listening');
@@ -817,7 +967,9 @@
 
         async function openChat(isRestore = false) {
             initAudio();
+            initSpeechRecognition();
             interruptRestartHoldUntil = 0;
+
             const container = document.getElementById('usd-chat-container');
             const tooltip = document.getElementById('usd-tooltip');
             const bubble = document.getElementById('usd-bubble');
@@ -850,7 +1002,9 @@
                         let cleanText = turn.parts[0].text.replace(/\[.*?\]/g, '').trim();
                         let foundTag = null;
                         if (turn.role === 'model') {
-                            foundTag = detectLocalTagFromText(cleanText);
+                            for (const tag in usdLinks) {
+                                if (turn.parts[0].text.includes(tag)) { foundTag = tag; break; }
+                            }
                         }
                         logMessage(sender, cleanText, foundTag);
                     });
@@ -873,10 +1027,6 @@
                     
                     const greeting = "Namaste! How can we assist you today?";
                     logMessage('bot', greeting);
-
-                    // ⚡ FIX: Add greeting to the email transcript properly
-                    chatHistory.push({ role: "model", parts: [{ text: greeting }] });
-                    sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
                     
                     if (isVoiceMode) {
                         try {
@@ -1010,27 +1160,15 @@
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
 
-                                    // ⚡ START MIC TRANSCRIBER ⚡
-                                    finalUserTranscript = "";
-                                    document.getElementById('usd-interim-text').innerText = "";
-                                    if (recognition) { try { recognition.start(); } catch(e) {} }
-                                    
+                                    voiceInterimTranscript = "";
+                                    voiceFinalTranscript = "";
+                                    const interimBox = document.getElementById('usd-interim-text');
+                                    if (interimBox) interimBox.innerText = "";
+
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
-                                            
-                                            // ⚡ STOP TRANSCRIBER & SAVE USER TEXT ⚡
-                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                            const capturedText = document.getElementById('usd-interim-text').innerText.trim();
-                                            if (capturedText) {
-                                                logMessage('user', capturedText);
-                                                chatHistory.push({ role: "user", parts: [{ text: capturedText }] });
-                                                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                                            } else {
-                                                chatHistory.push({ role: "user", parts: [{ text: "[Voice Audio]" }] });
-                                                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                                            }
-
+                                            flushVoiceTranscript();
                                             updateState('thinking');
                                             document.getElementById('usd-interim-text').innerText = ""; 
                                             if (socket.readyState === WebSocket.OPEN) {
@@ -1053,19 +1191,7 @@
                                     if (isRecording) {
                                         isRecording = false;
                                         clearTimeout(maxRecordingTimer);
-
-                                        // ⚡ STOP TRANSCRIBER & SAVE USER TEXT ⚡
-                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                        const capturedText = document.getElementById('usd-interim-text').innerText.trim();
-                                        if (capturedText) {
-                                            logMessage('user', capturedText);
-                                            chatHistory.push({ role: "user", parts: [{ text: capturedText }] });
-                                            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                                        } else {
-                                            chatHistory.push({ role: "user", parts: [{ text: "[Voice Audio]" }] });
-                                            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                                        }
-
+                                        flushVoiceTranscript();
                                         updateState('thinking');
                                         document.getElementById('usd-interim-text').innerText = ""; 
                                         if (socket.readyState === WebSocket.OPEN) {
@@ -1097,17 +1223,26 @@
                         document.getElementById('usd-interim-text').innerText = data.text;
                     }
                     else if (data.type === 'text_stream') {
+                        lastAssistantStreamingText = String(data.text || '').trim();
+
                         if (!activeBotMessageDiv) {
-                            activeBotMessageDiv = logMessage('bot', data.text);
-                            activeBotTextSpan = activeBotMessageDiv.querySelector('.usd-msg-text');
+                            const log = document.getElementById('usd-chat-log');
+                            activeBotMessageDiv = document.createElement('div');
+                            activeBotMessageDiv.className = `msg msg-bot`;
+                            
+                            activeBotTextSpan = document.createElement('span');
+                            activeBotTextSpan.className = 'usd-msg-text';
+                            activeBotTextSpan.textContent = "Assistant: " + data.text;
+                            
+                            activeBotMessageDiv.appendChild(activeBotTextSpan);
+                            log.appendChild(activeBotMessageDiv);
+                            lastBotMessageDiv = activeBotMessageDiv;
                         } else if (activeBotTextSpan) {
-                            activeBotTextSpan.innerText = "Assistant: " + data.text;
+                            activeBotTextSpan.textContent = "Assistant: " + data.text;
                         }
 
-                        if (isVoiceMode) {
-                            const previewTag = detectLocalTagFromText(data.text);
-                            updateLiveTranscript(data.text, previewTag);
-                        }
+                        const previewTag = detectLocalTagFromText(data.text);
+                        updateLiveTranscript(data.text, previewTag);
 
                         const log = document.getElementById('usd-chat-log');
                         log.scrollTop = log.scrollHeight;
@@ -1123,34 +1258,48 @@
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
 
-                        const finalText = String(data.botText || currentLiveAssistantText || '').trim();
+                        const botSpanText = botTarget ? (botTarget.querySelector('.usd-msg-text')?.textContent || "") : "";
+                        const finalText = String(
+                            data.botText ||
+                            lastAssistantStreamingText ||
+                            currentLiveAssistantText ||
+                            botSpanText.replace(/^Assistant:\s*/, '') ||
+                            "Okay."
+                        ).trim();
+
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
                         if (botTarget && finalText) {
                             const span = botTarget.querySelector('.usd-msg-text');
-                            if (span) span.innerText = "Assistant: " + finalText;
-                            if (finalTag && usdLinks[finalTag]) {
-                                appendLinkButton(botTarget, finalTag);
+                            if (span) {
+                                span.textContent = "Assistant: " + finalText;
                             }
-                        } else if (!botTarget && finalText) {
-                            lastBotMessageDiv = logMessage('bot', finalText, finalTag);
+                        }
+
+                        if (!botTarget && finalText) {
+                            lastBotMessageDiv = logMessage('bot', finalText);
                         }
                         
-                        // ⚡ FIX: ONLY SAVE IF THE BOT ACTUALLY SPOKE ⚡
-                        if (finalText) {
-                            chatHistory.push({ role: "model", parts: [{ text: finalText }] });
-                            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
-                        }
+                        chatHistory.push({ role: "model", parts: [{ text: finalText }] });
+                        if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+                        sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
                         activeTag = finalTag;
                         isReplyComplete = true; 
                         
+                        const finalBotTarget = botTarget || lastBotMessageDiv;
+                        if (activeTag && usdLinks[activeTag] && finalBotTarget) {
+                            appendLinkButton(finalBotTarget, activeTag);
+                            const log = document.getElementById('usd-chat-log');
+                            log.scrollTop = log.scrollHeight;
+                        }
+
+                        updateLiveTranscript(finalText, activeTag, true);
+
                         if (!isVoiceMode) {
                             updateState('listening');
                             if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
                         } else {
-                            updateLiveTranscript(finalText, activeTag, true);
                             checkBotFinishedSpeaking(); 
                         }
 
@@ -1177,6 +1326,8 @@
         async function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
+                stopSpeechRecognition();
+                flushVoiceTranscript();
                 updateState('thinking');
                 interruptBot();
                 
@@ -1205,6 +1356,7 @@
         }
 
         function closeChat(showRating = false) {
+            stopSpeechRecognition();
             updateState('off');
             interruptBot();
             hideLiveTranscript(0);
@@ -1262,17 +1414,16 @@
             if (!userText || currentAgentState === 'thinking' || currentAgentState === 'connecting') return;
 
             inputEl.value = ''; 
+            stopSpeechRecognition();
+            flushVoiceTranscript();
             interruptBot();
 
             updateState('thinking');
             document.getElementById('usd-interim-text').innerText = ""; 
             
             logMessage('user', userText);
-            
-            if (userText) {
-                chatHistory.push({ role: "user", parts: [{ text: userText }] });
-                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-            }
+            chatHistory.push({ role: "user", parts: [{ text: userText }] });
+            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
 
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ 
@@ -1291,14 +1442,14 @@
             }
         }
 
-       async function handleLinkClick(tag) {
+        async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
             if (!linkInfo) return;
             
             logMessage('bot', "Redirecting you now...");
-            
             chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
             window.open(linkInfo.url, '_blank');
             
@@ -1310,14 +1461,10 @@
             const msgDiv = document.createElement('div');
             msgDiv.className = `msg msg-${sender}`;
             
-            const span = document.createElement('span');
-            span.className = 'usd-msg-text';
-            if (sender === 'user') span.innerText = "You: " + text;
-            else if (sender === 'bot') span.innerText = "Assistant: " + text;
-            else span.innerText = text; 
+            if (sender === 'user') msgDiv.innerText = "You: " + text;
+            else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
+            else msgDiv.innerText = text; 
             
-            msgDiv.appendChild(span);
-
             if (tag && usdLinks[tag]) {
                 const btn = document.createElement('button');
                 btn.className = 'usd-link-card';
@@ -1328,7 +1475,6 @@
 
             log.appendChild(msgDiv);
             log.scrollTop = log.scrollHeight;
-            return msgDiv;
         }
     </script>
 </body>
