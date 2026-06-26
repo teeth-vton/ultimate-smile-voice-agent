@@ -1122,6 +1122,14 @@
                                     if (isRecording) {
                                         isRecording = false;
                                         clearTimeout(maxRecordingTimer);
+                                        // ⚡ STOP TRANSCRIBER & LOG ⚡
+                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
+                                        const capturedText = document.getElementById('usd-interim-text').innerText.trim();
+                                        if (capturedText) {
+                                            logMessage('user', capturedText);
+                                            chatHistory.push({ role: "user", parts: [{ text: capturedText }] });
+                                            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+                                        }
                                         updateState('thinking');
                                         document.getElementById('usd-interim-text').innerText = ""; 
                                         if (socket.readyState === WebSocket.OPEN) {
