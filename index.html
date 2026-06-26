@@ -1167,6 +1167,7 @@
                         }
                         
                         chatHistory.push({ role: "model", parts: [{ text: finalText }] });
+                        if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6); // ⚡ ADD THIS LINE ⚡
                         sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
                         activeTag = finalTag;
