@@ -1084,6 +1084,10 @@
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
+                                    // ⚡ START MIC TRANSCRIBER ⚡
+                                    finalUserTranscript = "";
+                                    document.getElementById('usd-interim-text').innerText = "";
+                                    if (recognition) { try { recognition.start(); } catch(e) {} }
                                     
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
