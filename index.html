@@ -425,92 +425,11 @@
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
 
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let recognition = null;
-        let isRecognitionActive = false;
-        let voiceInterimTranscript = "";
-        let voiceFinalTranscript = "";
-
-        function initSpeechRecognition() {
-            if (!SpeechRecognition || recognition) return;
-
-            recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = 'en-IN';
-            recognition.maxAlternatives = 1;
-
-            recognition.onresult = (event) => {
-                let interim = "";
-                let finalText = "";
-
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    const transcript = event.results[i][0].transcript || "";
-                    if (event.results[i].isFinal) {
-                        finalText += transcript;
-                    } else {
-                        interim += transcript;
-                    }
-                }
-
-                if (finalText.trim()) {
-                    voiceFinalTranscript += " " + finalText.trim();
-                }
-
-                voiceInterimTranscript = (voiceFinalTranscript + " " + interim).trim();
-                const interimBox = document.getElementById('usd-interim-text');
-                if (interimBox) interimBox.innerText = voiceInterimTranscript;
-            };
-
-            recognition.onend = () => {
-                isRecognitionActive = false;
-                if (isVoiceMode && currentAgentState === 'listening') {
-                    setTimeout(() => {
-                        startSpeechRecognition();
-                    }, 150);
-                }
-            };
-
-            recognition.onerror = () => {
-                isRecognitionActive = false;
-            };
-        }
-
-        function startSpeechRecognition() {
-            if (!recognition || !isVoiceMode || isRecognitionActive) return;
-            try {
-                recognition.start();
-                isRecognitionActive = true;
-            } catch (e) {}
-        }
-
-        function stopSpeechRecognition() {
-            if (!recognition || !isRecognitionActive) return;
-            try {
-                recognition.stop();
-            } catch (e) {}
-            isRecognitionActive = false;
-        }
-
-        function flushVoiceTranscript() {
-            const interimBox = document.getElementById('usd-interim-text');
-            const text = [
-                voiceFinalTranscript,
-                voiceInterimTranscript,
-                (interimBox ? interimBox.innerText : "")
-            ].join(" ").replace(/\s+/g, " ").trim();
-
-            if (text) {
-                logMessage('user', text);
-                chatHistory.push({ role: "user", parts: [{ text }] });
-                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
-            }
-
-            voiceInterimTranscript = "";
-            voiceFinalTranscript = "";
-            if (interimBox) interimBox.innerText = "";
-        }
+        /* =========================================================================================
+           CHANGE MADE HERE: Removed redundant browser-native SpeechRecognition loop.
+           Relying entirely on the raw high-fidelity WebSocket PCM streaming prevents mic lockups,
+           double transcribing bugs, and resolves the browser activation beeps ("tun tun" sounds).
+           ========================================================================================= */
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
@@ -524,7 +443,6 @@
         };
 
         window.onload = async () => {
-            initSpeechRecognition();
             if (sessionStorage.getItem('usd_chat_active') === 'true') {
                 await openChat(true);
             }
@@ -575,19 +493,14 @@
 
             if (newState === 'speaking') {
                 if (isVoiceMode) visualizer.classList.add('active');
-                stopSpeechRecognition();
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
             }
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
-                startSpeechRecognition();
             } else {
                 isMicSoftwareMuted = true;
-                if (newState === 'thinking' || newState === 'connecting' || newState === 'cooldown' || newState === 'off') {
-                    stopSpeechRecognition();
-                }
             }
         }
 
@@ -957,7 +870,6 @@
                 textControls.style.display = "flex";
                 micText.style.display = "none";
                 if (liveTranscript) liveTranscript.style.display = "none";
-                stopSpeechRecognition();
                 interruptBot();
                 syncTranscriptLabel();
                 updateState('listening');
@@ -967,7 +879,6 @@
 
         async function openChat(isRestore = false) {
             initAudio();
-            initSpeechRecognition();
             interruptRestartHoldUntil = 0;
 
             const container = document.getElementById('usd-chat-container');
@@ -1160,15 +1071,12 @@
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
 
-                                    voiceInterimTranscript = "";
-                                    voiceFinalTranscript = "";
                                     const interimBox = document.getElementById('usd-interim-text');
                                     if (interimBox) interimBox.innerText = "";
 
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
-                                            flushVoiceTranscript();
                                             updateState('thinking');
                                             document.getElementById('usd-interim-text').innerText = ""; 
                                             if (socket.readyState === WebSocket.OPEN) {
@@ -1191,7 +1099,6 @@
                                     if (isRecording) {
                                         isRecording = false;
                                         clearTimeout(maxRecordingTimer);
-                                        flushVoiceTranscript();
                                         updateState('thinking');
                                         document.getElementById('usd-interim-text').innerText = ""; 
                                         if (socket.readyState === WebSocket.OPEN) {
@@ -1218,6 +1125,10 @@
                     else if (data.type === 'user_spoken_text') {
                         document.getElementById('usd-interim-text').innerText = ""; 
                         logMessage('user', data.text);
+                        // Save client turn transcript history locally 
+                        chatHistory.push({ role: "user", parts: [{ text: data.text }] });
+                        if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+                        sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
                     }
                     else if (data.type === 'interim_transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
@@ -1326,8 +1237,6 @@
         async function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
-                stopSpeechRecognition();
-                flushVoiceTranscript();
                 updateState('thinking');
                 interruptBot();
                 
@@ -1356,7 +1265,6 @@
         }
 
         function closeChat(showRating = false) {
-            stopSpeechRecognition();
             updateState('off');
             interruptBot();
             hideLiveTranscript(0);
@@ -1414,8 +1322,6 @@
             if (!userText || currentAgentState === 'thinking' || currentAgentState === 'connecting') return;
 
             inputEl.value = ''; 
-            stopSpeechRecognition();
-            flushVoiceTranscript();
             interruptBot();
 
             updateState('thinking');
@@ -1475,6 +1381,7 @@
 
             log.appendChild(msgDiv);
             log.scrollTop = log.scrollHeight;
+            return msgDiv;
         }
     </script>
 </body>
