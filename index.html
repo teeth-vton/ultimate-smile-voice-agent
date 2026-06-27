@@ -222,7 +222,7 @@
         }
 
         #usd-input-container {
-            display: flex; 
+            display: none; 
             border-top: 1px solid rgba(255,255,255,0.1);
             padding-top: 10px;
         }
@@ -358,6 +358,7 @@
                     </div>
                 </div>
 
+                <!-- LIVE TRANSCRIPT POPUP -->
                 <div id="usd-live-transcript-popup">
                     <div id="usd-live-transcript-label">Assistant speaking</div>
                     <div id="usd-live-transcript-text"></div>
@@ -634,11 +635,11 @@
             }
 
             let energy = 0;
-            for (let i = 0; i < timeDomainArray.length; i++) {
-                const centered = (timeDomainArray[i] - 128) / 128;
+            for (let i = 0; i < timeDataArray.length; i++) {
+                const centered = (timeDataArray[i] - 128) / 128;
                 energy += centered * centered;
             }
-            const rms = Math.sqrt(energy / Math.max(1, timeDomainArray.length));
+            const rms = Math.sqrt(energy / Math.max(1, timeDataArray.length));
 
             const speechAvg = speechSum / Math.max(1, speechCount);
             const coreAvg = coreSum / Math.max(1, coreCount);
@@ -756,8 +757,8 @@
         function appendLinkButton(targetEl, tag) {
             if (!targetEl || !tag || !usdLinks[tag]) return;
 
-            const alreadyHasButton = targetEl.querySelector('.usd-link-card');
-            if (alreadyHasButton) return;
+            const existing = targetEl.querySelector('.usd-link-card');
+            if (existing) return;
 
             const btn = document.createElement('button');
             btn.className = 'usd-link-card';
@@ -896,7 +897,7 @@
             if (isVoiceMode) {
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "flex";
-                textControls.style.display = "flex";
+                textControls.style.display = "none";
                 micText.style.display = "block";
                 if (liveTranscript) liveTranscript.style.display = "none";
                 syncTranscriptLabel();
@@ -967,6 +968,7 @@
                     
                     const greeting = "Namaste! How can we assist you today?";
                     logMessage('bot', greeting);
+                    addBotHistoryIfNew(greeting);
                     
                     if (isVoiceMode) {
                         try {
@@ -1205,7 +1207,7 @@
                         const fallbackText = cleanDisplayText(data.text || "");
                         if (!fallbackText) return;
 
-                        let targetDiv = activeBotMessageDiv || lastBotMessageDiv;
+                        let targetDiv = lastBotMessageDiv;
                         if (targetDiv) {
                             const span = targetDiv.querySelector('.usd-msg-text');
                             if (span) span.textContent = "Assistant: " + fallbackText;
