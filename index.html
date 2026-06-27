@@ -358,7 +358,6 @@
                     </div>
                 </div>
 
-                <!-- LIVE TRANSCRIPT POPUP -->
                 <div id="usd-live-transcript-popup">
                     <div id="usd-live-transcript-label">Assistant speaking</div>
                     <div id="usd-live-transcript-text"></div>
@@ -423,6 +422,7 @@
         let currentLiveAssistantText = "";
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
+        let currentAssistantGenerationId = 0;
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
@@ -604,7 +604,7 @@
             return null;
         }
 
-        function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
+        function getHumanSpeechProfile(dataArray, timeDataArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
 
@@ -801,7 +801,7 @@
                 nextPlayTime = 0; 
                 
                 if (activeTag === '[END_CHAT]') {
-                    setTimeout(() => closeChat(true), 2000);
+                    setTimeout(() => closeChat(true), 1200);
                 } else {
                     updateState('cooldown');
                     setTimeout(() => {
@@ -897,7 +897,7 @@
             if (isVoiceMode) {
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "flex";
-                textControls.style.display = "none";
+                textControls.style.display = "flex";
                 micText.style.display = "block";
                 if (liveTranscript) liveTranscript.style.display = "none";
                 syncTranscriptLabel();
@@ -947,7 +947,8 @@
                     chatHistory.forEach(turn => {
                         const sender = turn.role === 'model' ? 'bot' : 'user';
                         const cleanText = cleanDisplayText(turn.parts[0].text);
-                        logMessage(sender, cleanText);
+                        const foundTag = sender === 'bot' ? detectLocalTagFromText(cleanText) : null;
+                        logMessage(sender, cleanText, foundTag);
                     });
 
                     updateState('thinking');
@@ -1158,26 +1159,16 @@
 
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
-                    
-                    if (data.type === 'idle') {
-                        document.getElementById('usd-interim-text').innerText = "";
-                        hideLiveTranscript(0);
-                        updateState('listening');
-                    }
-                    else if (data.type === 'user_spoken_text') {
-                        const cleanUserText = cleanDisplayText(data.text || "");
-                        if (cleanUserText) {
-                            logMessage('user', cleanUserText);
-                            addUserHistoryIfNew(cleanUserText);
-                        }
-                        document.getElementById('usd-interim-text').innerText = "";
-                    }
-                    else if (data.type === 'interim_transcript') {
-                        document.getElementById('usd-interim-text').innerText = data.text;
-                    }
-                    else if (data.type === 'text_stream') {
+
+                    if (data.type === 'assistant_text_stream') {
                         const streamedText = cleanDisplayText(data.text || "");
                         if (!streamedText) return;
+
+                        if (data.generationId && data.generationId !== currentAssistantGenerationId) {
+                            currentAssistantGenerationId = data.generationId;
+                            activeBotMessageDiv = null;
+                            activeBotTextSpan = null;
+                        }
 
                         lastAssistantStreamingText = streamedText;
 
@@ -1197,74 +1188,89 @@
                         const log = document.getElementById('usd-chat-log');
                         log.scrollTop = log.scrollHeight;
                     }
+                    else if (data.type === 'assistant_text_complete') {
+                        if (data.generationId && data.generationId < currentAssistantGenerationId) return;
+                        if (data.generationId) currentAssistantGenerationId = data.generationId;
+
+                        const finalText = cleanDisplayText(
+                            data.botText ||
+                            lastAssistantStreamingText ||
+                            currentLiveAssistantText ||
+                            "Okay."
+                        );
+
+                        const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
+
+                        let targetBotDiv = activeBotMessageDiv;
+                        if (targetBotDiv) {
+                            const span = targetBotDiv.querySelector('.usd-msg-text');
+                            if (span) span.textContent = "Assistant: " + finalText;
+                        } else {
+                            targetBotDiv = logMessage('bot', finalText);
+                        }
+
+                        activeBotMessageDiv = null;
+                        activeBotTextSpan = null;
+                        lastBotMessageDiv = targetBotDiv;
+
+                        addBotHistoryIfNew(finalText);
+
+                        activeTag = finalTag;
+                        if (activeTag && usdLinks[activeTag] && targetBotDiv) {
+                            appendLinkButton(targetBotDiv, activeTag);
+                        }
+
+                        updateLiveTranscript(finalText, activeTag, true);
+
+                        if (!isVoiceMode) {
+                            updateState('listening');
+                            if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 1200);
+                        } else {
+                            if (
+                                activeTag === '[END_CHAT]' &&
+                                audioChunkQueue.length === 0 &&
+                                activeSources.length === 0 &&
+                                currentAgentState !== 'speaking'
+                            ) {
+                                setTimeout(() => closeChat(true), 1200);
+                            }
+                        }
+
+                        hideLiveTranscript(3500);
+                    }
                     else if (data.type === 'audio_chunk') {
                         if (isVoiceMode) {
                             audioChunkQueue.push(data);
                             processAudioQueue();
                         }
                     }
-                    else if (data.type === 'assistant_text_fallback') {
-                        const fallbackText = cleanDisplayText(data.text || "");
-                        if (!fallbackText) return;
-
-                        let targetDiv = lastBotMessageDiv;
-                        if (targetDiv) {
-                            const span = targetDiv.querySelector('.usd-msg-text');
-                            if (span) span.textContent = "Assistant: " + fallbackText;
-                        } else {
-                            targetDiv = logMessage('bot', fallbackText);
-                        }
-
-                        addBotHistoryIfNew(fallbackText);
-
-                        const fallbackTag = data.tag || detectLocalTagFromText(fallbackText);
-                        if (fallbackTag && targetDiv) appendLinkButton(targetDiv, fallbackTag);
-
-                        updateLiveTranscript(fallbackText, fallbackTag, true);
+                    else if (data.type === 'audio_reply_complete') {
+                        isReplyComplete = true;
+                        checkBotFinishedSpeaking();
                     }
-                    else if (data.type === 'reply_complete') {
-                        const finalText = cleanDisplayText(
-                            data.botText ||
-                            lastAssistantStreamingText ||
-                            currentLiveAssistantText ||
-                            ""
-                        ).trim();
+                    else if (data.type === 'user_spoken_text') {
+                        const cleanUserText = cleanDisplayText(data.text || "");
+                        if (!cleanUserText) return;
 
-                        const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
-
-                        let targetBotDiv = activeBotMessageDiv;
-
-                        if (finalText) {
-                            if (targetBotDiv) {
-                                const span = targetBotDiv.querySelector('.usd-msg-text');
-                                if (span) span.textContent = "Assistant: " + finalText;
-                            } else {
-                                targetBotDiv = logMessage('bot', finalText);
-                            }
-
-                            addBotHistoryIfNew(finalText);
-
-                            if (finalTag && targetBotDiv) {
-                                appendLinkButton(targetBotDiv, finalTag);
-                            }
-
-                            updateLiveTranscript(finalText, finalTag, true);
-                        }
-
-                        activeBotMessageDiv = null;
-                        activeBotTextSpan = null;
-                        lastBotMessageDiv = targetBotDiv || lastBotMessageDiv;
-                        activeTag = finalTag;
-                        isReplyComplete = true; 
-                        
-                        if (!isVoiceMode) {
-                            updateState('listening');
-                            if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
+                        if (activeBotMessageDiv && activeBotMessageDiv.parentNode) {
+                            const msgDiv = createMessageDiv('user', cleanUserText);
+                            activeBotMessageDiv.parentNode.insertBefore(msgDiv, activeBotMessageDiv);
+                            const log = document.getElementById('usd-chat-log');
+                            log.scrollTop = log.scrollHeight;
                         } else {
-                            checkBotFinishedSpeaking(); 
+                            logMessage('user', cleanUserText);
                         }
 
-                        hideLiveTranscript(3500);
+                        addUserHistoryIfNew(cleanUserText);
+                        document.getElementById('usd-interim-text').innerText = "";
+                    }
+                    else if (data.type === 'idle') {
+                        document.getElementById('usd-interim-text').innerText = "";
+                        hideLiveTranscript(0);
+                        updateState('listening');
+                    }
+                    else if (data.type === 'interim_transcript') {
+                        document.getElementById('usd-interim-text').innerText = data.text;
                     }
                     else if (data.type === 'error') {
                         document.getElementById('usd-interim-text').innerText = "";
