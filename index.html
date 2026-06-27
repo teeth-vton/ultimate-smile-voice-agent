@@ -222,7 +222,7 @@
         }
 
         #usd-input-container {
-            display: none; 
+            display: flex; 
             border-top: 1px solid rgba(255,255,255,0.1);
             padding-top: 10px;
         }
@@ -756,6 +756,9 @@
         function appendLinkButton(targetEl, tag) {
             if (!targetEl || !tag || !usdLinks[tag]) return;
 
+            const alreadyHasButton = targetEl.querySelector('.usd-link-card');
+            if (alreadyHasButton) return;
+
             const btn = document.createElement('button');
             btn.className = 'usd-link-card';
             btn.innerText = usdLinks[tag].label;
@@ -775,6 +778,18 @@
             if (last && last.role === 'user' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
 
             chatHistory.push({ role: "user", parts: [{ text: clean }] });
+            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+            saveHistory();
+        }
+
+        function addBotHistoryIfNew(text) {
+            const clean = cleanDisplayText(text);
+            if (!clean) return;
+
+            const last = chatHistory[chatHistory.length - 1];
+            if (last && last.role === 'model' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
+
+            chatHistory.push({ role: "model", parts: [{ text: clean }] });
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
             saveHistory();
         }
@@ -1186,47 +1201,60 @@
                             processAudioQueue();
                         }
                     }
+                    else if (data.type === 'assistant_text_fallback') {
+                        const fallbackText = cleanDisplayText(data.text || "");
+                        if (!fallbackText) return;
+
+                        let targetDiv = activeBotMessageDiv || lastBotMessageDiv;
+                        if (targetDiv) {
+                            const span = targetDiv.querySelector('.usd-msg-text');
+                            if (span) span.textContent = "Assistant: " + fallbackText;
+                        } else {
+                            targetDiv = logMessage('bot', fallbackText);
+                        }
+
+                        addBotHistoryIfNew(fallbackText);
+
+                        const fallbackTag = data.tag || detectLocalTagFromText(fallbackText);
+                        if (fallbackTag && targetDiv) appendLinkButton(targetDiv, fallbackTag);
+
+                        updateLiveTranscript(fallbackText, fallbackTag, true);
+                    }
                     else if (data.type === 'reply_complete') {
                         const finalText = cleanDisplayText(
                             data.botText ||
                             lastAssistantStreamingText ||
                             currentLiveAssistantText ||
-                            "Okay."
+                            ""
                         ).trim();
 
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
                         let targetBotDiv = activeBotMessageDiv;
 
-                        if (targetBotDiv) {
-                            const span = targetBotDiv.querySelector('.usd-msg-text');
-                            if (span) span.textContent = "Assistant: " + finalText;
-                        } else {
-                            targetBotDiv = logMessage('bot', finalText);
+                        if (finalText) {
+                            if (targetBotDiv) {
+                                const span = targetBotDiv.querySelector('.usd-msg-text');
+                                if (span) span.textContent = "Assistant: " + finalText;
+                            } else {
+                                targetBotDiv = logMessage('bot', finalText);
+                            }
+
+                            addBotHistoryIfNew(finalText);
+
+                            if (finalTag && targetBotDiv) {
+                                appendLinkButton(targetBotDiv, finalTag);
+                            }
+
+                            updateLiveTranscript(finalText, finalTag, true);
                         }
 
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
-                        lastBotMessageDiv = targetBotDiv;
-
-                        const last = chatHistory[chatHistory.length - 1];
-                        if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
-                            chatHistory.push({ role: "model", parts: [{ text: finalText }] });
-                            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                            saveHistory();
-                        }
-
+                        lastBotMessageDiv = targetBotDiv || lastBotMessageDiv;
                         activeTag = finalTag;
                         isReplyComplete = true; 
                         
-                        if (activeTag && usdLinks[activeTag] && targetBotDiv) {
-                            appendLinkButton(targetBotDiv, activeTag);
-                            const log = document.getElementById('usd-chat-log');
-                            log.scrollTop = log.scrollHeight;
-                        }
-
-                        updateLiveTranscript(finalText, activeTag, true);
-
                         if (!isVoiceMode) {
                             updateState('listening');
                             if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
@@ -1262,6 +1290,7 @@
                 
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
                 logMessage('bot', goodbyeText);
+                addBotHistoryIfNew(goodbyeText);
                 
                 if (isVoiceMode) {
                     try {
@@ -1372,9 +1401,7 @@
             if (!linkInfo) return;
             
             logMessage('bot', "Redirecting you now...");
-            chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
-            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-            saveHistory();
+            addBotHistoryIfNew("Redirecting you now...");
 
             window.open(linkInfo.url, '_blank');
             
