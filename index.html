@@ -426,9 +426,9 @@
         let lastAssistantStreamingText = "";
 
         /* =========================================================================================
-           CHANGE MADE HERE: Removed redundant browser-native SpeechRecognition loop.
-           Relying entirely on the raw high-fidelity WebSocket PCM streaming prevents mic lockups,
-           double transcribing bugs, and resolves the browser activation beeps ("tun tun" sounds).
+           CRITICAL BUG FIX: Removed redundant SpeechRecognition engines and references.
+           Relying fully on high-fidelity PCM streaming resolves resource locks and removes
+           the system microphone beep-beep / "tun tun" sounds entirely on mobile and desktop browsers.
            ========================================================================================= */
 
         const usdLinks = {
@@ -1023,7 +1023,7 @@
 
                         const speechProfile = getHumanSpeechProfile(
                             dataArray,
-                            timeDataArray,
+                            timeDomainArray,
                             streamCtx.sampleRate || 16000,
                             analyser.fftSize || 512
                         );
