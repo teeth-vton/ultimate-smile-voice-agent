@@ -425,12 +425,6 @@
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
 
-        /* =========================================================================================
-           CRITICAL BUG FIX: Removed redundant SpeechRecognition engines and references.
-           Relying fully on high-fidelity PCM streaming resolves resource locks and removes
-           the system microphone beep-beep / "tun tun" sounds entirely on mobile and desktop browsers.
-           ========================================================================================= */
-
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist. Add your details and we will reach out to you soon.' },
@@ -1070,9 +1064,6 @@
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
-
-                                    const interimBox = document.getElementById('usd-interim-text');
-                                    if (interimBox) interimBox.innerText = "";
 
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
