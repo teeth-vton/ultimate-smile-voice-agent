@@ -176,6 +176,7 @@
         }
         #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
         
+        /* LIVE TRANSCRIPT POPUP */
         #usd-live-transcript-popup {
             display: none;
             margin-bottom: 10px;
@@ -463,9 +464,8 @@
 
         function cleanDisplayText(text = "") {
             let result = String(text || "");
-            // ⚡ SAFE REGEX IMPLEMENTATION ⚡
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("", "g"), "");
+            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
@@ -516,42 +516,13 @@
         function detectLocalTagFromText(input = '') {
             const text = cleanDisplayText(String(input || "").toLowerCase());
 
-            if (
-                text.includes("end chat") || text.includes("goodbye") || text.includes("bye") || text.includes("take care") || text.includes("see you") ||
-                text.includes("अलविदा") || text.includes("बाय") || text.includes("फिर मिलेंगे") || text.includes("આવજો") || text.includes("બાય")
-            ) return "[END_CHAT]";
-
-            if (
-                text.includes("virtual smile") || text.includes("try on") || text.includes("try-on") || text.includes("smile try") || text.includes("smile makeover") ||
-                text.includes("design my smile") || text.includes("see how your smile") || text.includes("before and after") || text.includes("before/after") ||
-                text.includes("वर्चुअल स्माइल") || text.includes("વર્ચ્યુઅલ સ્માઇલ")
-            ) return "[LINK_VTRYON]";
-
-            if (
-                text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist") || text.includes("find a dentist") ||
-                text.includes("nearby dentist") || text.includes("locate dentist") || text.includes("dentist near") || text.includes("nearest clinic") ||
-                text.includes("सर्टिफाइड डेंटिस्ट") || text.includes("નજીકના ડેન્ટિસ્ટ") || text.includes("સર્ટિફાઇડ ડેન્ટિસ્ટ")
-            ) return "[LINK_DENTISTS]";
-
-            if (
-                text.includes("consultation") || text.includes("consult") || text.includes("schedule") || text.includes("appointment") || text.includes("book") ||
-                text.includes("visit the clinic") || text.includes("कंसल्टेशन") || text.includes("अपॉइंटमेंट") || text.includes("કન્સલ્ટેશન") || text.includes("એપોઇન્ટમેન્ટ")
-            ) return "[LINK_CONSULT]";
-
-            if (
-                text.includes("contact") || text.includes("reach out") || text.includes("get in touch") || text.includes("call us") || text.includes("phone number") ||
-                text.includes("संपर्क") || text.includes("સંપર્ક")
-            ) return "[LINK_CONTACT]";
-
-            if (
-                text.includes("dentist connect") || text.includes("become certified dentist") || text.includes("collaborate") || text.includes("partner") ||
-                text.includes("join our network") || text.includes("डेंटिस्ट कनेक्ट") || text.includes("ડેન્ટિસ્ટ કનેક્ટ")
-            ) return "[LINK_CONNECT]";
-
-            if (
-                text.includes("gallery") || text.includes("results") || text.includes("before and after") || text.includes("before/after") ||
-                text.includes("गैलरी") || text.includes("ગેલેરી")
-            ) return "[LINK_GALLERY]";
+            if (text.includes("end chat") || text.includes("goodbye") || text.includes("bye") || text.includes("take care") || text.includes("see you") || text.includes("अलविदा") || text.includes("बाय") || text.includes("फिर मिलेंगे") || text.includes("આવજો") || text.includes("બાય")) return "[END_CHAT]";
+            if (text.includes("virtual smile") || text.includes("try on") || text.includes("try-on") || text.includes("smile try") || text.includes("smile makeover") || text.includes("design my smile") || text.includes("see how your smile") || text.includes("before and after") || text.includes("before/after") || text.includes("वर्चुअल स्माइल") || text.includes("વર્ચ્યુઅલ સ્માઇલ")) return "[LINK_VTRYON]";
+            if (text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist") || text.includes("find a dentist") || text.includes("nearby dentist") || text.includes("locate dentist") || text.includes("dentist near") || text.includes("nearest clinic") || text.includes("सर्टिफाइड डेंटिस्ट") || text.includes("નજીકના ડેન્ટિસ્ટ") || text.includes("સર્ટિફાઇડ ડેન્ટિસ્ટ")) return "[LINK_DENTISTS]";
+            if (text.includes("consultation") || text.includes("consult") || text.includes("schedule") || text.includes("appointment") || text.includes("book") || text.includes("visit the clinic") || text.includes("कंसल्टेशन") || text.includes("अपॉइंटमेंट") || text.includes("કન્સલ્ટેશન") || text.includes("એપોઇન્ટમેન્ટ")) return "[LINK_CONSULT]";
+            if (text.includes("contact") || text.includes("reach out") || text.includes("get in touch") || text.includes("call us") || text.includes("phone number") || text.includes("संपर्क") || text.includes("સંપર્ક")) return "[LINK_CONTACT]";
+            if (text.includes("dentist connect") || text.includes("become certified dentist") || text.includes("collaborate") || text.includes("partner") || text.includes("join our network") || text.includes("डेंटिस्ट कनेक्ट") || text.includes("ડેન્ટિસ્ટ કનેક્ટ")) return "[LINK_CONNECT]";
+            if (text.includes("gallery") || text.includes("results") || text.includes("before and after") || text.includes("before/after") || text.includes("गैलरी") || text.includes("ગેલેરી")) return "[LINK_GALLERY]";
 
             return null;
         }
@@ -1333,6 +1304,37 @@
             window.open(linkInfo.url, '_blank');
             
             updateState('listening');
+        }
+        
+        function logMessage(sender, text, tag = null) {
+            const log = document.getElementById('usd-chat-log');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `msg msg-${sender}`;
+            
+            const span = document.createElement('span');
+            span.className = 'usd-msg-text';
+            if (sender === 'user') span.innerText = "You: " + text;
+            else if (sender === 'bot') span.innerText = "Assistant: " + text;
+            else span.innerText = text; 
+            
+            msgDiv.appendChild(span);
+
+            if (tag && usdLinks[tag]) {
+                const btn = document.createElement('button');
+                btn.className = 'usd-link-card';
+                btn.innerText = usdLinks[tag].label;
+                btn.onclick = () => handleLinkClick(tag);
+                msgDiv.appendChild(btn);
+            }
+
+            log.appendChild(msgDiv);
+            log.scrollTop = log.scrollHeight;
+
+            if (sender === 'bot') {
+                lastBotMessageDiv = msgDiv;
+            }
+
+            return msgDiv;
         }
     </script>
 </body>
