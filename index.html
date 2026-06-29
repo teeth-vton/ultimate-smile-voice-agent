@@ -174,16 +174,8 @@
             color: #111111;
             transform: translateY(-2px);
         }
-        #usd-interim-text {
-            color: #888;
-            text-align: right;
-            font-style: italic;
-            font-size: 12px;
-            min-height: 16px;
-            margin-bottom: 5px;
-        }
-
-        /* LIVE TRANSCRIPT POPUP */
+        #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
+        
         #usd-live-transcript-popup {
             display: none;
             margin-bottom: 10px;
@@ -351,7 +343,7 @@
                         <div id="usd-status-box">Connected 🟢</div>
                     </div>
                     <div id="usd-header-right">
-                        <button id="usd-mode-toggle" onclick="toggleChatMode()">🎙️ Voice</button>
+                        <button id="usd-mode-toggle" onclick="toggleChatMode()">💬 Text</button>
                         <div id="usd-visualizer">
                             <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
                         </div>
@@ -359,7 +351,6 @@
                     </div>
                 </div>
 
-                <!-- LIVE TRANSCRIPT POPUP -->
                 <div id="usd-live-transcript-popup">
                     <div id="usd-live-transcript-label">Assistant speaking</div>
                     <div id="usd-live-transcript-text"></div>
@@ -423,38 +414,17 @@
         let liveTranscriptHideTimer = null;
         let currentLiveAssistantText = "";
         let currentLiveAssistantTag = null;
-        // ⚡ LIVE USER TRANSCRIPTION SETUP ⚡
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        let recognition = null;
-        let finalUserTranscript = "";
-        
-        if (SpeechRecognition) {
-            recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = 'en-IN'; // Works great for Hinglish/Gujarati/English
-            
-            recognition.onresult = (event) => {
-                let interim = "";
-                let final = "";
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) final += event.results[i][0].transcript;
-                    else interim += event.results[i][0].transcript;
-                }
-                finalUserTranscript += final;
-                document.getElementById('usd-interim-text').innerText = (finalUserTranscript + " " + interim).trim();
-            };
-        }
+        let lastAssistantStreamingText = "";
 
         const usdLinks = {
-            '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
-            '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist. Add your details and we will reach out to you soon.' },
-            '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On', voice: 'Click design my smile now to know how your beautiful smile looks after treatment.' }, 
-            '[LINK_BLOGS]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '📰 Read Our Blogs', voice: 'Now you are on our blogs page.' }, 
-            '[LINK_GALLERY]': { url: 'https://ultimatesmiledesign.com/gallery/', label: '🖼️ Check Out Gallery', voice: 'Now you are on our gallery page.' },
-            '[LINK_CONSULT]': { url: 'https://ultimatesmiledesign.com/consult-with-dentist/', label: '👨‍⚕️ Consult Expert Dentist', voice: 'Please fill the answers to get a response from our expert dentist.' },
-            '[LINK_CONTACT]': { url: 'https://ultimatesmiledesign.com/contact/', label: '📞 Contact Us', voice: 'Please fill the answers to get a response from us.' },
-            '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist', voice: 'Now you are on our dentist connect page.' }
+            '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
+            '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist' },
+            '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On' }, 
+            '[LINK_BLOGS]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '📰 Read Our Blogs' }, 
+            '[LINK_GALLERY]': { url: 'https://ultimatesmiledesign.com/gallery/', label: '🖼️ Check Out Gallery' },
+            '[LINK_CONSULT]': { url: 'https://ultimatesmiledesign.com/consult-with-dentist/', label: '👨‍⚕️ Consult Expert Dentist' },
+            '[LINK_CONTACT]': { url: 'https://ultimatesmiledesign.com/contact/', label: '📞 Contact Us' },
+            '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist' }
         };
 
         window.onload = async () => {
@@ -490,6 +460,14 @@
                 bubble.style.setProperty('--pulse-max', '20px');
             }, 150);
         });
+
+        function cleanDisplayText(text = "") {
+            return String(text || "")
+                .replace(/\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\]/gi, '')
+                .replace(//g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
 
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
@@ -535,83 +513,44 @@
         }
 
         function detectLocalTagFromText(input = '') {
-            const text = String(input || "").toLowerCase();
+            const text = cleanDisplayText(String(input || "").toLowerCase());
 
             if (
-                text.includes("end chat") ||
-                text.includes("goodbye") ||
-                text.includes("bye") ||
-                text.includes("take care") ||
-                text.includes("see you")
-            ) {
-                return "[END_CHAT]";
-            }
+                text.includes("end chat") || text.includes("goodbye") || text.includes("bye") || text.includes("take care") || text.includes("see you") ||
+                text.includes("अलविदा") || text.includes("बाय") || text.includes("फिर मिलेंगे") || text.includes("આવજો") || text.includes("બાય")
+            ) return "[END_CHAT]";
 
             if (
-                text.includes("virtual smile") ||
-                text.includes("try on") ||
-                text.includes("try-on") ||
-                text.includes("smile try") ||
-                text.includes("smile makeover") ||
-                text.includes("design my smile") ||
-                text.includes("see how your smile") ||
-                text.includes("before and after") ||
-                text.includes("before/after")
-            ) {
-                return "[LINK_VTRYON]";
-            }
+                text.includes("virtual smile") || text.includes("try on") || text.includes("try-on") || text.includes("smile try") || text.includes("smile makeover") ||
+                text.includes("design my smile") || text.includes("see how your smile") || text.includes("before and after") || text.includes("before/after") ||
+                text.includes("वर्चुअल स्माइल") || text.includes("વર્ચ્યુઅલ સ્માઇલ")
+            ) return "[LINK_VTRYON]";
 
             if (
-                text.includes("certified dentist") ||
-                text.includes("nearest dentist") ||
-                text.includes("find dentist") ||
-                text.includes("find a dentist") ||
-                text.includes("nearby dentist") ||
-                text.includes("locate dentist") ||
-                text.includes("dentist near")
-            ) {
-                return "[LINK_DENTISTS]";
-            }
+                text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist") || text.includes("find a dentist") ||
+                text.includes("nearby dentist") || text.includes("locate dentist") || text.includes("dentist near") || text.includes("nearest clinic") ||
+                text.includes("सर्टिफाइड डेंटिस्ट") || text.includes("નજીકના ડેન્ટિસ્ટ") || text.includes("સર્ટિફાઇડ ડેન્ટિસ્ટ")
+            ) return "[LINK_DENTISTS]";
 
             if (
-                text.includes("consultation") ||
-                text.includes("consult") ||
-                text.includes("schedule") ||
-                text.includes("appointment") ||
-                text.includes("book") ||
-                text.includes("visit the clinic")
-            ) {
-                return "[LINK_CONSULT]";
-            }
+                text.includes("consultation") || text.includes("consult") || text.includes("schedule") || text.includes("appointment") || text.includes("book") ||
+                text.includes("visit the clinic") || text.includes("कंसल्टेशन") || text.includes("अपॉइंटमेंट") || text.includes("કન્સલ્ટેશન") || text.includes("એપોઇન્ટમેન્ટ")
+            ) return "[LINK_CONSULT]";
 
             if (
-                text.includes("contact") ||
-                text.includes("reach out") ||
-                text.includes("get in touch") ||
-                text.includes("call us") ||
-                text.includes("phone number")
-            ) {
-                return "[LINK_CONTACT]";
-            }
+                text.includes("contact") || text.includes("reach out") || text.includes("get in touch") || text.includes("call us") || text.includes("phone number") ||
+                text.includes("संपर्क") || text.includes("સંપર્ક")
+            ) return "[LINK_CONTACT]";
 
             if (
-                text.includes("dentist connect") ||
-                text.includes("become certified dentist") ||
-                text.includes("collaborate") ||
-                text.includes("partner") ||
-                text.includes("join our network")
-            ) {
-                return "[LINK_CONNECT]";
-            }
+                text.includes("dentist connect") || text.includes("become certified dentist") || text.includes("collaborate") || text.includes("partner") ||
+                text.includes("join our network") || text.includes("डेंटिस्ट कनेक्ट") || text.includes("ડેન્ટિસ્ટ કનેક્ટ")
+            ) return "[LINK_CONNECT]";
 
             if (
-                text.includes("gallery") ||
-                text.includes("results") ||
-                text.includes("before and after") ||
-                text.includes("before/after")
-            ) {
-                return "[LINK_GALLERY]";
-            }
+                text.includes("gallery") || text.includes("results") || text.includes("before and after") || text.includes("before/after") ||
+                text.includes("गैलरी") || text.includes("ગેલેરી")
+            ) return "[LINK_GALLERY]";
 
             return null;
         }
@@ -666,15 +605,7 @@
                 speechRatio > 0.56 &&
                 coreVsNoise > 1.14;
 
-            return {
-                rms,
-                speechAvg,
-                coreAvg,
-                noiseAvg,
-                speechRatio,
-                coreVsNoise,
-                isNearHumanSpeech
-            };
+            return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
 
         function renderPopupLink(tag) {
@@ -712,21 +643,22 @@
 
             syncTranscriptLabel();
 
-            const clean = String(text || '').trim();
+            const clean = cleanDisplayText(text || '');
 
             if (clean) {
                 currentLiveAssistantText = clean;
+                lastAssistantStreamingText = clean;
             } else if (force && currentLiveAssistantText) {
                 text = currentLiveAssistantText;
             }
 
-            const finalText = String(text || currentLiveAssistantText || '').trim();
+            const finalText = cleanDisplayText(text || currentLiveAssistantText || '');
             const finalTag = tag || detectLocalTagFromText(finalText) || currentLiveAssistantTag;
 
             currentLiveAssistantTag = finalTag || null;
             popupText.textContent = finalText;
 
-            if (finalText) {
+            if (finalText && isVoiceMode) {
                 popup.style.display = 'block';
                 renderPopupLink(finalTag);
             }
@@ -746,6 +678,7 @@
                 }
                 currentLiveAssistantText = "";
                 currentLiveAssistantTag = null;
+                lastAssistantStreamingText = "";
             }, delay);
         }
 
@@ -772,6 +705,22 @@
             btn.innerText = usdLinks[tag].label;
             btn.onclick = () => handleLinkClick(tag);
             targetEl.appendChild(btn);
+        }
+
+        function saveHistory() {
+            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
+        }
+
+        function addUserHistoryIfNew(text) {
+            const clean = cleanDisplayText(text);
+            if (!clean) return;
+
+            const last = chatHistory[chatHistory.length - 1];
+            if (last && last.role === 'user' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
+
+            chatHistory.push({ role: "user", parts: [{ text: clean }] });
+            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+            saveHistory();
         }
 
         function checkBotFinishedSpeaking() {
@@ -847,7 +796,6 @@
             isReplyComplete = false; 
             nextPlayTime = 0; 
             
-            // short hold to stop mobile speaker echo/self-voice loops
             interruptRestartHoldUntil = performance.now() + 180;
 
             if (socket && socket.readyState === WebSocket.OPEN) {
@@ -861,6 +809,9 @@
             });
             activeSources = [];
             hideLiveTranscript(0);
+            activeBotMessageDiv = null;
+            activeBotTextSpan = null;
+            lastAssistantStreamingText = "";
         }
 
         function toggleChatMode() {
@@ -924,12 +875,10 @@
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory.forEach(turn => {
                         const sender = turn.role === 'model' ? 'bot' : 'user';
-                        let cleanText = turn.parts[0].text.replace(/\[.*?\]/g, '').trim();
+                        let cleanText = cleanDisplayText(turn.parts[0].text);
                         let foundTag = null;
                         if (turn.role === 'model') {
-                            for (const tag in usdLinks) {
-                                if (turn.parts[0].text.includes(tag)) { foundTag = tag; break; }
-                            }
+                            foundTag = detectLocalTagFromText(cleanText);
                         }
                         logMessage(sender, cleanText, foundTag);
                     });
@@ -945,10 +894,10 @@
                     lastBotMessageDiv = null;
                     
                     updateState('connecting', "Calling assistant... 🟡");
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await new Promise(resolve => setTimeout(resolve, 1200));
                     
                     updateState('connecting', "Connected 🟢");
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 600));
                     
                     const greeting = "Namaste! How can we assist you today?";
                     logMessage('bot', greeting);
@@ -965,7 +914,6 @@
                             isReplyComplete = true; 
                             audioChunkQueue.push(data);
                             processAudioQueue();
-                            
                         } catch(e) {}
                     }
                     
@@ -981,7 +929,11 @@
 
                 socket.onopen = async () => {
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false }
+                        audio: { 
+                            echoCancellation: true, 
+                            noiseSuppression: true, 
+                            autoGainControl: false 
+                        }
                     });
 
                     const streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
@@ -989,13 +941,16 @@
                     
                     const bufferSize = 4096;
                     const processor = streamCtx.createScriptProcessor(bufferSize, 1, 1);
-                    
                     const analyser = streamCtx.createAnalyser();
                     analyser.fftSize = 512;
 
+                    const silenceGain = streamCtx.createGain();
+                    silenceGain.gain.value = 0;
+
                     source.connect(analyser);
                     source.connect(processor);
-                    processor.connect(streamCtx.destination); 
+                    processor.connect(silenceGain);
+                    silenceGain.connect(streamCtx.destination);
 
                     let isRecording = false;
                     let shortPauseTimer = null; 
@@ -1031,8 +986,12 @@
                         const timeDataArray = new Uint8Array(analyser.fftSize);
                         analyser.getByteTimeDomainData(timeDataArray);
                         
-                        let voiceSum = 0; let voiceBins = 0;
-                        for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
+                        let voiceSum = 0;
+                        let voiceBins = 0;
+                        for (let i = 10; i < 96; i++) {
+                            voiceSum += dataArray[i];
+                            voiceBins++;
+                        }
                         let humanVolume = voiceSum / Math.max(1, voiceBins);
 
                         const speechProfile = getHumanSpeechProfile(
@@ -1062,10 +1021,11 @@
                             } else {
                                 consecutiveLoudFrames = 0; 
                             }
-                            requestAnimationFrame(detectVoice); return;
+                            requestAnimationFrame(detectVoice);
+                            return;
                         }
 
-                        if (currentAgentState === 'listening') {
+                        if (currentAgentState === 'listening' && isVoiceMode) {
                             const inRestartHold = performance.now() < interruptRestartHoldUntil;
 
                             const canStartRecording = inRestartHold
@@ -1081,25 +1041,16 @@
                                 if (!isRecording) {
                                     isRecording = true;
                                     
+                                    const interimBox = document.getElementById('usd-interim-text');
+                                    if (interimBox) interimBox.innerText = "Listening...";
+
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
-                                    // ⚡ START MIC TRANSCRIBER ⚡
-                                    finalUserTranscript = "";
-                                    document.getElementById('usd-interim-text').innerText = "";
-                                    if (recognition) { try { recognition.start(); } catch(e) {} }
                                     
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
-                                            // ⚡ STOP TRANSCRIBER & LOG ⚡
-                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                            const capturedText = document.getElementById('usd-interim-text').innerText.trim();
-                                            if (capturedText) {
-                                                logMessage('user', capturedText);
-                                                chatHistory.push({ role: "user", parts: [{ text: capturedText }] });
-                                                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                                            }
                                             updateState('thinking');
                                             document.getElementById('usd-interim-text').innerText = ""; 
                                             if (socket.readyState === WebSocket.OPEN) {
@@ -1122,14 +1073,6 @@
                                     if (isRecording) {
                                         isRecording = false;
                                         clearTimeout(maxRecordingTimer);
-                                        // ⚡ STOP TRANSCRIBER & LOG ⚡
-                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                        const capturedText = document.getElementById('usd-interim-text').innerText.trim();
-                                        if (capturedText) {
-                                            logMessage('user', capturedText);
-                                            chatHistory.push({ role: "user", parts: [{ text: capturedText }] });
-                                            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                                        }
                                         updateState('thinking');
                                         document.getElementById('usd-interim-text').innerText = ""; 
                                         if (socket.readyState === WebSocket.OPEN) {
@@ -1153,32 +1096,36 @@
                         hideLiveTranscript(0);
                         updateState('listening');
                     }
+                    // ⚡ GROQ SENDS USER TEXT HERE ⚡
                     else if (data.type === 'user_spoken_text') {
                         document.getElementById('usd-interim-text').innerText = ""; 
-                        logMessage('user', data.text);
+                        const cleanUserText = cleanDisplayText(data.text || "");
+                        if (cleanUserText) {
+                            logMessage('user', cleanUserText);
+                            addUserHistoryIfNew(cleanUserText);
+                        }
                     }
                     else if (data.type === 'interim_transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
                     }
                     else if (data.type === 'text_stream') {
+                        const streamedText = cleanDisplayText(data.text || "");
+                        if (!streamedText) return;
+
+                        lastAssistantStreamingText = streamedText;
+
                         if (!activeBotMessageDiv) {
                             const log = document.getElementById('usd-chat-log');
-                            activeBotMessageDiv = document.createElement('div');
-                            activeBotMessageDiv.className = `msg msg-bot`;
-                            
-                            activeBotTextSpan = document.createElement('span');
-                            activeBotTextSpan.className = 'usd-msg-text';
-                            activeBotTextSpan.textContent = "Assistant: " + data.text;
-                            
-                            activeBotMessageDiv.appendChild(activeBotTextSpan);
+                            activeBotMessageDiv = createMessageDiv('bot', streamedText);
+                            activeBotTextSpan = activeBotMessageDiv.querySelector('.usd-msg-text');
                             log.appendChild(activeBotMessageDiv);
                             lastBotMessageDiv = activeBotMessageDiv;
                         } else if (activeBotTextSpan) {
-                            activeBotTextSpan.textContent = "Assistant: " + data.text;
+                            activeBotTextSpan.textContent = "Assistant: " + streamedText;
                         }
 
-                        const previewTag = detectLocalTagFromText(data.text);
-                        updateLiveTranscript(data.text, previewTag);
+                        const previewTag = detectLocalTagFromText(streamedText);
+                        updateLiveTranscript(streamedText, previewTag);
 
                         const log = document.getElementById('usd-chat-log');
                         log.scrollTop = log.scrollHeight;
@@ -1190,34 +1137,40 @@
                         }
                     }
                     else if (data.type === 'reply_complete') {
-                        const botTarget = activeBotMessageDiv || lastBotMessageDiv;
-                        activeBotMessageDiv = null;
-                        activeBotTextSpan = null;
+                        const finalText = cleanDisplayText(
+                            data.botText ||
+                            lastAssistantStreamingText ||
+                            currentLiveAssistantText ||
+                            "Okay."
+                        ).trim();
 
-                        const finalText = String(data.botText || currentLiveAssistantText || '').trim();
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
-                        if (botTarget && finalText) {
-                            const span = botTarget.querySelector('.usd-msg-text');
-                            if (span) {
-                                span.textContent = "Assistant: " + finalText;
-                            }
+                        let targetBotDiv = activeBotMessageDiv;
+
+                        if (targetBotDiv) {
+                            const span = targetBotDiv.querySelector('.usd-msg-text');
+                            if (span) span.textContent = "Assistant: " + finalText;
+                        } else {
+                            targetBotDiv = logMessage('bot', finalText);
                         }
 
-                        if (!botTarget && finalText) {
-                            lastBotMessageDiv = logMessage('bot', finalText);
+                        activeBotMessageDiv = null;
+                        activeBotTextSpan = null;
+                        lastBotMessageDiv = targetBotDiv;
+
+                        const last = chatHistory[chatHistory.length - 1];
+                        if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
+                            chatHistory.push({ role: "model", parts: [{ text: finalText }] });
+                            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+                            saveHistory();
                         }
-                        
-                        chatHistory.push({ role: "model", parts: [{ text: finalText }] });
-                        if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6); // ⚡ ADD THIS LINE ⚡
-                        sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
                         activeTag = finalTag;
                         isReplyComplete = true; 
                         
-                        const finalBotTarget = botTarget || lastBotMessageDiv;
-                        if (activeTag && usdLinks[activeTag] && finalBotTarget) {
-                            appendLinkButton(finalBotTarget, activeTag);
+                        if (activeTag && usdLinks[activeTag] && targetBotDiv) {
+                            appendLinkButton(targetBotDiv, activeTag);
                             const log = document.getElementById('usd-chat-log');
                             log.scrollTop = log.scrollHeight;
                         }
@@ -1335,7 +1288,7 @@
 
         async function submitTextMessage() {
             const inputEl = document.getElementById('usd-text-input');
-            const userText = inputEl.value.trim();
+            const userText = cleanDisplayText(inputEl.value.trim());
             if (!userText || currentAgentState === 'thinking' || currentAgentState === 'connecting') return;
 
             inputEl.value = ''; 
@@ -1345,8 +1298,7 @@
             document.getElementById('usd-interim-text').innerText = ""; 
             
             logMessage('user', userText);
-            chatHistory.push({ role: "user", parts: [{ text: userText }] });
-            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6); // ⚡ ADD THIS LINE ⚡
+            addUserHistoryIfNew(userText);
 
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ 
@@ -1371,32 +1323,12 @@
             
             logMessage('bot', "Redirecting you now...");
             chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
-           if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6); // ⚡ ADD THIS LINE ⚡
+            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+            saveHistory();
 
             window.open(linkInfo.url, '_blank');
             
             updateState('listening');
-        }
-        
-        function logMessage(sender, text, tag = null) {
-            const log = document.getElementById('usd-chat-log');
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `msg msg-${sender}`;
-            
-            if (sender === 'user') msgDiv.innerText = "You: " + text;
-            else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
-            else msgDiv.innerText = text; 
-            
-            if (tag && usdLinks[tag]) {
-                const btn = document.createElement('button');
-                btn.className = 'usd-link-card';
-                btn.innerText = usdLinks[tag].label;
-                btn.onclick = () => handleLinkClick(tag);
-                msgDiv.appendChild(btn);
-            }
-
-            log.appendChild(msgDiv);
-            log.scrollTop = log.scrollHeight;
         }
     </script>
 </body>
