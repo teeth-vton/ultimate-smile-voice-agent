@@ -1099,11 +1099,21 @@
                             activeBotTextSpan.textContent = "Assistant: " + streamedText;
                         }
 
-                        const previewTag = detectLocalTagFromText(streamedText);
+                        // ⚡ CAPTURE THE TAG DIRECTLY FROM THE BACKEND ⚡
+                        const previewTag = data.tag || detectLocalTagFromText(streamedText);
                         updateLiveTranscript(streamedText, previewTag);
+
+                        // ⚡ Force the button to pop up immediately in the chat log too ⚡
+                        if (previewTag && usdLinks[previewTag]) {
+                            if (!activeBotMessageDiv.querySelector('.usd-link-card')) {
+                                appendLinkButton(activeBotMessageDiv, previewTag);
+                            }
+                        }
 
                         const log = document.getElementById('usd-chat-log');
                         log.scrollTop = log.scrollHeight;
+                    }
+                    
                     }
                     else if (data.type === 'audio_chunk') {
                         if (isVoiceMode) {
