@@ -1120,28 +1120,27 @@
                             processAudioQueue();
                         }
                     }
-                    else if (data.type === 'reply_complete') {
-                        const finalText = cleanDisplayText(
-                            data.botText ||
-                            lastAssistantStreamingText ||
-                            currentLiveAssistantText ||
-                            "Okay."
-                        ).trim();
-
-                        const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
-
-                        let targetBotDiv = activeBotMessageDiv;
-
-                        if (targetBotDiv) {
-                            const span = targetBotDiv.querySelector('.usd-msg-text');
-                            if (span) span.textContent = "Assistant: " + finalText;
-                        } else {
-                            targetBotDiv = logMessage('bot', finalText);
-                        }
-
+                   else if (data.type === 'reply_complete') {
+                        // ⚡ FIX: Removed '|| lastBotMessageDiv' so it stops overwriting old messages! ⚡
+                        const botTarget = activeBotMessageDiv; 
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
-                        lastBotMessageDiv = targetBotDiv;
+
+                        const finalText = String(data.botText || currentLiveAssistantText || '').trim();
+                        const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
+
+                        // Update existing bubble if it was actively streaming
+                        if (botTarget && finalText) {
+                            const span = botTarget.querySelector('.usd-msg-text');
+                            if (span) {
+                                span.textContent = "Assistant: " + finalText;
+                            }
+                        }
+
+                        // ⚡ Create a brand new bubble if one wasn't streaming ⚡
+                        if (!botTarget && finalText) {
+                            lastBotMessageDiv = logMessage('bot', finalText);
+                        }
 
                         const last = chatHistory[chatHistory.length - 1];
                         if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
@@ -1153,8 +1152,10 @@
                         activeTag = finalTag;
                         isReplyComplete = true; 
                         
-                        if (activeTag && usdLinks[activeTag] && targetBotDiv) {
-                            appendLinkButton(targetBotDiv, activeTag);
+                        // Force the link button to appear on the correct message
+                        const finalBotTarget = botTarget || lastBotMessageDiv;
+                        if (activeTag && usdLinks[activeTag] && finalBotTarget) {
+                            appendLinkButton(finalBotTarget, activeTag);
                             const log = document.getElementById('usd-chat-log');
                             log.scrollTop = log.scrollHeight;
                         }
