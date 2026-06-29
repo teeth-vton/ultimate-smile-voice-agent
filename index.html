@@ -1083,27 +1083,24 @@
                     else if (data.type === 'interim_transcript') {
                         document.getElementById('usd-interim-text').innerText = data.text;
                     }
+                    // ⚡ INDUSTRY STANDARD: LIVE STREAMING UI ⚡
                     else if (data.type === 'text_stream') {
                         const streamedText = cleanDisplayText(data.text || "");
-                        if (!streamedText) return;
+                        if (!streamedText) return; // 🚨 PREVENTS GHOST/BLANK BUBBLES 🚨
 
                         lastAssistantStreamingText = streamedText;
 
                         if (!activeBotMessageDiv) {
-                            const log = document.getElementById('usd-chat-log');
-                            activeBotMessageDiv = createMessageDiv('bot', streamedText);
+                            activeBotMessageDiv = logMessage('bot', streamedText);
                             activeBotTextSpan = activeBotMessageDiv.querySelector('.usd-msg-text');
-                            log.appendChild(activeBotMessageDiv);
-                            lastBotMessageDiv = activeBotMessageDiv;
                         } else if (activeBotTextSpan) {
-                            activeBotTextSpan.textContent = "Assistant: " + streamedText;
+                            activeBotTextSpan.innerText = "Assistant: " + streamedText;
                         }
 
-                        // ⚡ CAPTURE THE TAG DIRECTLY FROM THE BACKEND ⚡
+                        // Parse the tag and pop up the link IMMEDIATELY mid-sentence
                         const previewTag = data.tag || detectLocalTagFromText(streamedText);
                         updateLiveTranscript(streamedText, previewTag);
 
-                        // ⚡ Force the button to pop up immediately in the chat log too ⚡
                         if (previewTag && usdLinks[previewTag]) {
                             if (!activeBotMessageDiv.querySelector('.usd-link-card')) {
                                 appendLinkButton(activeBotMessageDiv, previewTag);
@@ -1113,54 +1110,57 @@
                         const log = document.getElementById('usd-chat-log');
                         log.scrollTop = log.scrollHeight;
                     }
-                        
                     else if (data.type === 'audio_chunk') {
                         if (isVoiceMode) {
                             audioChunkQueue.push(data);
                             processAudioQueue();
                         }
                     }
-                   else if (data.type === 'reply_complete') {
-                        // ⚡ FIX: Removed '|| lastBotMessageDiv' so it stops overwriting old messages! ⚡
+                    else if (data.type === 'reply_complete') {
                         const botTarget = activeBotMessageDiv; 
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
 
-                        const finalText = String(data.botText || currentLiveAssistantText || '').trim();
+                        const finalText = cleanDisplayText(
+                            data.botText ||
+                            lastAssistantStreamingText ||
+                            currentLiveAssistantText ||
+                            ""
+                        ).trim();
+
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
-                        // Update existing bubble if it was actively streaming
-                        if (botTarget && finalText) {
-                            const span = botTarget.querySelector('.usd-msg-text');
-                            if (span) {
-                                span.textContent = "Assistant: " + finalText;
+                        // 🚨 ONLY create/update a bubble if there is actual text 🚨
+                        if (finalText) {
+                            if (botTarget) {
+                                const span = botTarget.querySelector('.usd-msg-text');
+                                if (span) span.innerText = "Assistant: " + finalText;
+                            } else {
+                                lastBotMessageDiv = logMessage('bot', finalText);
                             }
-                        }
 
-                        // ⚡ Create a brand new bubble if one wasn't streaming ⚡
-                        if (!botTarget && finalText) {
-                            lastBotMessageDiv = logMessage('bot', finalText);
-                        }
-
-                        const last = chatHistory[chatHistory.length - 1];
-                        if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
-                            chatHistory.push({ role: "model", parts: [{ text: finalText }] });
-                            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                            saveHistory();
+                            const last = chatHistory[chatHistory.length - 1];
+                            if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
+                                chatHistory.push({ role: "model", parts: [{ text: finalText }] });
+                                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+                                saveHistory();
+                            }
+                            
+                            updateLiveTranscript(finalText, finalTag, true);
                         }
 
                         activeTag = finalTag;
                         isReplyComplete = true; 
                         
-                        // Force the link button to appear on the correct message
+                        // Fallback hook to ensure the link triggers at the end
                         const finalBotTarget = botTarget || lastBotMessageDiv;
                         if (activeTag && usdLinks[activeTag] && finalBotTarget) {
-                            appendLinkButton(finalBotTarget, activeTag);
+                            if (!finalBotTarget.querySelector('.usd-link-card')) {
+                                appendLinkButton(finalBotTarget, activeTag);
+                            }
                             const log = document.getElementById('usd-chat-log');
                             log.scrollTop = log.scrollHeight;
                         }
-
-                        updateLiveTranscript(finalText, activeTag, true);
 
                         if (!isVoiceMode) {
                             updateState('listening');
