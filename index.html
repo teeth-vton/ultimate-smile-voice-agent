@@ -761,6 +761,15 @@
             
             isAudioPlaying = false;
             checkBotFinishedSpeaking(); 
+
+            // 🚨 WATCHDOG: Force unlock mic and visualizer if audio breaks 🚨
+            setTimeout(() => {
+                if (currentAgentState === 'speaking' && activeSources.length === 0) {
+                    isReplyComplete = false;
+                    updateState('listening');
+                    hideLiveTranscript(0);
+                }
+            }, 3000);
         }
 
         function interruptBot() {
