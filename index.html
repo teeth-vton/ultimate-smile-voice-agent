@@ -176,7 +176,6 @@
         }
         #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
         
-        /* LIVE TRANSCRIPT POPUP */
         #usd-live-transcript-popup {
             display: none;
             margin-bottom: 10px;
@@ -463,11 +462,12 @@
         });
 
         function cleanDisplayText(text = "") {
-            return String(text || "")
-                .replace(/\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\]/gi, '')
-                .replace(//g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
+            let result = String(text || "");
+            // ⚡ SAFE REGEX IMPLEMENTATION ⚡
+            result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
+            result = result.replace(new RegExp("", "g"), "");
+            result = result.replace(new RegExp("\\s+", "g"), " ");
+            return result.trim();
         }
 
         function updateState(newState, statusText = null) {
@@ -902,6 +902,9 @@
                     
                     const greeting = "Namaste! How can we assist you today?";
                     logMessage('bot', greeting);
+
+                    chatHistory.push({ role: "model", parts: [{ text: greeting }] });
+                    sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
                     
                     if (isVoiceMode) {
                         try {
