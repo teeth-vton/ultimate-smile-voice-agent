@@ -465,7 +465,7 @@
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
+            result = result.replace(new RegExp("", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
@@ -490,7 +490,7 @@
             if (newState === 'speaking') {
                 if (isVoiceMode) {
                     visualizer.classList.add('active');
-                    // ⚡ FIX: Keep "Answering..." visible while assistant speaks until Groq transcript arrives
+                    // ⚡ Keeps "Answering..." visible while assistant speaks until transcript arrives
                     if (interimBox && !interimBox.innerText.includes("You:") && !isReplyComplete) {
                         interimBox.innerText = "Answering...";
                         interimBox.style.color = "#ffffff";
@@ -582,11 +582,12 @@
             return null;
         }
 
-        // ⚡ FIX 4: Fine-tuned VAD for picking up voice exactly 18-inches away! ⚡
+        // ⚡ VAPI/ELEVENLABS SWEET SPOT VAD FOR 18 INCH RANGE ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
 
+            // Narrower core bands to specifically target clean human speech frequencies
             const speechStart = idx(90);
             const speechEnd = idx(3400);
             const coreStart = idx(180);
@@ -626,13 +627,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // Much more sensitive to distant volume, but strictly tests for voice ratio frequencies
+            // ⚡ Fine-tuned for distance without triggering on background noise ⚡
             const isNearHumanSpeech =
-                rms > 0.015 &&
-                speechAvg > 15 &&
-                coreAvg > 18 &&
-                speechRatio > 0.50 &&
-                coreVsNoise > 1.08;
+                rms > 0.012 &&           // Lowered RMS threshold for 18-inch distance
+                speechAvg > 12 &&        // Lowered overall volume threshold
+                coreAvg > 15 &&          // Lowered core volume threshold
+                speechRatio > 0.65 &&    // INCREASED strictness: Must clearly be speech, not noise
+                coreVsNoise > 1.20;      // INCREASED strictness: Core speech must heavily outweigh background
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -954,7 +955,7 @@
                         audio: { 
                             echoCancellation: true, 
                             noiseSuppression: true, 
-                            autoGainControl: false 
+                            autoGainControl: true // ⚡ FORCES OS TO BOOST FAR AWAY AUDIO ⚡
                         }
                     });
 
@@ -994,6 +995,7 @@
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
                     let consecutiveLoudFrames = 0; 
+                    let continuousSpeechFrames = 0; // ⚡ ADDED VAPI/ELEVENLABS SPEECH TIMER ⚡
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1038,10 +1040,12 @@
                             analyser.fftSize || 512
                         );
 
+                        // ⚡ VAPI/ELEVENLABS INTERRUPTION LOGIC ⚡
                         if (isSpeakingNow) {
-                            // Requires a longer burst of higher volume to interrupt to prevent false positives from distance
-                            if (speechProfile.isNearHumanSpeech && humanVolume > 20) { 
+                            if (speechProfile.isNearHumanSpeech && humanVolume > 15) { 
                                 consecutiveLoudFrames++;
+                                
+                                // Requires 6 consecutive frames of clean speech to interrupt (ignoring background noise/coughs)
                                 if (consecutiveLoudFrames >= 6) { 
                                     consecutiveLoudFrames = 0;
 
@@ -1070,15 +1074,15 @@
                                 ? (
                                     speechProfile.isNearHumanSpeech &&
                                     humanVolume > 35 &&
-                                    speechProfile.speechRatio > 0.55 &&
-                                    speechProfile.coreVsNoise > 1.12
+                                    speechProfile.speechRatio > 0.65 &&
+                                    speechProfile.coreVsNoise > 1.20
                                 )
-                                : (humanVolume > 25); // Easily triggers from 18 inches away
+                                : (humanVolume > 18); // Highly sensitive to 18-inch distance, but heavily filtered
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
-                                    updateState('listening'); // Sets UI to Gold "Listening..."
+                                    updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
@@ -1141,7 +1145,7 @@
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) {
                             interimBox.innerText = "You: " + data.text;
-                            interimBox.style.color = "#D4AF37";
+                            interimBox.style.color = "#D4AF37"; // Gold text for User Interim
                         }
                     }
                     // ⚡ INDUSTRY STANDARD: LIVE STREAMING UI ⚡
