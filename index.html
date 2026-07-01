@@ -174,7 +174,7 @@
             color: #111111;
             transform: translateY(-2px);
         }
-        #usd-interim-text { color: #D4AF37; text-align: right; font-style: italic; font-size: 12px; font-weight: bold; min-height: 16px; margin-bottom: 5px;}
+        #usd-interim-text { text-align: right; font-style: italic; font-size: 12px; font-weight: bold; min-height: 16px; margin-bottom: 5px; transition: color 0.2s; }
         
         /* LIVE TRANSCRIPT POPUP */
         #usd-live-transcript-popup {
@@ -490,7 +490,8 @@
             if (newState === 'speaking') {
                 if (isVoiceMode) {
                     visualizer.classList.add('active');
-                    if (interimBox) interimBox.innerText = "Assistant is speaking...";
+                    // ⚡ FIX 2: Clear interim text entirely instead of saying "Assistant is speaking..."
+                    if (interimBox) interimBox.innerText = "";
                 }
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
@@ -499,14 +500,20 @@
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
                 if (interimBox && !interimBox.innerText.includes("You:")) {
+                    // ⚡ FIX 3: Crisp gold text for Listening
                     interimBox.innerText = "Listening...";
+                    interimBox.style.color = "#D4AF37";
                 }
             } else {
                 isMicSoftwareMuted = true;
             }
 
             if (newState === 'thinking') {
-                if (interimBox) interimBox.innerText = "Answering...";
+                if (interimBox) {
+                    // ⚡ FIX 3: Crisp white text for Processing/Answering
+                    interimBox.innerText = "Answering...";
+                    interimBox.style.color = "#ffffff";
+                }
             }
 
             if (!isVoiceMode && interimBox && newState !== 'thinking') {
@@ -572,6 +579,7 @@
             return null;
         }
 
+        // ⚡ FIX 4: Fine-tuned VAD for picking up voice exactly 18-inches away! ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -615,12 +623,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
+            // Much more sensitive to distant volume, but strictly tests for voice ratio frequencies
             const isNearHumanSpeech =
-                rms > 0.045 &&
-                speechAvg > 28 &&
-                coreAvg > 32 &&
-                speechRatio > 0.56 &&
-                coreVsNoise > 1.14;
+                rms > 0.015 &&
+                speechAvg > 15 &&
+                coreAvg > 18 &&
+                speechRatio > 0.50 &&
+                coreVsNoise > 1.08;
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -925,8 +934,7 @@
                     updateState('connecting', "Connected 🟢");
                     await new Promise(resolve => setTimeout(resolve, 600));
                     
-                    // ⚡ REMOVED THE STATIC GREETING & TTS CALL ⚡
-                    // Live Greeting is now handled automatically by the WebSocket!
+                    // Live Greeting is handled automatically by WebSocket!
 
                     sessionStorage.setItem('usd_chat_active', 'true');
                     await startWebSocket();
@@ -963,7 +971,7 @@
                     processor.connect(silenceGain);
                     silenceGain.connect(streamCtx.destination);
 
-                    // ⚡ NEW: FORCE LIVE VOICE GREETING ON FIRST CONNECT ⚡
+                    // ⚡ NEW: FORCE LIVE VOICE GREETING ON FIRST CONNECT (WITH NAME PROMPT) ⚡
                     if (chatHistory.length === 0) {
                         updateState('thinking'); 
                         if (socket.readyState === WebSocket.OPEN) {
@@ -1028,9 +1036,10 @@
                         );
 
                         if (isSpeakingNow) {
-                            if (speechProfile.isNearHumanSpeech) { 
+                            // Requires a longer burst of higher volume to interrupt to prevent false positives from distance
+                            if (speechProfile.isNearHumanSpeech && humanVolume > 20) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames >= 5) { 
+                                if (consecutiveLoudFrames >= 6) { 
                                     consecutiveLoudFrames = 0;
 
                                     clearTimeout(shortPauseTimer);
@@ -1057,16 +1066,16 @@
                             const canStartRecording = inRestartHold
                                 ? (
                                     speechProfile.isNearHumanSpeech &&
-                                    humanVolume > 66 &&
-                                    speechProfile.speechRatio > 0.60 &&
-                                    speechProfile.coreVsNoise > 1.18
+                                    humanVolume > 35 &&
+                                    speechProfile.speechRatio > 0.55 &&
+                                    speechProfile.coreVsNoise > 1.12
                                 )
-                                : (humanVolume > 50);
+                                : (humanVolume > 25); // Easily triggers from 18 inches away
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
-                                    updateState('listening'); // Sets popup to Listening...
+                                    updateState('listening'); // Sets UI to Gold "Listening..."
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
@@ -1127,7 +1136,10 @@
                     }
                     else if (data.type === 'interim_transcript') {
                         const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox) interimBox.innerText = "You: " + data.text;
+                        if (interimBox) {
+                            interimBox.innerText = "You: " + data.text;
+                            interimBox.style.color = "#D4AF37";
+                        }
                     }
                     // ⚡ INDUSTRY STANDARD: LIVE STREAMING UI ⚡
                     else if (data.type === 'text_stream') {
