@@ -470,7 +470,6 @@
             return result.trim();
         }
 
-        // ⚡ NEW UI TEXT LOGIC ⚡
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
@@ -490,7 +489,6 @@
             if (newState === 'speaking') {
                 if (isVoiceMode) {
                     visualizer.classList.add('active');
-                    // ⚡ Keeps "Answering..." visible while assistant speaks until transcript arrives
                     if (interimBox && !interimBox.innerText.includes("You:") && !isReplyComplete) {
                         interimBox.innerText = "Answering...";
                         interimBox.style.color = "#ffffff";
@@ -503,7 +501,6 @@
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
                 if (interimBox && !interimBox.innerText.includes("You:")) {
-                    // ⚡ Crisp gold text for Listening
                     interimBox.innerText = "Listening...";
                     interimBox.style.color = "#D4AF37";
                 }
@@ -513,7 +510,6 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    // ⚡ Crisp white text for Processing/Answering
                     interimBox.innerText = "Answering...";
                     interimBox.style.color = "#ffffff";
                 }
@@ -582,16 +578,16 @@
             return null;
         }
 
-        // ⚡ VAPI/ELEVENLABS SWEET SPOT VAD FOR 18 INCH RANGE ⚡
+        // ⚡ RAW ACOUSTIC VAD: Bypasses browser filters to catch soft/distant speech flawlessly ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
 
-            // Narrower core bands to specifically target clean human speech frequencies
-            const speechStart = idx(90);
-            const speechEnd = idx(3400);
-            const coreStart = idx(180);
-            const coreEnd = idx(1200);
+            // Pure human vocal cord frequency bands
+            const speechStart = idx(200); 
+            const speechEnd = idx(3000);
+            const coreStart = idx(300);
+            const coreEnd = idx(1500);
 
             let speechSum = 0, speechCount = 0;
             let coreSum = 0, coreCount = 0;
@@ -624,16 +620,15 @@
             const speechAvg = speechSum / Math.max(1, speechCount);
             const coreAvg = coreSum / Math.max(1, coreCount);
             const noiseAvg = noiseSum / Math.max(1, noiseCount);
+            
+            // Relies on ratio vs volume. If ratio is very high, it is a voice even if whispering.
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // ⚡ Fine-tuned for distance without triggering on background noise ⚡
             const isNearHumanSpeech =
-                rms > 0.012 &&           // Lowered RMS threshold for 18-inch distance
-                speechAvg > 12 &&        // Lowered overall volume threshold
-                coreAvg > 15 &&          // Lowered core volume threshold
-                speechRatio > 0.65 &&    // INCREASED strictness: Must clearly be speech, not noise
-                coreVsNoise > 1.20;      // INCREASED strictness: Core speech must heavily outweigh background
+                rms > 0.005 &&            // Extremely low threshold to catch 18-inch soft speech
+                speechRatio > 0.45 &&     // Must be mostly voice frequencies, not fan noise
+                coreVsNoise > 1.15;       // Core vocal frequencies must dominate background noise
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -820,7 +815,6 @@
             isAudioPlaying = false;
             checkBotFinishedSpeaking(); 
 
-            // 🚨 WATCHDOG: Force unlock mic and visualizer if audio breaks 🚨
             setTimeout(() => {
                 if (currentAgentState === 'speaking' && activeSources.length === 0) {
                     isReplyComplete = false;
@@ -938,8 +932,6 @@
                     updateState('connecting', "Connected 🟢");
                     await new Promise(resolve => setTimeout(resolve, 600));
                     
-                    // Live Greeting is handled automatically by WebSocket!
-
                     sessionStorage.setItem('usd_chat_active', 'true');
                     await startWebSocket();
                 }
@@ -953,9 +945,10 @@
                 socket.onopen = async () => {
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
                         audio: { 
-                            echoCancellation: true, 
-                            noiseSuppression: true, 
-                            autoGainControl: true // ⚡ FORCES OS TO BOOST FAR AWAY AUDIO ⚡
+                            // ⚡ RAW ACOUSTICS: Bypassed aggressive filters so it hears soft speech perfectly ⚡
+                            echoCancellation: false, 
+                            noiseSuppression: false, 
+                            autoGainControl: true // Auto boosts low volumes from distance
                         }
                     });
 
@@ -975,7 +968,6 @@
                     processor.connect(silenceGain);
                     silenceGain.connect(streamCtx.destination);
 
-                    // ⚡ NEW: FORCE LIVE VOICE GREETING ON FIRST CONNECT (WITH NAME PROMPT) ⚡
                     if (chatHistory.length === 0) {
                         updateState('thinking'); 
                         if (socket.readyState === WebSocket.OPEN) {
@@ -995,7 +987,6 @@
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
                     let consecutiveLoudFrames = 0; 
-                    let continuousSpeechFrames = 0; // ⚡ ADDED VAPI/ELEVENLABS SPEECH TIMER ⚡
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1025,14 +1016,6 @@
                         const timeDataArray = new Uint8Array(analyser.fftSize);
                         analyser.getByteTimeDomainData(timeDataArray);
                         
-                        let voiceSum = 0;
-                        let voiceBins = 0;
-                        for (let i = 10; i < 96; i++) {
-                            voiceSum += dataArray[i];
-                            voiceBins++;
-                        }
-                        let humanVolume = voiceSum / Math.max(1, voiceBins);
-
                         const speechProfile = getHumanSpeechProfile(
                             dataArray,
                             timeDataArray,
@@ -1040,12 +1023,11 @@
                             analyser.fftSize || 512
                         );
 
-                        // ⚡ VAPI/ELEVENLABS INTERRUPTION LOGIC ⚡
                         if (isSpeakingNow) {
-                            if (speechProfile.isNearHumanSpeech && humanVolume > 15) { 
+                            // Needs sustained, clear speech frequencies to interrupt the bot
+                            if (speechProfile.isNearHumanSpeech && speechProfile.rms > 0.035) { 
                                 consecutiveLoudFrames++;
                                 
-                                // Requires 6 consecutive frames of clean speech to interrupt (ignoring background noise/coughs)
                                 if (consecutiveLoudFrames >= 6) { 
                                     consecutiveLoudFrames = 0;
 
@@ -1073,11 +1055,10 @@
                             const canStartRecording = inRestartHold
                                 ? (
                                     speechProfile.isNearHumanSpeech &&
-                                    humanVolume > 35 &&
-                                    speechProfile.speechRatio > 0.65 &&
-                                    speechProfile.coreVsNoise > 1.20
+                                    speechProfile.rms > 0.05 &&
+                                    speechProfile.speechRatio > 0.65
                                 )
-                                : (humanVolume > 18); // Highly sensitive to 18-inch distance, but heavily filtered
+                                : (speechProfile.isNearHumanSpeech); // Will trigger on quiet speech perfectly!
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
@@ -1133,7 +1114,6 @@
                         hideLiveTranscript(0);
                         updateState('listening');
                     }
-                    // ⚡ GROQ SENDS USER TEXT HERE ⚡
                     else if (data.type === 'user_spoken_text') {
                         const cleanUserText = cleanDisplayText(data.text || "");
                         if (cleanUserText) {
@@ -1145,10 +1125,9 @@
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) {
                             interimBox.innerText = "You: " + data.text;
-                            interimBox.style.color = "#D4AF37"; // Gold text for User Interim
+                            interimBox.style.color = "#D4AF37";
                         }
                     }
-                    // ⚡ INDUSTRY STANDARD: LIVE STREAMING UI ⚡
                     else if (data.type === 'text_stream') {
                         const streamedText = cleanDisplayText(data.text || "");
                         if (!streamedText) return; 
@@ -1162,7 +1141,6 @@
                             activeBotTextSpan.innerText = "Assistant: " + streamedText;
                         }
 
-                        // Parse the tag and pop up the link IMMEDIATELY mid-sentence
                         const previewTag = data.tag || detectLocalTagFromText(streamedText);
                         updateLiveTranscript(streamedText, previewTag);
 
@@ -1182,9 +1160,8 @@
                         }
                     }
                     else if (data.type === 'reply_complete') {
-                        isReplyComplete = true; // Set early to stop overrides
+                        isReplyComplete = true; 
                         
-                        // ⚡ GROQ FINISHED: Clear "Answering..." from interim text ⚡
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox && interimBox.innerText === "Answering...") {
                             interimBox.innerText = "";
@@ -1203,7 +1180,6 @@
 
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
-                        // 🚨 ONLY create/update a bubble if there is actual text 🚨
                         if (finalText) {
                             if (botTarget) {
                                 const span = botTarget.querySelector('.usd-msg-text');
@@ -1224,7 +1200,6 @@
 
                         activeTag = finalTag;
                         
-                        // Fallback hook to ensure the link triggers at the end
                         const finalBotTarget = botTarget || lastBotMessageDiv;
                         if (activeTag && usdLinks[activeTag] && finalBotTarget) {
                             if (!finalBotTarget.querySelector('.usd-link-card')) {
