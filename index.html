@@ -470,7 +470,7 @@
             return result.trim();
         }
 
-        // ⚡ NEW UI TEXT LOGIC (Colors & States fixed) ⚡
+        // ⚡ NEW UI TEXT LOGIC ⚡
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
@@ -490,7 +490,11 @@
             if (newState === 'speaking') {
                 if (isVoiceMode) {
                     visualizer.classList.add('active');
-                    if (interimBox) interimBox.innerText = "";
+                    // ⚡ FIX: Keep "Answering..." visible while assistant speaks until Groq transcript arrives
+                    if (interimBox && !interimBox.innerText.includes("You:") && !isReplyComplete) {
+                        interimBox.innerText = "Answering...";
+                        interimBox.style.color = "#ffffff";
+                    }
                 }
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
@@ -499,8 +503,9 @@
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
                 if (interimBox && !interimBox.innerText.includes("You:")) {
+                    // ⚡ Crisp gold text for Listening
                     interimBox.innerText = "Listening...";
-                    interimBox.style.color = "#D4AF37"; // Gold for Listening
+                    interimBox.style.color = "#D4AF37";
                 }
             } else {
                 isMicSoftwareMuted = true;
@@ -508,8 +513,9 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
+                    // ⚡ Crisp white text for Processing/Answering
                     interimBox.innerText = "Answering...";
-                    interimBox.style.color = "#ffffff"; // White for Answering
+                    interimBox.style.color = "#ffffff";
                 }
             }
 
@@ -576,7 +582,7 @@
             return null;
         }
 
-        // ⚡ NEW VAD MATH: Extremely strict so it ignores distant noises and tiny voices ⚡
+        // ⚡ FIX 4: Fine-tuned VAD for picking up voice exactly 18-inches away! ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -620,13 +626,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // Tuned for 18 inches distance (lower RMS) but stricter ratio to block noise
+            // Much more sensitive to distant volume, but strictly tests for voice ratio frequencies
             const isNearHumanSpeech =
                 rms > 0.015 &&
                 speechAvg > 15 &&
                 coreAvg > 18 &&
-                speechRatio > 0.60 &&
-                coreVsNoise > 1.15;
+                speechRatio > 0.50 &&
+                coreVsNoise > 1.08;
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -742,7 +748,6 @@
             if (last && last.role === 'user' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
 
             chatHistory.push({ role: "user", parts: [{ text: clean }] });
-            // ⚡ YES, 6 MESSAGE LIMIT IS HERE AND WORKING PERFECTLY ⚡
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
             saveHistory();
         }
@@ -814,6 +819,7 @@
             isAudioPlaying = false;
             checkBotFinishedSpeaking(); 
 
+            // 🚨 WATCHDOG: Force unlock mic and visualizer if audio breaks 🚨
             setTimeout(() => {
                 if (currentAgentState === 'speaking' && activeSources.length === 0) {
                     isReplyComplete = false;
@@ -930,6 +936,8 @@
                     
                     updateState('connecting', "Connected 🟢");
                     await new Promise(resolve => setTimeout(resolve, 600));
+                    
+                    // Live Greeting is handled automatically by WebSocket!
 
                     sessionStorage.setItem('usd_chat_active', 'true');
                     await startWebSocket();
@@ -966,6 +974,7 @@
                     processor.connect(silenceGain);
                     silenceGain.connect(streamCtx.destination);
 
+                    // ⚡ NEW: FORCE LIVE VOICE GREETING ON FIRST CONNECT (WITH NAME PROMPT) ⚡
                     if (chatHistory.length === 0) {
                         updateState('thinking'); 
                         if (socket.readyState === WebSocket.OPEN) {
@@ -1030,10 +1039,10 @@
                         );
 
                         if (isSpeakingNow) {
-                            // ⚡ FIX 1: MASSIVELY INCREASED INTERRUPTION THRESHOLD (Harder to interrupt) ⚡
-                            if (speechProfile.isNearHumanSpeech && humanVolume > 45) { 
+                            // Requires a longer burst of higher volume to interrupt to prevent false positives from distance
+                            if (speechProfile.isNearHumanSpeech && humanVolume > 20) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames >= 12) { 
+                                if (consecutiveLoudFrames >= 6) { 
                                     consecutiveLoudFrames = 0;
 
                                     clearTimeout(shortPauseTimer);
@@ -1064,12 +1073,12 @@
                                     speechProfile.speechRatio > 0.55 &&
                                     speechProfile.coreVsNoise > 1.12
                                 )
-                                : (humanVolume > 25); 
+                                : (humanVolume > 25); // Easily triggers from 18 inches away
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
-                                    updateState('listening'); 
+                                    updateState('listening'); // Sets UI to Gold "Listening..."
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
@@ -1120,6 +1129,7 @@
                         hideLiveTranscript(0);
                         updateState('listening');
                     }
+                    // ⚡ GROQ SENDS USER TEXT HERE ⚡
                     else if (data.type === 'user_spoken_text') {
                         const cleanUserText = cleanDisplayText(data.text || "");
                         if (cleanUserText) {
@@ -1134,6 +1144,7 @@
                             interimBox.style.color = "#D4AF37";
                         }
                     }
+                    // ⚡ INDUSTRY STANDARD: LIVE STREAMING UI ⚡
                     else if (data.type === 'text_stream') {
                         const streamedText = cleanDisplayText(data.text || "");
                         if (!streamedText) return; 
@@ -1147,6 +1158,7 @@
                             activeBotTextSpan.innerText = "Assistant: " + streamedText;
                         }
 
+                        // Parse the tag and pop up the link IMMEDIATELY mid-sentence
                         const previewTag = data.tag || detectLocalTagFromText(streamedText);
                         updateLiveTranscript(streamedText, previewTag);
 
@@ -1166,6 +1178,14 @@
                         }
                     }
                     else if (data.type === 'reply_complete') {
+                        isReplyComplete = true; // Set early to stop overrides
+                        
+                        // ⚡ GROQ FINISHED: Clear "Answering..." from interim text ⚡
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox && interimBox.innerText === "Answering...") {
+                            interimBox.innerText = "";
+                        }
+
                         const botTarget = activeBotMessageDiv; 
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
@@ -1179,6 +1199,7 @@
 
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
+                        // 🚨 ONLY create/update a bubble if there is actual text 🚨
                         if (finalText) {
                             if (botTarget) {
                                 const span = botTarget.querySelector('.usd-msg-text');
@@ -1198,8 +1219,8 @@
                         }
 
                         activeTag = finalTag;
-                        isReplyComplete = true; 
                         
+                        // Fallback hook to ensure the link triggers at the end
                         const finalBotTarget = botTarget || lastBotMessageDiv;
                         if (activeTag && usdLinks[activeTag] && finalBotTarget) {
                             if (!finalBotTarget.querySelector('.usd-link-card')) {
