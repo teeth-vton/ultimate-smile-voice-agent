@@ -174,7 +174,7 @@
             color: #111111;
             transform: translateY(-2px);
         }
-        #usd-interim-text { color: #888; text-align: right; font-style: italic; font-size: 12px; min-height: 16px; margin-bottom: 5px;}
+        #usd-interim-text { color: #D4AF37; text-align: right; font-style: italic; font-size: 12px; font-weight: bold; min-height: 16px; margin-bottom: 5px;}
         
         /* LIVE TRANSCRIPT POPUP */
         #usd-live-transcript-popup {
@@ -465,15 +465,17 @@
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("", "g"), "");
+            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
 
+        // ⚡ NEW UI TEXT LOGIC ⚡
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
             const visualizer = document.getElementById('usd-visualizer');
+            const interimBox = document.getElementById('usd-interim-text');
 
             if (statusBox) {
                 if (newState === 'connecting' || newState === 'off') {
@@ -486,15 +488,29 @@
             }
 
             if (newState === 'speaking') {
-                if (isVoiceMode) visualizer.classList.add('active');
+                if (isVoiceMode) {
+                    visualizer.classList.add('active');
+                    if (interimBox) interimBox.innerText = "Assistant is speaking...";
+                }
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
             }
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
+                if (interimBox && !interimBox.innerText.includes("You:")) {
+                    interimBox.innerText = "Listening...";
+                }
             } else {
                 isMicSoftwareMuted = true;
+            }
+
+            if (newState === 'thinking') {
+                if (interimBox) interimBox.innerText = "Answering...";
+            }
+
+            if (!isVoiceMode && interimBox && newState !== 'thinking') {
+                interimBox.innerText = "";
             }
         }
 
@@ -909,27 +925,9 @@
                     updateState('connecting', "Connected 🟢");
                     await new Promise(resolve => setTimeout(resolve, 600));
                     
-                    const greeting = "Namaste! How can we assist you today?";
-                    logMessage('bot', greeting);
+                    // ⚡ REMOVED THE STATIC GREETING & TTS CALL ⚡
+                    // Live Greeting is now handled automatically by the WebSocket!
 
-                    chatHistory.push({ role: "model", parts: [{ text: greeting }] });
-                    sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
-                    
-                    if (isVoiceMode) {
-                        try {
-                            const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ text: greeting, lang: 'en-IN' })
-                            });
-                            const data = await response.json();
-                            
-                            isReplyComplete = true; 
-                            audioChunkQueue.push(data);
-                            processAudioQueue();
-                        } catch(e) {}
-                    }
-                    
                     sessionStorage.setItem('usd_chat_active', 'true');
                     await startWebSocket();
                 }
@@ -964,6 +962,21 @@
                     source.connect(processor);
                     processor.connect(silenceGain);
                     silenceGain.connect(streamCtx.destination);
+
+                    // ⚡ NEW: FORCE LIVE VOICE GREETING ON FIRST CONNECT ⚡
+                    if (chatHistory.length === 0) {
+                        updateState('thinking'); 
+                        if (socket.readyState === WebSocket.OPEN) {
+                            socket.send(JSON.stringify({ 
+                                type: 'text_input', 
+                                text: "SYSTEM INSTRUCTION: Start the conversation by warmly saying EXACTLY this specific phrase and absolutely nothing else: 'Namaste! How can we assist you today? Let's start with your beautiful name, what is your name?'", 
+                                history: [],
+                                isVoiceMode: isVoiceMode 
+                            }));
+                        }
+                    } else {
+                        updateState('listening');
+                    }
 
                     let isRecording = false;
                     let shortPauseTimer = null; 
@@ -1053,10 +1066,8 @@
                             if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
+                                    updateState('listening'); // Sets popup to Listening...
                                     
-                                    const interimBox = document.getElementById('usd-interim-text');
-                                    if (interimBox) interimBox.innerText = "Listening...";
-
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
@@ -1065,7 +1076,6 @@
                                         if (isRecording) {
                                             isRecording = false;
                                             updateState('thinking');
-                                            document.getElementById('usd-interim-text').innerText = ""; 
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                             }
@@ -1087,7 +1097,6 @@
                                         isRecording = false;
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking');
-                                        document.getElementById('usd-interim-text').innerText = ""; 
                                         if (socket.readyState === WebSocket.OPEN) {
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
@@ -1104,14 +1113,12 @@
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    if (data.type === 'idle') {
-                        document.getElementById('usd-interim-text').innerText = "";
+                    if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
                         updateState('listening');
                     }
                     // ⚡ GROQ SENDS USER TEXT HERE ⚡
                     else if (data.type === 'user_spoken_text') {
-                        document.getElementById('usd-interim-text').innerText = ""; 
                         const cleanUserText = cleanDisplayText(data.text || "");
                         if (cleanUserText) {
                             logMessage('user', cleanUserText);
@@ -1119,12 +1126,13 @@
                         }
                     }
                     else if (data.type === 'interim_transcript') {
-                        document.getElementById('usd-interim-text').innerText = data.text;
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) interimBox.innerText = "You: " + data.text;
                     }
                     // ⚡ INDUSTRY STANDARD: LIVE STREAMING UI ⚡
                     else if (data.type === 'text_stream') {
                         const streamedText = cleanDisplayText(data.text || "");
-                        if (!streamedText) return; // 🚨 PREVENTS GHOST/BLANK BUBBLES 🚨
+                        if (!streamedText) return; 
 
                         lastAssistantStreamingText = streamedText;
 
@@ -1208,11 +1216,6 @@
                         }
 
                         hideLiveTranscript(3500);
-                    }
-                    else if (data.type === 'error') {
-                        document.getElementById('usd-interim-text').innerText = "";
-                        hideLiveTranscript(0);
-                        updateState('listening');
                     }
                 };
 
@@ -1318,7 +1321,6 @@
             interruptBot();
 
             updateState('thinking');
-            document.getElementById('usd-interim-text').innerText = ""; 
             
             logMessage('user', userText);
             addUserHistoryIfNew(userText);
