@@ -465,7 +465,7 @@
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
+            result = result.replace(new RegExp("", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
@@ -578,7 +578,8 @@
             return null;
         }
 
-        // ⚡ EXTREME OFFICE VAD: Max strictness to ignore sudden background voices ⚡
+        // ⚡ PERFECT MIDDLE GROUND VAD ⚡
+        // Extremely sensitive for listening (so it responds quickly), but strictly gated for interruptions.
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -622,13 +623,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // ⚡ MAXIMUM STRICTNESS to completely reject background office chatter ⚡
+            // ⚡ Very sensitive threshold to effortlessly pick up your voice from 18 inches ⚡
             const isNearHumanSpeech =
-                rms > 0.035 &&            
-                speechAvg > 25 &&         
-                coreAvg > 30 &&
-                speechRatio > 0.75 &&     
-                coreVsNoise > 1.35;       
+                rms > 0.010 &&            
+                speechAvg > 10 &&         
+                coreAvg > 12 &&
+                speechRatio > 0.50 &&     
+                coreVsNoise > 1.10;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -1032,6 +1033,7 @@
 
                         if (isSpeakingNow) {
                             // ⚡ STRICTION ON INTERRUPTION: Requires significantly louder/nearer voice for solid 300ms ⚡
+                            // Because it takes 10 consecutive frames, brief background noises or single words won't interrupt her!
                             if (speechProfile.isNearHumanSpeech && humanVolume > 35) { 
                                 consecutiveLoudFrames++;
                                 if (consecutiveLoudFrames >= 10) { 
@@ -1061,10 +1063,10 @@
                             const canStartRecording = inRestartHold
                                 ? (
                                     speechProfile.isNearHumanSpeech &&
-                                    humanVolume > 50 &&
-                                    speechProfile.speechRatio > 0.75
+                                    humanVolume > 40 &&
+                                    speechProfile.speechRatio > 0.65
                                 )
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 20);
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 10); // ⚡ Fast-reacting listening threshold
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
@@ -1095,6 +1097,7 @@
                                     }
                                 }, 600); 
 
+                                // ⚡ FAST TRANSITION: 800ms to immediately switch to "Answering..." when you stop talking
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -1104,7 +1107,7 @@
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 1200); 
+                                }, 800); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
