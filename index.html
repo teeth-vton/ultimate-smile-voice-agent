@@ -552,7 +552,7 @@
             if (
                 text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist") || text.includes("find a dentist") ||
                 text.includes("nearby dentist") || text.includes("locate dentist") || text.includes("dentist near") || text.includes("nearest clinic") ||
-                text.includes("सर्टिफाइड डेंटिस्ट") || text.includes("નજીકના ડેન્ટિસ્ટ") || text.includes("સર્ટિફાઇડ ડેન્ટિસ્ટ")
+                text.includes("सर्टिफाइड डentist") || text.includes("નજીકના ડેન્ટિસ્ટ") || text.includes("સર્ટિફાઇડ ડેન્ટિસ્ટ")
             ) return "[LINK_DENTISTS]";
 
             if (
@@ -578,16 +578,15 @@
             return null;
         }
 
-        // ⚡ RAW ACOUSTIC VAD: Bypasses browser filters to catch soft/distant speech flawlessly ⚡
+        // ⚡ OFFICE SWEET SPOT VAD: Ignores distant chatter, catches near speech perfectly ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
 
-            // Pure human vocal cord frequency bands
-            const speechStart = idx(200); 
-            const speechEnd = idx(3000);
-            const coreStart = idx(300);
-            const coreEnd = idx(1500);
+            const speechStart = idx(90);
+            const speechEnd = idx(3400);
+            const coreStart = idx(180);
+            const coreEnd = idx(1200);
 
             let speechSum = 0, speechCount = 0;
             let coreSum = 0, coreCount = 0;
@@ -620,15 +619,16 @@
             const speechAvg = speechSum / Math.max(1, speechCount);
             const coreAvg = coreSum / Math.max(1, coreCount);
             const noiseAvg = noiseSum / Math.max(1, noiseCount);
-            
-            // Relies on ratio vs volume. If ratio is very high, it is a voice even if whispering.
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
+            // ⚡ Finetuned to ignore distant colleagues but catch you at 18 inches ⚡
             const isNearHumanSpeech =
-                rms > 0.005 &&            // Extremely low threshold to catch 18-inch soft speech
-                speechRatio > 0.45 &&     // Must be mostly voice frequencies, not fan noise
-                coreVsNoise > 1.15;       // Core vocal frequencies must dominate background noise
+                rms > 0.025 &&            // Bumped up so distant office chatter fails the check
+                speechAvg > 20 &&         // Requires clearer voice presence
+                coreAvg > 22 &&
+                speechRatio > 0.60 &&     // Strict voice ratio
+                coreVsNoise > 1.15;       // Core speech must override background noise
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -945,10 +945,10 @@
                 socket.onopen = async () => {
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
                         audio: { 
-                            // ⚡ RAW ACOUSTICS: Bypassed aggressive filters so it hears soft speech perfectly ⚡
-                            echoCancellation: false, 
-                            noiseSuppression: false, 
-                            autoGainControl: true // Auto boosts low volumes from distance
+                            // ⚡ RESTORED: Suppress background office noise while keeping 18-inch auto-gain ⚡
+                            echoCancellation: true, 
+                            noiseSuppression: true, 
+                            autoGainControl: true 
                         }
                     });
 
@@ -1016,6 +1016,14 @@
                         const timeDataArray = new Uint8Array(analyser.fftSize);
                         analyser.getByteTimeDomainData(timeDataArray);
                         
+                        let voiceSum = 0;
+                        let voiceBins = 0;
+                        for (let i = 10; i < 96; i++) {
+                            voiceSum += dataArray[i];
+                            voiceBins++;
+                        }
+                        let humanVolume = voiceSum / Math.max(1, voiceBins);
+
                         const speechProfile = getHumanSpeechProfile(
                             dataArray,
                             timeDataArray,
@@ -1024,10 +1032,8 @@
                         );
 
                         if (isSpeakingNow) {
-                            // Needs sustained, clear speech frequencies to interrupt the bot
-                            if (speechProfile.isNearHumanSpeech && speechProfile.rms > 0.035) { 
+                            if (speechProfile.isNearHumanSpeech && humanVolume > 20) { 
                                 consecutiveLoudFrames++;
-                                
                                 if (consecutiveLoudFrames >= 6) { 
                                     consecutiveLoudFrames = 0;
 
@@ -1055,10 +1061,10 @@
                             const canStartRecording = inRestartHold
                                 ? (
                                     speechProfile.isNearHumanSpeech &&
-                                    speechProfile.rms > 0.05 &&
-                                    speechProfile.speechRatio > 0.65
+                                    humanVolume > 45 &&
+                                    speechProfile.speechRatio > 0.70
                                 )
-                                : (speechProfile.isNearHumanSpeech); // Will trigger on quiet speech perfectly!
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 30); // ⚡ Ignores low-volume office chatter, triggers on intentional user speech
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
@@ -1098,7 +1104,7 @@
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 800); 
+                                }, 1200); // ⚡ Lengthened slightly to prevent cutting you off when speaking slowly
                             }
                         }
                         requestAnimationFrame(detectVoice);
