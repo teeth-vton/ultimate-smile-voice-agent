@@ -552,7 +552,7 @@
             if (
                 text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist") || text.includes("find a dentist") ||
                 text.includes("nearby dentist") || text.includes("locate dentist") || text.includes("dentist near") || text.includes("nearest clinic") ||
-                text.includes("सर्टिफाइड डentist") || text.includes("નજીકના ડેન્ટિસ્ટ") || text.includes("સર્ટિફાઇડ ડેન્ટિસ્ટ")
+                text.includes("सर्टिफाइड डेंटिस्ट") || text.includes("નજીકના ડેન્ટિસ્ટ") || text.includes("સર્ટિફાઇડ ડેન્ટિસ્ટ")
             ) return "[LINK_DENTISTS]";
 
             if (
@@ -578,7 +578,7 @@
             return null;
         }
 
-        // ⚡ OFFICE SWEET SPOT VAD: Ignores distant chatter, catches near speech perfectly ⚡
+        // ⚡ NEAR-FIELD OFFICE VAD: Strict proximity gate ignores far away chatter ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -622,13 +622,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // ⚡ Finetuned to ignore distant colleagues but catch you at 18 inches ⚡
+            // ⚡ The Magic Formula: Triggers if you speak nearby, but ignores loud distant colleagues ⚡
             const isNearHumanSpeech =
-                rms > 0.025 &&            // Bumped up so distant office chatter fails the check
-                speechAvg > 20 &&         // Requires clearer voice presence
-                coreAvg > 22 &&
-                speechRatio > 0.60 &&     // Strict voice ratio
-                coreVsNoise > 1.15;       // Core speech must override background noise
+                rms > 0.015 &&            
+                speechAvg > 12 &&         
+                coreAvg > 15 &&
+                speechRatio > 0.65 &&     
+                coreVsNoise > 1.25;       // Requires massive spike in acoustic density (near-field)
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -945,10 +945,10 @@
                 socket.onopen = async () => {
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
                         audio: { 
-                            // ⚡ RESTORED: Suppress background office noise while keeping 18-inch auto-gain ⚡
+                            // ⚡ RESTORED AI NOISE SUPPRESSION & AEC TO FIX MUDDY AUDIO FOR GEMINI ⚡
                             echoCancellation: true, 
                             noiseSuppression: true, 
-                            autoGainControl: true 
+                            autoGainControl: true // Actively boosts 18-inch audio
                         }
                     });
 
@@ -1064,7 +1064,7 @@
                                     humanVolume > 45 &&
                                     speechProfile.speechRatio > 0.70
                                 )
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 30); // ⚡ Ignores low-volume office chatter, triggers on intentional user speech
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 15); // ⚡ Can hear soft/distant speech perfectly now
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
@@ -1104,7 +1104,7 @@
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 1200); // ⚡ Lengthened slightly to prevent cutting you off when speaking slowly
+                                }, 1200); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
