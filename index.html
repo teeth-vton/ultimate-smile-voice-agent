@@ -578,7 +578,7 @@
             return null;
         }
 
-        // ⚡ EXTREME OFFICE VAD: Max strictness to ignore sudden background voices ⚡
+        // ⚡ BALANCED VAD: Highly sensitive for listening, ultra-strict for interruptions ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -622,13 +622,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // ⚡ MAXIMUM STRICTNESS to completely reject background office chatter ⚡
+            // Base threshold for normal listening (very sensitive)
             const isNearHumanSpeech =
-                rms > 0.035 &&            
-                speechAvg > 25 &&         
-                coreAvg > 30 &&
-                speechRatio > 0.75 &&     
-                coreVsNoise > 1.35;       
+                rms > 0.010 &&            
+                speechAvg > 12 &&         
+                coreAvg > 15 &&
+                speechRatio > 0.55 &&     
+                coreVsNoise > 1.15;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -1031,10 +1031,10 @@
                         );
 
                         if (isSpeakingNow) {
-                            // ⚡ STRICTION ON INTERRUPTION: Requires significantly louder/nearer voice for solid 300ms ⚡
-                            if (speechProfile.isNearHumanSpeech && humanVolume > 35) { 
+                            // ⚡ ULTRA-STRICT INTERRUPTION: Prevents random noises from stopping her ⚡
+                            if (speechProfile.isNearHumanSpeech && humanVolume > 35 && speechProfile.speechRatio > 0.75 && speechProfile.coreVsNoise > 1.30) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames >= 10) { 
+                                if (consecutiveLoudFrames >= 10) { // Requires sustained speech
                                     consecutiveLoudFrames = 0;
 
                                     clearTimeout(shortPauseTimer);
@@ -1059,12 +1059,8 @@
                             const inRestartHold = performance.now() < interruptRestartHoldUntil;
 
                             const canStartRecording = inRestartHold
-                                ? (
-                                    speechProfile.isNearHumanSpeech &&
-                                    humanVolume > 50 &&
-                                    speechProfile.speechRatio > 0.75
-                                )
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 20);
+                                ? (speechProfile.isNearHumanSpeech && humanVolume > 40)
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 15); // Sensitive enough for 18 inches
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
@@ -1093,8 +1089,9 @@
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
-                                }, 600); 
+                                }, 500); 
 
+                                // ⚡ FAST CUTOFF: Shuts mic 800ms after you stop speaking to remove lag ⚡
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -1104,7 +1101,7 @@
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 1200); 
+                                }, 800); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
