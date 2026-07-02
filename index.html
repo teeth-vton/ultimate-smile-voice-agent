@@ -578,7 +578,7 @@
             return null;
         }
 
-        // ⚡ NEAR-FIELD OFFICE VAD: Strict proximity gate ignores far away chatter ⚡
+        // ⚡ NEAR-FIELD OFFICE VAD (ULTRA STRICT) ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -622,13 +622,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // ⚡ The Magic Formula: Triggers if you speak nearby, but ignores loud distant colleagues ⚡
+            // ⚡ Increased Strictness to reject background chatter completely ⚡
             const isNearHumanSpeech =
-                rms > 0.015 &&            
-                speechAvg > 12 &&         
-                coreAvg > 15 &&
-                speechRatio > 0.65 &&     
-                coreVsNoise > 1.25;       // Requires massive spike in acoustic density (near-field)
+                rms > 0.020 &&            
+                speechAvg > 15 &&         
+                coreAvg > 18 &&
+                speechRatio > 0.70 &&     // HIGHly selective for voice
+                coreVsNoise > 1.30;       // Requires STRONG proximity dominance
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -945,10 +945,9 @@
                 socket.onopen = async () => {
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
                         audio: { 
-                            // ⚡ RESTORED AI NOISE SUPPRESSION & AEC TO FIX MUDDY AUDIO FOR GEMINI ⚡
                             echoCancellation: true, 
                             noiseSuppression: true, 
-                            autoGainControl: true // Actively boosts 18-inch audio
+                            autoGainControl: true 
                         }
                     });
 
@@ -1032,9 +1031,10 @@
                         );
 
                         if (isSpeakingNow) {
-                            if (speechProfile.isNearHumanSpeech && humanVolume > 20) { 
+                            // ⚡ STRICTION ON INTERRUPTION: Requires significantly louder/nearer voice to cut her off ⚡
+                            if (speechProfile.isNearHumanSpeech && humanVolume > 30) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames >= 6) { 
+                                if (consecutiveLoudFrames >= 8) { // Requires longer sustained speech
                                     consecutiveLoudFrames = 0;
 
                                     clearTimeout(shortPauseTimer);
@@ -1061,10 +1061,10 @@
                             const canStartRecording = inRestartHold
                                 ? (
                                     speechProfile.isNearHumanSpeech &&
-                                    humanVolume > 45 &&
-                                    speechProfile.speechRatio > 0.70
+                                    humanVolume > 50 &&
+                                    speechProfile.speechRatio > 0.75
                                 )
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 15); // ⚡ Can hear soft/distant speech perfectly now
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 15); 
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
@@ -1194,6 +1194,7 @@
                                 lastBotMessageDiv = logMessage('bot', finalText);
                             }
 
+                            // ⚡ The 6-Message Rule is actively maintained here ⚡
                             const last = chatHistory[chatHistory.length - 1];
                             if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
                                 chatHistory.push({ role: "model", parts: [{ text: finalText }] });
@@ -1299,6 +1300,7 @@
 
             try {
                 let transcript = "No chat history recorded.";
+                // ⚡ Grabs the full chat history from the frontend UI state before sending ⚡
                 if (chatHistory && chatHistory.length > 0) {
                     transcript = chatHistory.map(turn => `${turn.role === 'user' ? 'User' : 'Agent'}: ${turn.parts[0].text}`).join('\n\n');
                 }
