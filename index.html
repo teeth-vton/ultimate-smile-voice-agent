@@ -465,7 +465,7 @@
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("", "g"), "");
+            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
@@ -578,7 +578,7 @@
             return null;
         }
 
-        // ⚡ NEAR-FIELD OFFICE VAD (ULTRA STRICT) ⚡
+        // ⚡ EXTREME OFFICE VAD: Max strictness to ignore sudden background voices ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -622,13 +622,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // ⚡ Increased Strictness to reject background chatter completely ⚡
+            // ⚡ MAXIMUM STRICTNESS to completely reject background office chatter ⚡
             const isNearHumanSpeech =
-                rms > 0.020 &&            
-                speechAvg > 15 &&         
-                coreAvg > 18 &&
-                speechRatio > 0.70 &&     // HIGHly selective for voice
-                coreVsNoise > 1.30;       // Requires STRONG proximity dominance
+                rms > 0.035 &&            
+                speechAvg > 25 &&         
+                coreAvg > 30 &&
+                speechRatio > 0.75 &&     
+                coreVsNoise > 1.35;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -1031,10 +1031,10 @@
                         );
 
                         if (isSpeakingNow) {
-                            // ⚡ STRICTION ON INTERRUPTION: Requires significantly louder/nearer voice to cut her off ⚡
-                            if (speechProfile.isNearHumanSpeech && humanVolume > 30) { 
+                            // ⚡ STRICTION ON INTERRUPTION: Requires significantly louder/nearer voice for solid 300ms ⚡
+                            if (speechProfile.isNearHumanSpeech && humanVolume > 35) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames >= 8) { // Requires longer sustained speech
+                                if (consecutiveLoudFrames >= 10) { 
                                     consecutiveLoudFrames = 0;
 
                                     clearTimeout(shortPauseTimer);
@@ -1064,7 +1064,7 @@
                                     humanVolume > 50 &&
                                     speechProfile.speechRatio > 0.75
                                 )
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 15); 
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 20);
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
@@ -1194,7 +1194,6 @@
                                 lastBotMessageDiv = logMessage('bot', finalText);
                             }
 
-                            // ⚡ The 6-Message Rule is actively maintained here ⚡
                             const last = chatHistory[chatHistory.length - 1];
                             if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
                                 chatHistory.push({ role: "model", parts: [{ text: finalText }] });
@@ -1300,7 +1299,6 @@
 
             try {
                 let transcript = "No chat history recorded.";
-                // ⚡ Grabs the full chat history from the frontend UI state before sending ⚡
                 if (chatHistory && chatHistory.length > 0) {
                     transcript = chatHistory.map(turn => `${turn.role === 'user' ? 'User' : 'Agent'}: ${turn.parts[0].text}`).join('\n\n');
                 }
