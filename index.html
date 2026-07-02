@@ -465,7 +465,7 @@
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
+            result = result.replace(new RegExp("", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
@@ -578,7 +578,7 @@
             return null;
         }
 
-        // ⚡ BALANCED VAD: Highly sensitive for listening, ultra-strict for interruptions ⚡
+        // ⚡ BULLETPROOF VAD: Impossible to interrupt with background office noise ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -622,13 +622,12 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // Base threshold for normal listening (very sensitive)
             const isNearHumanSpeech =
-                rms > 0.010 &&            
-                speechAvg > 12 &&         
-                coreAvg > 15 &&
-                speechRatio > 0.55 &&     
-                coreVsNoise > 1.15;       
+                rms > 0.020 &&            
+                speechAvg > 15 &&         
+                coreAvg > 18 &&
+                speechRatio > 0.70 &&     
+                coreVsNoise > 1.30;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -1031,10 +1030,10 @@
                         );
 
                         if (isSpeakingNow) {
-                            // ⚡ ULTRA-STRICT INTERRUPTION: Prevents random noises from stopping her ⚡
-                            if (speechProfile.isNearHumanSpeech && humanVolume > 35 && speechProfile.speechRatio > 0.75 && speechProfile.coreVsNoise > 1.30) { 
+                            // ⚡ REQUIRES 10 SOLID FRAMES TO INTERRUPT (Bans background noise interrupts) ⚡
+                            if (speechProfile.isNearHumanSpeech && humanVolume > 35) { 
                                 consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames >= 10) { // Requires sustained speech
+                                if (consecutiveLoudFrames >= 10) { 
                                     consecutiveLoudFrames = 0;
 
                                     clearTimeout(shortPauseTimer);
@@ -1059,8 +1058,12 @@
                             const inRestartHold = performance.now() < interruptRestartHoldUntil;
 
                             const canStartRecording = inRestartHold
-                                ? (speechProfile.isNearHumanSpeech && humanVolume > 40)
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 15); // Sensitive enough for 18 inches
+                                ? (
+                                    speechProfile.isNearHumanSpeech &&
+                                    humanVolume > 45 &&
+                                    speechProfile.speechRatio > 0.70
+                                )
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 15); 
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
@@ -1089,9 +1092,8 @@
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
-                                }, 500); 
+                                }, 600); 
 
-                                // ⚡ FAST CUTOFF: Shuts mic 800ms after you stop speaking to remove lag ⚡
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -1101,7 +1103,7 @@
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 800); 
+                                }, 1200); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
