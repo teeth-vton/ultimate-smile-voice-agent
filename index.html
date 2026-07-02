@@ -465,7 +465,7 @@
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("", "g"), "");
+            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
@@ -578,7 +578,7 @@
             return null;
         }
 
-        // ⚡ BULLETPROOF VAD: Impossible to interrupt with background office noise ⚡
+        // ⚡ EXTREME OFFICE VAD: Max strictness to ignore sudden background voices ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -622,12 +622,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
+            // ⚡ MAXIMUM STRICTNESS to completely reject background office chatter ⚡
             const isNearHumanSpeech =
-                rms > 0.020 &&            
-                speechAvg > 15 &&         
-                coreAvg > 18 &&
-                speechRatio > 0.70 &&     
-                coreVsNoise > 1.30;       
+                rms > 0.035 &&            
+                speechAvg > 25 &&         
+                coreAvg > 30 &&
+                speechRatio > 0.75 &&     
+                coreVsNoise > 1.35;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -1030,7 +1031,7 @@
                         );
 
                         if (isSpeakingNow) {
-                            // ⚡ REQUIRES 10 SOLID FRAMES TO INTERRUPT (Bans background noise interrupts) ⚡
+                            // ⚡ STRICTION ON INTERRUPTION: Requires significantly louder/nearer voice for solid 300ms ⚡
                             if (speechProfile.isNearHumanSpeech && humanVolume > 35) { 
                                 consecutiveLoudFrames++;
                                 if (consecutiveLoudFrames >= 10) { 
@@ -1060,10 +1061,10 @@
                             const canStartRecording = inRestartHold
                                 ? (
                                     speechProfile.isNearHumanSpeech &&
-                                    humanVolume > 45 &&
-                                    speechProfile.speechRatio > 0.70
+                                    humanVolume > 50 &&
+                                    speechProfile.speechRatio > 0.75
                                 )
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 15); 
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 20);
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
