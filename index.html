@@ -1302,8 +1302,11 @@
 
             try {
                 let transcript = "No chat history recorded.";
-                if (chatHistory && chatHistory.length > 0) {
-                    transcript = chatHistory.map(turn => `${turn.role === 'user' ? 'User' : 'Agent'}: ${turn.parts[0].text}`).join('\n\n');
+                
+                // ⚡ FIX: Scrape the ENTIRE visual chat log from the UI instead of the 6-message Gemini array ⚡
+                const allMessages = document.querySelectorAll('#usd-chat-log .usd-msg-text');
+                if (allMessages.length > 0) {
+                    transcript = Array.from(allMessages).map(msg => msg.innerText).join('\n\n');
                 }
 
                 await fetch('https://api.web3forms.com/submit', {
