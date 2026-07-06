@@ -5,12 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ultimate Smile Design - Live Agent</title>
     <style>
+        /**
+         * ============================================================================
+         * ULTIMATE SMILE DESIGN - GLOBAL STYLES
+         * ============================================================================
+         * The following CSS variables and reset properties define the core aesthetic.
+         * By separating properties line-by-line, we ensure maximum readability and
+         * easier debugging for future UI enhancements.
+         */
         body {
             background-color: #000000;
             color: #ffffff;
             margin: 0;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
+
+        /**
+         * ============================================================================
+         * VOICE WIDGET CONTAINER
+         * ============================================================================
+         */
         #usd-voice-widget {
             position: fixed;
             bottom: 30px;
@@ -20,6 +34,12 @@
             flex-direction: column;
             align-items: flex-end;
         }
+
+        /**
+         * ============================================================================
+         * TOOLTIP STYLES
+         * ============================================================================
+         */
         #usd-tooltip {
             background: #D4AF37;
             color: #111;
@@ -36,6 +56,7 @@
             transition: opacity 0.3s ease-in-out;
             opacity: 1;
         }
+
         #usd-tooltip::after {
             content: '';
             position: absolute;
@@ -45,15 +66,38 @@
             border-style: solid;
             border-color: #D4AF37 transparent transparent transparent;
         }
+
+        /**
+         * ============================================================================
+         * ANIMATIONS
+         * ============================================================================
+         */
         @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
+            0%, 100% { 
+                transform: translateY(0); 
+            }
+            50% { 
+                transform: translateY(-5px); 
+            }
         }
+
         @keyframes floatContainer {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-8px); }
-            100% { transform: translateY(0px); }
+            0% { 
+                transform: translateY(0px); 
+            }
+            50% { 
+                transform: translateY(-8px); 
+            }
+            100% { 
+                transform: translateY(0px); 
+            }
         }
+
+        /**
+         * ============================================================================
+         * CHAT CONTAINER
+         * ============================================================================
+         */
         #usd-chat-container {
             width: 320px;
             max-height: 380px;
@@ -70,6 +114,12 @@
             transform: translateZ(0);
             backface-visibility: hidden;
         }
+
+        /**
+         * ============================================================================
+         * HEADER STYLES
+         * ============================================================================
+         */
         #usd-chat-header {
             display: flex;
             justify-content: space-between;
@@ -78,21 +128,30 @@
             padding-bottom: 10px;
             margin-bottom: 10px;
         }
+
         #usd-header-left {
             display: flex;
             align-items: center;
             gap: 10px;
         }
+
         #usd-status-box {
             color: #D4AF37;
             font-size: 13px;
             font-weight: bold;
         }
+
         #usd-header-right {
             display: flex;
             align-items: center;
             gap: 10px;
         }
+
+        /**
+         * ============================================================================
+         * MODE TOGGLE BUTTON
+         * ============================================================================
+         */
         #usd-mode-toggle {
             background: #222;
             color: #D4AF37;
@@ -104,13 +163,24 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        #usd-mode-toggle:hover { background: #D4AF37; color: #111; }
+
+        #usd-mode-toggle:hover { 
+            background: #D4AF37; 
+            color: #111; 
+        }
+
+        /**
+         * ============================================================================
+         * AUDIO VISUALIZER
+         * ============================================================================
+         */
         #usd-visualizer {
             display: flex;
             gap: 3px;
             align-items: center;
             height: 20px;
         }
+
         .usd-bar {
             width: 3px;
             background: #D4AF37;
@@ -118,13 +188,26 @@
             height: 4px; 
             transition: height 0.2s ease;
         }
-        #usd-visualizer.active .usd-bar { animation: usd-sound 0.4s ease-in-out infinite alternate; }
+
+        #usd-visualizer.active .usd-bar { 
+            animation: usd-sound 0.4s ease-in-out infinite alternate; 
+        }
         #usd-visualizer.active .usd-bar:nth-child(1) { animation-delay: 0.0s; }
         #usd-visualizer.active .usd-bar:nth-child(2) { animation-delay: 0.2s; }
         #usd-visualizer.active .usd-bar:nth-child(3) { animation-delay: 0.1s; }
         #usd-visualizer.active .usd-bar:nth-child(4) { animation-delay: 0.3s; }
         #usd-visualizer.active .usd-bar:nth-child(5) { animation-delay: 0.1s; }
-        @keyframes usd-sound { 0% { height: 4px; } 100% { height: 18px; } }
+
+        @keyframes usd-sound { 
+            0% { height: 4px; } 
+            100% { height: 18px; } 
+        }
+
+        /**
+         * ============================================================================
+         * CLOSE BUTTON
+         * ============================================================================
+         */
         #usd-close-btn {
             background: none;
             border: none;
@@ -134,7 +217,16 @@
             padding: 0;
             transition: color 0.2s;
         }
-        #usd-close-btn:hover { color: #ff4444; }
+
+        #usd-close-btn:hover { 
+            color: #ff4444; 
+        }
+
+        /**
+         * ============================================================================
+         * CHAT LOG AREA
+         * ============================================================================
+         */
         #usd-chat-log {
             overflow-y: auto;
             flex-grow: 1;
@@ -142,17 +234,53 @@
             max-height: 210px;
             padding-right: 5px;
         }
-        #usd-chat-log::-webkit-scrollbar { width: 4px; }
-        #usd-chat-log::-webkit-scrollbar-thumb { background: #D4AF37; border-radius: 10px; }
-        .msg { margin-bottom: 8px; font-size: 13px; line-height: 1.4; }
-        .msg-user { color: #ffffff; text-align: right; }
-        .msg-bot { color: #D4AF37; text-align: left; }
-        .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
+
+        #usd-chat-log::-webkit-scrollbar { 
+            width: 4px; 
+        }
+
+        #usd-chat-log::-webkit-scrollbar-thumb { 
+            background: #D4AF37; 
+            border-radius: 10px; 
+        }
+
+        .msg { 
+            margin-bottom: 8px; 
+            font-size: 13px; 
+            line-height: 1.4; 
+        }
+
+        .msg-user { 
+            color: #ffffff; 
+            text-align: right; 
+        }
+
+        .msg-bot { 
+            color: #D4AF37; 
+            text-align: left; 
+        }
+
+        .msg-error { 
+            color: #ff4444; 
+            text-align: left; 
+            font-size: 11px; 
+            background: rgba(255,68,68,0.1); 
+            padding: 6px; 
+            border-radius: 5px; 
+            margin-top: 5px; 
+        }
+
         .usd-msg-text {
             white-space: pre-wrap;
             word-break: break-word;
             display: inline-block;
         }
+
+        /**
+         * ============================================================================
+         * ACTION LINK CARDS
+         * ============================================================================
+         */
         .usd-link-card {
             display: block;
             width: 100%;
@@ -169,14 +297,28 @@
             box-sizing: border-box;
             transition: all 0.2s;
         }
+
         .usd-link-card:hover {
             background: #D4AF37;
             color: #111111;
             transform: translateY(-2px);
         }
-        #usd-interim-text { text-align: right; font-style: italic; font-size: 12px; font-weight: bold; min-height: 16px; margin-bottom: 5px; transition: color 0.2s; }
+
+        #usd-interim-text { 
+            text-align: right; 
+            font-style: italic; 
+            font-size: 12px; 
+            font-weight: bold; 
+            min-height: 16px; 
+            margin-bottom: 5px; 
+            transition: color 0.2s; 
+        }
         
-        /* LIVE TRANSCRIPT POPUP */
+        /**
+         * ============================================================================
+         * LIVE TRANSCRIPT POPUP
+         * ============================================================================
+         */
         #usd-live-transcript-popup {
             display: none;
             margin-bottom: 10px;
@@ -188,6 +330,7 @@
             position: relative;
             z-index: 5;
         }
+
         #usd-live-transcript-label {
             color: #D4AF37;
             font-size: 11px;
@@ -196,6 +339,7 @@
             letter-spacing: 0.6px;
             margin-bottom: 4px;
         }
+
         #usd-live-transcript-text {
             color: #ffffff;
             font-size: 13px;
@@ -205,21 +349,29 @@
             max-height: 70px;
             overflow-y: auto;
         }
+
         #usd-live-transcript-link-wrap {
             display: none;
             margin-top: 8px;
         }
+
         #usd-live-transcript-link-wrap .usd-link-card {
             margin-top: 0;
             font-size: 11px;
             padding: 9px 10px;
         }
 
+        /**
+         * ============================================================================
+         * TEXT INPUT CONTROLS
+         * ============================================================================
+         */
         #usd-input-container {
             display: none; 
             border-top: 1px solid rgba(255,255,255,0.1);
             padding-top: 10px;
         }
+
         #usd-text-input {
             flex-grow: 1;
             background: #222;
@@ -230,7 +382,11 @@
             font-size: 13px;
             outline: none;
         }
-        #usd-text-input:focus { border-color: #D4AF37; }
+
+        #usd-text-input:focus { 
+            border-color: #D4AF37; 
+        }
+
         #usd-send-btn {
             background: #D4AF37;
             color: #111;
@@ -242,8 +398,16 @@
             font-weight: bold;
             font-size: 13px;
         }
-        #usd-send-btn:hover { background: #FFF8DC; }
+
+        #usd-send-btn:hover { 
+            background: #FFF8DC; 
+        }
         
+        /**
+         * ============================================================================
+         * MAIN FLOATING BUBBLE
+         * ============================================================================
+         */
         #usd-bubble {
             width: 80px;
             height: 80px;
@@ -260,33 +424,83 @@
             transition: transform 0.2s ease-in-out;
             user-select: none;
         }
-        #usd-bubble:hover { transform: scale(1.05); }
-        #usd-bubble:active { transform: scale(0.95); }
-        @keyframes usd-pulse {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 var(--pulse-max) rgba(212, 175, 55, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
+
+        #usd-bubble:hover { 
+            transform: scale(1.05); 
         }
+
+        #usd-bubble:active { 
+            transform: scale(0.95); 
+        }
+
+        @keyframes usd-pulse {
+            0% { 
+                transform: scale(0.95); 
+                box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); 
+            }
+            70% { 
+                transform: scale(1); 
+                box-shadow: 0 0 0 var(--pulse-max) rgba(212, 175, 55, 0); 
+            }
+            100% { 
+                transform: scale(0.95); 
+                box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); 
+            }
+        }
+
+        /**
+         * ============================================================================
+         * INLINE RATING SYSTEM
+         * ============================================================================
+         */
         #usd-inline-rating {
             display: none;
             border-top: 1px solid rgba(255,255,255,0.1);
             padding-top: 15px;
             text-align: center;
         }
-        #usd-rating-title { color: #fff; font-size: 15px; margin-bottom: 12px; font-weight: bold; letter-spacing: 0.5px;}
-        .usd-stars { display: flex; justify-content: center; gap: 12px; cursor: pointer; }
+
+        #usd-rating-title { 
+            color: #fff; 
+            font-size: 15px; 
+            margin-bottom: 12px; 
+            font-weight: bold; 
+            letter-spacing: 0.5px;
+        }
+
+        .usd-stars { 
+            display: flex; 
+            justify-content: center; 
+            gap: 12px; 
+            cursor: pointer; 
+        }
+
         .usd-star { 
             font-size: 28px; 
             color: #333333; 
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
             transition: transform 0.2s, color 0.2s, text-shadow 0.2s; 
         }
+
         .usd-star:hover, .usd-star.active { 
             color: #FFD700; 
             transform: scale(1.2);
             text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
         }
-        #usd-rating-thanks { display: none; color: #D4AF37; font-size: 13px; margin-top: 12px; font-weight: bold; }
+
+        #usd-rating-thanks { 
+            display: none; 
+            color: #D4AF37; 
+            font-size: 13px; 
+            margin-top: 12px; 
+            font-weight: bold; 
+        }
+
+        /**
+         * ============================================================================
+         * END CONFIRMATION OVERLAY
+         * ============================================================================
+         */
         #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -300,34 +514,86 @@
             text-align: center;
             padding: 20px;
         }
-        .usd-confirm-title { color: #fff; font-size: 16px; margin-bottom: 20px; font-weight: bold; }
-        .usd-confirm-btns { display: flex; gap: 15px; }
-        .usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
 
+        .usd-confirm-title { 
+            color: #fff; 
+            font-size: 16px; 
+            margin-bottom: 20px; 
+            font-weight: bold; 
+        }
+
+        .usd-confirm-btns { 
+            display: flex; 
+            gap: 15px; 
+        }
+
+        .usd-btn-yes { 
+            background: #ff4444; 
+            color: #fff; 
+            border: none; 
+            padding: 8px 20px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-weight: bold; 
+        }
+
+        .usd-btn-no { 
+            background: #444; 
+            color: #fff; 
+            border: none; 
+            padding: 8px 20px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-weight: bold; 
+        }
+
+        /**
+         * ============================================================================
+         * MOBILE RESPONSIVENESS
+         * ============================================================================
+         */
         @media (max-width: 480px) {
-            #usd-voice-widget { bottom: 15px; right: 15px; }
-            #usd-bubble { width: 50px; height: 50px; } 
-            #usd-bubble svg { width: 24px; height: 24px; }
+            #usd-voice-widget { 
+                bottom: 15px; 
+                right: 15px; 
+            }
+            #usd-bubble { 
+                width: 50px; 
+                height: 50px; 
+            } 
+            #usd-bubble svg { 
+                width: 24px; 
+                height: 24px; 
+            }
             #usd-chat-container { 
                 width: calc(100vw - 40px); 
                 max-height: 380px; 
                 padding: 12px; 
                 margin-bottom: 10px; 
             }
-            #usd-chat-log { max-height: 160px; } 
-            #usd-tooltip { font-size: 12px; padding: 8px 12px; margin-bottom: 10px; }
-            #usd-tooltip::after { right: 20px; }
+            #usd-chat-log { 
+                max-height: 160px; 
+            } 
+            #usd-tooltip { 
+                font-size: 12px; 
+                padding: 8px 12px; 
+                margin-bottom: 10px; 
+            }
+            #usd-tooltip::after { 
+                right: 20px; 
+            }
         }
     </style>
 </head>
 <body>
 
     <div id="usd-voice-widget">
+        <!-- TOOLTIP -->
         <div id="usd-tooltip" onclick="openChat(false)">
             Namaste! Tap here to talk about your new smile!
         </div>
 
+        <!-- MAIN CHAT CONTAINER -->
         <div id="usd-chat-container">
             <div id="usd-end-confirm-overlay">
                 <div class="usd-confirm-title">Want to end the call?</div>
@@ -338,6 +604,8 @@
             </div>
 
             <div id="usd-chat-inner-wrap" style="height: 100%; display: flex; flex-direction: column;">
+                
+                <!-- HEADER -->
                 <div id="usd-chat-header">
                     <div id="usd-header-left">
                         <img src="https://raw.githubusercontent.com/teeth-vton/sd-voice-backend/dab01d9f2e96be2fcda278af63db62dfef9e1559/Gemini_Generated_Image_67gd1767gd1767gd.png" alt="USD Assistant" width="24" height="24" style="object-fit: contain;">
@@ -346,26 +614,36 @@
                     <div id="usd-header-right">
                         <button id="usd-mode-toggle" onclick="toggleChatMode()">💬 Text</button>
                         <div id="usd-visualizer">
-                            <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
+                            <div class="usd-bar"></div>
+                            <div class="usd-bar"></div>
+                            <div class="usd-bar"></div>
+                            <div class="usd-bar"></div>
+                            <div class="usd-bar"></div>
                         </div>
                         <button id="usd-close-btn" onclick="closeChatBtnClicked()">✕</button>
                     </div>
                 </div>
 
+                <!-- LIVE TRANSCRIPT POPUP -->
                 <div id="usd-live-transcript-popup">
                     <div id="usd-live-transcript-label">Assistant speaking</div>
                     <div id="usd-live-transcript-text"></div>
                     <div id="usd-live-transcript-link-wrap"></div>
                 </div>
 
+                <!-- CHAT LOG -->
                 <div id="usd-chat-log"></div>
+                
+                <!-- INTERIM MIC TEXT -->
                 <div id="usd-interim-text"></div>
                 
+                <!-- TEXT INPUT -->
                 <div id="usd-input-container">
                     <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
                     <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
                 </div>
 
+                <!-- INLINE RATING -->
                 <div id="usd-inline-rating">
                     <div id="usd-rating-title">Rate your experience</div>
                     <div class="usd-stars">
@@ -380,6 +658,7 @@
             </div>
         </div>
         
+        <!-- FLOATING BUBBLE BUTTON -->
         <div id="usd-bubble" onclick="openChat(false)">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
@@ -390,6 +669,13 @@
     </div>
 
     <script>
+        /**
+         * ============================================================================
+         * GLOBAL CONFIGURATION & STATE
+         * ============================================================================
+         * This section initializes all required global variables, WebSocket paths,
+         * and audio context tools for tracking the current state of the USD Live Agent.
+         */
         const RENDER_BACKEND_URL = "https://nikjoshi123-usd-voice-backend.hf.space";
         const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
 
@@ -417,6 +703,58 @@
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
 
+        // NATIVE BROWSER LIVE TRANSCRIPTION
+        let recognition = null;
+        let liveUserText = "";
+        
+        // Permanent memory string for intermediate typing
+        let finalTranscript = ""; 
+
+        /**
+         * ============================================================================
+         * NATIVE BROWSER SPEECH RECOGNITION INIT
+         * ============================================================================
+         * Attempts to mount the webkitSpeechRecognition API to enable live transcription
+         * of the user's speech as an overlay text, providing feedback before backend finishes.
+         */
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'hi-IN'; // Better detection for Indian English/Hindi
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript + " ";
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                
+                liveUserText = (finalTranscript + interimTranscript).trim();
+                
+                if (liveUserText) {
+                    const interimBox = document.getElementById('usd-interim-text');
+                    if (interimBox) {
+                        interimBox.innerText = "You: " + liveUserText;
+                        interimBox.style.color = "#D4AF37";
+                    }
+                }
+            };
+
+            recognition.onerror = (e) => {
+                // Fail silently to avoid interrupting UX
+            }; 
+        }
+
+        /**
+         * ============================================================================
+         * ACTION LINKS CONFIGURATION
+         * ============================================================================
+         */
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist' },
@@ -428,6 +766,11 @@
             '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist' }
         };
 
+        /**
+         * ============================================================================
+         * WINDOW LOAD EVENT
+         * ============================================================================
+         */
         window.onload = async () => {
             if (sessionStorage.getItem('usd_chat_active') === 'true') {
                 await openChat(true);
@@ -437,6 +780,11 @@
         let lastScrollY = window.scrollY || 0;
         let scrollTimeout = null;
 
+        /**
+         * ============================================================================
+         * SCROLL LISTENER (PULSE EFFECT)
+         * ============================================================================
+         */
         window.addEventListener('scroll', () => {
             const currentScrollY = window.scrollY || document.documentElement.scrollTop;
             const tooltip = document.getElementById('usd-tooltip');
@@ -462,14 +810,27 @@
             }, 150);
         });
 
+        /**
+         * ============================================================================
+         * TEXT SANITIZATION
+         * ============================================================================
+         * Cleans incoming and outgoing text to ensure no raw HTML or tags leak.
+         */
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("", "g"), "");
+            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
 
+        /**
+         * ============================================================================
+         * UI STATE MANAGEMENT
+         * ============================================================================
+         * Controls the active elements in the chat header, the visualizer, and the 
+         * underlying status logic indicating listening, speaking, or thinking.
+         */
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
@@ -489,10 +850,6 @@
             if (newState === 'speaking') {
                 if (isVoiceMode) {
                     visualizer.classList.add('active');
-                    if (interimBox && !interimBox.innerText.includes("You:") && !isReplyComplete) {
-                        interimBox.innerText = "Answering...";
-                        interimBox.style.color = "#ffffff";
-                    }
                 }
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
@@ -500,9 +857,14 @@
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
-                if (interimBox && !interimBox.innerText.includes("You:")) {
-                    interimBox.innerText = "Listening...";
-                    interimBox.style.color = "#D4AF37";
+                if (interimBox) {
+                    if (liveUserText) {
+                        interimBox.innerText = "You: " + liveUserText;
+                        interimBox.style.color = "#D4AF37";
+                    } else if (!interimBox.innerText.includes("You:")) {
+                        interimBox.innerText = "Listening...";
+                        interimBox.style.color = "#D4AF37";
+                    }
                 }
             } else {
                 isMicSoftwareMuted = true;
@@ -510,8 +872,14 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    interimBox.innerText = "Answering...";
-                    interimBox.style.color = "#ffffff";
+                    // FREEZE TEXT WHILE PROCESSING
+                    if (liveUserText) {
+                        interimBox.innerText = "You: " + liveUserText + " ...";
+                        interimBox.style.color = "#ffffff";
+                    } else {
+                        interimBox.innerText = "Answering...";
+                        interimBox.style.color = "#ffffff";
+                    }
                 }
             }
 
@@ -520,6 +888,11 @@
             }
         }
 
+        /**
+         * ============================================================================
+         * AUDIO CONTEXT INITIALIZATION
+         * ============================================================================
+         */
         async function initAudio() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -529,12 +902,23 @@
             }
         }
 
+        /**
+         * ============================================================================
+         * TRANSCRIPT LABEL SYNCHRONIZATION
+         * ============================================================================
+         */
         function syncTranscriptLabel() {
             const label = document.getElementById('usd-live-transcript-label');
             if (!label) return;
             label.innerText = isVoiceMode ? 'Assistant speaking' : 'Assistant typing';
         }
 
+        /**
+         * ============================================================================
+         * LOCAL KEYWORD & TAG DETECTION
+         * ============================================================================
+         * Identifies specific keywords to trigger frontend action buttons.
+         */
         function detectLocalTagFromText(input = '') {
             const text = cleanDisplayText(String(input || "").toLowerCase());
 
@@ -578,8 +962,13 @@
             return null;
         }
 
-        // ⚡ PERFECT MIDDLE GROUND VAD ⚡
-        // Extremely sensitive for listening (so it responds quickly), but strictly gated for interruptions.
+        /**
+         * ============================================================================
+         * VOICE ACTIVITY DETECTION (VAD) ENGINE
+         * ============================================================================
+         * Analyzes raw audio frequencies via FFT to determine if a human is speaking,
+         * filtering out background noise, bumps, and thuds by comparing core averages.
+         */
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -615,25 +1004,30 @@
                 const centered = (timeDomainArray[i] - 128) / 128;
                 energy += centered * centered;
             }
+            
             const rms = Math.sqrt(energy / Math.max(1, timeDomainArray.length));
-
             const speechAvg = speechSum / Math.max(1, speechCount);
             const coreAvg = coreSum / Math.max(1, coreCount);
             const noiseAvg = noiseSum / Math.max(1, noiseCount);
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // ⚡ Very sensitive threshold to effortlessly pick up your voice from 18 inches ⚡
+            // ⚡ UPDATED: MORE SENSITIVE RMS, BUT STRICTER RATIO TO REJECT THUDS ⚡
             const isNearHumanSpeech =
-                rms > 0.010 &&            
+                rms > 0.008 &&            
                 speechAvg > 10 &&         
                 coreAvg > 12 &&
-                speechRatio > 0.50 &&     
-                coreVsNoise > 1.10;       
+                speechRatio > 0.55 &&     
+                coreVsNoise > 1.20;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
 
+        /**
+         * ============================================================================
+         * POPUP LINK RENDERER
+         * ============================================================================
+         */
         function renderPopupLink(tag) {
             const wrap = document.getElementById('usd-live-transcript-link-wrap');
             if (!wrap) return;
@@ -662,6 +1056,11 @@
             wrap.style.display = 'block';
         }
 
+        /**
+         * ============================================================================
+         * LIVE TRANSCRIPT RENDERER
+         * ============================================================================
+         */
         function updateLiveTranscript(text, tag = null, force = false) {
             const popup = document.getElementById('usd-live-transcript-popup');
             const popupText = document.getElementById('usd-live-transcript-text');
@@ -696,18 +1095,26 @@
                 const popup = document.getElementById('usd-live-transcript-popup');
                 const popupText = document.getElementById('usd-live-transcript-text');
                 const popupLinkWrap = document.getElementById('usd-live-transcript-link-wrap');
+                
                 if (popup) popup.style.display = 'none';
                 if (popupText) popupText.textContent = '';
+                
                 if (popupLinkWrap) {
                     popupLinkWrap.innerHTML = '';
                     popupLinkWrap.style.display = 'none';
                 }
+                
                 currentLiveAssistantText = "";
                 currentLiveAssistantTag = null;
                 lastAssistantStreamingText = "";
             }, delay);
         }
 
+        /**
+         * ============================================================================
+         * MESSAGE ELEMENT GENERATOR
+         * ============================================================================
+         */
         function createMessageDiv(sender, text) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `msg msg-${sender}`;
@@ -749,6 +1156,11 @@
             saveHistory();
         }
 
+        /**
+         * ============================================================================
+         * AUDIO QUEUE COMPLETION HANDLER
+         * ============================================================================
+         */
         function checkBotFinishedSpeaking() {
             if (isReplyComplete && audioChunkQueue.length === 0 && activeSources.length === 0) {
                 isReplyComplete = false;
@@ -769,6 +1181,11 @@
             }
         }
 
+        /**
+         * ============================================================================
+         * BASE64 AUDIO STREAM DECODER
+         * ============================================================================
+         */
         async function playAudioChunk(base64) {
             if (!base64) return;
             updateState('speaking');
@@ -825,29 +1242,21 @@
             }, 3000);
         }
 
+        /**
+         * ============================================================================
+         * INTERRUPTION CONTROLLER
+         * ============================================================================
+         */
         function interruptBot() {
-            audioChunkQueue = [];
-            isReplyComplete = false; 
-            nextPlayTime = 0; 
-            
-            interruptRestartHoldUntil = performance.now() + 180;
-
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                try {
-                    socket.send(JSON.stringify({ type: 'interrupt' }));
-                } catch (e) {}
-            }
-
-            activeSources.forEach(s => {
-                try { s.stop(); } catch(e) {}
-            });
-            activeSources = [];
-            hideLiveTranscript(0);
-            activeBotMessageDiv = null;
-            activeBotTextSpan = null;
-            lastAssistantStreamingText = "";
+            // Disabled entirely per user instructions to avoid cutting off mid-sentence
+            // due to background anomalies.
         }
 
+        /**
+         * ============================================================================
+         * MODE TOGGLE UI
+         * ============================================================================
+         */
         function toggleChatMode() {
             isVoiceMode = !isVoiceMode;
             const toggleBtn = document.getElementById('usd-mode-toggle');
@@ -877,6 +1286,11 @@
             sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
         }
 
+        /**
+         * ============================================================================
+         * PRIMARY CHAT INITIATOR
+         * ============================================================================
+         */
         async function openChat(isRestore = false) {
             initAudio();
             interruptRestartHoldUntil = 0;
@@ -939,6 +1353,11 @@
             }
         }
 
+        /**
+         * ============================================================================
+         * WEBSOCKET & VAD CONTROLLER CORE
+         * ============================================================================
+         */
         async function startWebSocket() {
             try {
                 socket = new WebSocket(WS_URL);
@@ -986,7 +1405,9 @@
                     let shortPauseTimer = null; 
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
-                    let consecutiveLoudFrames = 0; 
+                    
+                    // ⚡ NEW: Tracking continuous audio frames to ignore thuds
+                    let consecutiveVoiceFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1032,82 +1453,77 @@
                         );
 
                         if (isSpeakingNow) {
-                            // ⚡ STRICTION ON INTERRUPTION: Requires significantly louder/nearer voice for solid 300ms ⚡
-                            // Because it takes 10 consecutive frames, brief background noises or single words won't interrupt her!
-                            if (speechProfile.isNearHumanSpeech && humanVolume > 35) { 
-                                consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames >= 10) { 
-                                    consecutiveLoudFrames = 0;
-
-                                    clearTimeout(shortPauseTimer);
-                                    clearTimeout(longPauseTimer);
-                                    clearTimeout(maxRecordingTimer);
-                                    shortPauseTimer = null;
-                                    longPauseTimer = null;
-                                    maxRecordingTimer = null;
-
-                                    interruptBot();
-                                    updateState('listening');
-                                    isRecording = false;
-                                }
-                            } else {
-                                consecutiveLoudFrames = 0; 
-                            }
                             requestAnimationFrame(detectVoice);
                             return;
                         }
 
                         if (currentAgentState === 'listening' && isVoiceMode) {
-                            const inRestartHold = performance.now() < interruptRestartHoldUntil;
+                            // Require at least a decent volume base to prevent absolute silence triggering
+                            const volumeIsGood = humanVolume > 15; 
+                            
+                            const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
 
-                            const canStartRecording = inRestartHold
-                                ? (
-                                    speechProfile.isNearHumanSpeech &&
-                                    humanVolume > 40 &&
-                                    speechProfile.speechRatio > 0.65
-                                )
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 10); // ⚡ Fast-reacting listening threshold
+                            // ⚡ THUD/COUGH PROTECTION LOGIC ⚡
+                            if (canStartRecording) {
+                                consecutiveVoiceFrames++;
+                            } else {
+                                consecutiveVoiceFrames = 0;
+                            }
 
-                            if (canStartRecording) { 
+                            // Require at least 8 consecutive frames of human-like speech 
+                            // to ignore instantaneous bumps, thuds, or quick coughs.
+                            if (consecutiveVoiceFrames > 8) { 
                                 if (!isRecording) {
                                     isRecording = true;
+                                    liveUserText = ""; 
+                                    finalTranscript = ""; 
+                                    if (recognition) {
+                                        try { 
+                                            recognition.abort(); 
+                                            setTimeout(() => recognition.start(), 50); 
+                                        } catch(e) {}
+                                    }
                                     updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
                                     
+                                    // Massive 20-second timeout to allow long stories
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
+                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
                                             updateState('thinking');
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                             }
                                         }
-                                    }, 14000); 
+                                    }, 20000); 
                                 }
                                 
                                 clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
                                 
+                                // ⚡ CHANGED TO 800ms PER REQUEST ⚡
                                 shortPauseTimer = setTimeout(() => {
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
-                                }, 600); 
+                                }, 800); 
 
-                                // ⚡ FAST TRANSITION: 800ms to immediately switch to "Answering..." when you stop talking
+                                // ⚡ INCREASED TO 2500ms TO PREVENT BREATH CUTS ⚡
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
+                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking');
                                         if (socket.readyState === WebSocket.OPEN) {
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 800); 
+                                }, 2500); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
@@ -1121,6 +1537,13 @@
                     
                     if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
+                        liveUserText = ""; 
+                        finalTranscript = ""; 
+                        if (recognition) { try { recognition.abort(); } catch(e) {} }
+                        
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) interimBox.innerText = "";
+                        
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
@@ -1128,12 +1551,20 @@
                         if (cleanUserText) {
                             logMessage('user', cleanUserText);
                             addUserHistoryIfNew(cleanUserText);
+                            
+                            liveUserText = "";
+                            finalTranscript = ""; 
+                            const interimBox = document.getElementById('usd-interim-text');
+                            if (interimBox && interimBox.innerText.includes("You:")) {
+                                interimBox.innerText = "Answering...";
+                                interimBox.style.color = "#ffffff";
+                            }
                         }
                     }
                     else if (data.type === 'interim_transcript') {
                         const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox) {
-                            interimBox.innerText = "You: " + data.text;
+                        if (interimBox && data.text) {
+                            interimBox.innerText = "You: " + data.text + " ...";
                             interimBox.style.color = "#D4AF37";
                         }
                     }
@@ -1171,8 +1602,10 @@
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
                         
+                        liveUserText = ""; 
+                        finalTranscript = "";
                         const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox && interimBox.innerText === "Answering...") {
+                        if (interimBox) {
                             interimBox.innerText = "";
                         }
 
@@ -1180,13 +1613,7 @@
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
 
-                        const finalText = cleanDisplayText(
-                            data.botText ||
-                            lastAssistantStreamingText ||
-                            currentLiveAssistantText ||
-                            ""
-                        ).trim();
-
+                        const finalText = cleanDisplayText(data.botText || "").trim();
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
                         if (finalText) {
@@ -1205,8 +1632,12 @@
                             }
                             
                             updateLiveTranscript(finalText, finalTag, true);
+                        } else if (botTarget) {
+                            botTarget.remove();
                         }
 
+                        lastAssistantStreamingText = "";
+                        currentLiveAssistantText = "";
                         activeTag = finalTag;
                         
                         const finalBotTarget = botTarget || lastBotMessageDiv;
@@ -1236,6 +1667,11 @@
             }
         }
 
+        /**
+         * ============================================================================
+         * CALL TERMINATION FLOW
+         * ============================================================================
+         */
         function closeChatBtnClicked() {
             document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
         }
@@ -1292,6 +1728,11 @@
             }
         }
 
+        /**
+         * ============================================================================
+         * POST-CALL RATING & TRANSCRIPT DELIVERY
+         * ============================================================================
+         */
         async function submitRating(stars) {
             const starElements = document.querySelectorAll('.usd-star');
             starElements.forEach((s, index) => {
@@ -1302,8 +1743,10 @@
 
             try {
                 let transcript = "No chat history recorded.";
-                if (chatHistory && chatHistory.length > 0) {
-                    transcript = chatHistory.map(turn => `${turn.role === 'user' ? 'User' : 'Agent'}: ${turn.parts[0].text}`).join('\n\n');
+                
+                const allMessages = document.querySelectorAll('#usd-chat-log .usd-msg-text');
+                if (allMessages.length > 0) {
+                    transcript = Array.from(allMessages).map(msg => msg.innerText).join('\n\n');
                 }
 
                 await fetch('https://api.web3forms.com/submit', {
@@ -1322,6 +1765,11 @@
             setTimeout(() => { closeChat(false); }, 3000);
         }
 
+        /**
+         * ============================================================================
+         * MANUAL TEXT MESSAGE INJECTION
+         * ============================================================================
+         */
         async function submitTextMessage() {
             const inputEl = document.getElementById('usd-text-input');
             const userText = cleanDisplayText(inputEl.value.trim());
@@ -1352,7 +1800,12 @@
             }
         }
 
-       async function handleLinkClick(tag) {
+        /**
+         * ============================================================================
+         * LINK REDIRECTION HANDLER
+         * ============================================================================
+         */
+        async function handleLinkClick(tag) {
             const linkInfo = usdLinks[tag];
             if (!linkInfo) return;
             
@@ -1366,6 +1819,11 @@
             updateState('listening');
         }
         
+        /**
+         * ============================================================================
+         * LOCAL CHAT DOM INJECTOR
+         * ============================================================================
+         */
         function logMessage(sender, text, tag = null) {
             const log = document.getElementById('usd-chat-log');
             const msgDiv = document.createElement('div');
