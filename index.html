@@ -24,6 +24,7 @@
          * ============================================================================
          * VOICE WIDGET CONTAINER
          * ============================================================================
+         * The parent container that pins the entire chat experience to the bottom right.
          */
         #usd-voice-widget {
             position: fixed;
@@ -1504,12 +1505,8 @@
                                             if (recognition) { try { recognition.stop(); } catch(e) {} }
                                             updateState('thinking');
                                             
-                                            // ⚡ INSTANT UI UPDATE ⚡
-                                            if (liveUserText) {
-                                                logMessage('user', liveUserText);
-                                                addUserHistoryIfNew(liveUserText);
-                                            }
-                                            
+                                            // Send to backend, the backend will return `user_spoken_text`
+                                            // which acts as the SINGLE SOURCE OF TRUTH to render UI once.
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ 
                                                     type: 'process_final', 
@@ -1518,6 +1515,8 @@
                                                     nativeTranscript: liveUserText // ⚡ FAST TRACK ⚡
                                                 }));
                                             }
+                                            
+                                            // Clear local buffer immediately
                                             liveUserText = ""; finalTranscript = "";
                                             const interimBox = document.getElementById('usd-interim-text');
                                             if (interimBox) interimBox.innerText = "Answering...";
@@ -1543,12 +1542,6 @@
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking');
                                         
-                                        // ⚡ INSTANT UI UPDATE ⚡
-                                        if (liveUserText) {
-                                            logMessage('user', liveUserText);
-                                            addUserHistoryIfNew(liveUserText);
-                                        }
-                                        
                                         if (socket.readyState === WebSocket.OPEN) {
                                             socket.send(JSON.stringify({ 
                                                 type: 'process_final', 
@@ -1557,6 +1550,7 @@
                                                 nativeTranscript: liveUserText // ⚡ FAST TRACK ⚡
                                             }));
                                         }
+                                        
                                         liveUserText = ""; finalTranscript = "";
                                         const interimBox = document.getElementById('usd-interim-text');
                                         if (interimBox) interimBox.innerText = "Answering...";
@@ -1585,12 +1579,15 @@
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
+                        // ⚡ THIS IS THE SINGLE SOURCE OF TRUTH. 
+                        // Backend echoes the fast-track string or Sarvam string instantly. ⚡
                         const cleanUserText = cleanDisplayText(data.text || "");
-                        // Only add if it hasn't already been added by the instant UI update above
+                        
                         if (cleanUserText) {
                             const last = chatHistory[chatHistory.length - 1];
                             const alreadyInHistory = last && last.role === 'user' && last.parts && last.parts[0] && cleanUserText === last.parts[0].text;
                             
+                            // Prevent duplicate bubbles permanently
                             if (!alreadyInHistory) {
                                 logMessage('user', cleanUserText);
                                 addUserHistoryIfNew(cleanUserText);
