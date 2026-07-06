@@ -420,8 +420,9 @@
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
 
-        // ⚡ BROWSER NATIVE LIVE TRANSCRIPTION (FOR INSTANT "YOU: " POPUP) ⚡
+        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION (MASSIVELY ACCELERATED) ⚡
         let recognition = null;
+        let isRecognitionActive = false;
         let liveUserText = "";
         let finalTranscript = ""; 
 
@@ -430,6 +431,11 @@
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'hi-IN';
+
+            // Now tracks state properly so it never crashes
+            recognition.onstart = () => { isRecognitionActive = true; };
+            recognition.onend = () => { isRecognitionActive = false; };
+            recognition.onerror = () => { isRecognitionActive = false; };
 
             recognition.onresult = (event) => {
                 let interimTranscript = '';
@@ -442,7 +448,7 @@
                 }
                 liveUserText = (finalTranscript + interimTranscript).trim();
                 
-                if (liveUserText) {
+                if (liveUserText && currentAgentState === 'listening') {
                     const interimBox = document.getElementById('usd-interim-text');
                     if (interimBox) {
                         interimBox.innerText = "You: " + liveUserText;
@@ -450,7 +456,6 @@
                     }
                 }
             };
-            recognition.onerror = (e) => {}; 
         }
 
         const usdLinks = {
@@ -523,15 +528,19 @@
             }
 
             if (newState === 'speaking') {
-                if (isVoiceMode) {
-                    visualizer.classList.add('active');
-                }
+                if (isVoiceMode) visualizer.classList.add('active');
+                // STOP recognizer when bot speaks so it doesn't transcribe the bot's own voice
+                if (recognition && isRecognitionActive) { try { recognition.stop(); } catch(e){} }
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
             }
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
+                
+                // ⚡ START RECOGNIZER INSTANTLY so it's "hot" and waiting for your voice!
+                if (recognition && !isRecognitionActive) { try { recognition.start(); } catch(e){} }
+
                 if (interimBox) {
                     if (liveUserText) {
                         interimBox.innerText = "You: " + liveUserText;
@@ -546,6 +555,9 @@
             }
 
             if (newState === 'thinking') {
+                // STOP recognizer while thinking
+                if (recognition && isRecognitionActive) { try { recognition.stop(); } catch(e){} }
+
                 if (interimBox) {
                     if (liveUserText) {
                         interimBox.innerText = "You: " + liveUserText + " ...";
@@ -590,102 +602,6 @@
             const label = document.getElementById('usd-live-transcript-label');
             if (!label) return;
             label.innerText = isVoiceMode ? 'Assistant speaking' : 'Assistant typing';
-        }
-
-        function detectLocalTagFromText(input = '') {
-            const text = cleanDisplayText(String(input || "").toLowerCase());
-
-            if (
-                text.includes("end chat") || text.includes("goodbye") || text.includes("bye") || text.includes("take care") || text.includes("see you") ||
-                text.includes("अलविदा") || text.includes("बाय") || text.includes("फिर मिलेंगे") || text.includes("આવજો") || text.includes("બાય")
-            ) return "[END_CHAT]";
-
-            if (
-                text.includes("virtual smile") || text.includes("try on") || text.includes("try-on") || text.includes("smile try") || text.includes("smile makeover") ||
-                text.includes("design my smile") || text.includes("see how your smile") || text.includes("before and after") || text.includes("before/after") ||
-                text.includes("वर्चुअल स्माइल") || text.includes("વર્ચ્યુઅલ સ્માઇલ")
-            ) return "[LINK_VTRYON]";
-
-            if (
-                text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist") || text.includes("find a dentist") ||
-                text.includes("nearby dentist") || text.includes("locate dentist") || text.includes("dentist near") || text.includes("nearest clinic") ||
-                text.includes("सर्टिफाइड डेंटिस्ट") || text.includes("નજીકના ડેન્ટિસ્ટ") || text.includes("સર્ટિફાઇડ ડેન્ટિસ્ટ")
-            ) return "[LINK_DENTISTS]";
-
-            if (
-                text.includes("consultation") || text.includes("consult") || text.includes("schedule") || text.includes("appointment") || text.includes("book") ||
-                text.includes("visit the clinic") || text.includes("कंसल्टेशन") || text.includes("अपॉइंटमेंट") || text.includes("કન્સલ્ટેશન") || text.includes("એપોઇન્ટમેન્ટ")
-            ) return "[LINK_CONSULT]";
-
-            if (
-                text.includes("contact") || text.includes("reach out") || text.includes("get in touch") || text.includes("call us") || text.includes("phone number") ||
-                text.includes("संपर्क") || text.includes("સંપર્ક")
-            ) return "[LINK_CONTACT]";
-
-            if (
-                text.includes("dentist connect") || text.includes("become certified dentist") || text.includes("collaborate") || text.includes("partner") ||
-                text.includes("join our network") || text.includes("डेंटिस्ट कनेक्ट") || text.includes("ડેન્ટિસ્ટ કનેક્ટ")
-            ) return "[LINK_CONNECT]";
-
-            if (
-                text.includes("gallery") || text.includes("results") || text.includes("before and after") || text.includes("before/after") ||
-                text.includes("गैलरी") || text.includes("ગેલેરી")
-            ) return "[LINK_GALLERY]";
-
-            return null;
-        }
-
-        function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
-            const binHz = sampleRate / fftSize;
-            const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
-
-            const speechStart = idx(90);
-            const speechEnd = idx(3400);
-            const coreStart = idx(180);
-            const coreEnd = idx(1200);
-
-            let speechSum = 0, speechCount = 0;
-            let coreSum = 0, coreCount = 0;
-            let noiseSum = 0, noiseCount = 0;
-
-            for (let i = 0; i < dataArray.length; i++) {
-                const v = dataArray[i];
-
-                if (i >= speechStart && i <= speechEnd) {
-                    speechSum += v;
-                    speechCount++;
-                } else {
-                    noiseSum += v;
-                    noiseCount++;
-                }
-
-                if (i >= coreStart && i <= coreEnd) {
-                    coreSum += v;
-                    coreCount++;
-                }
-            }
-
-            let energy = 0;
-            for (let i = 0; i < timeDomainArray.length; i++) {
-                const centered = (timeDomainArray[i] - 128) / 128;
-                energy += centered * centered;
-            }
-            const rms = Math.sqrt(energy / Math.max(1, timeDomainArray.length));
-
-            const speechAvg = speechSum / Math.max(1, speechCount);
-            const coreAvg = coreSum / Math.max(1, coreCount);
-            const noiseAvg = noiseSum / Math.max(1, noiseCount);
-            const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
-            const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
-
-            const isNearHumanSpeech =
-                rms > 0.015 &&            
-                speechAvg > 15 &&         
-                coreAvg > 18 &&
-                speechRatio > 0.60 &&     
-                coreVsNoise > 1.15;       
-
-            return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
 
         function renderPopupLink(tag) {
@@ -733,7 +649,14 @@
             }
 
             const finalText = cleanDisplayText(text || currentLiveAssistantText || '');
-            const finalTag = tag || detectLocalTagFromText(finalText) || currentLiveAssistantTag;
+            
+            // Allow UI fallback tag detection if the backend didn't send one
+            let localDetect = null;
+            if (finalText.toLowerCase().includes("virtual smile try-on") || finalText.toLowerCase().includes("virtual smile")) localDetect = "[LINK_VTRYON]";
+            else if (finalText.toLowerCase().includes("locate the nearest") || finalText.toLowerCase().includes("find the nearest")) localDetect = "[LINK_DENTISTS]";
+            else if (finalText.toLowerCase().includes("schedule your consultation")) localDetect = "[LINK_CONSULT]";
+
+            const finalTag = tag || localDetect || currentLiveAssistantTag;
 
             currentLiveAssistantTag = finalTag || null;
             popupText.textContent = finalText;
@@ -880,7 +803,7 @@
         }
 
         function interruptBot() {
-            // Disabled intentionally per user request
+            // Disabled intentionally
         }
 
         function toggleChatMode() {
@@ -945,10 +868,7 @@
                     chatHistory.forEach(turn => {
                         const sender = turn.role === 'model' ? 'bot' : 'user';
                         let cleanText = cleanDisplayText(turn.parts[0].text);
-                        let foundTag = null;
-                        if (turn.role === 'model') {
-                            foundTag = detectLocalTagFromText(cleanText);
-                        }
+                        let foundTag = null; // UI tag fallback logic is run if needed
                         logMessage(sender, cleanText, foundTag);
                     });
 
@@ -972,6 +892,59 @@
                     await startWebSocket();
                 }
             }
+        }
+
+        function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
+            const binHz = sampleRate / fftSize;
+            const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
+
+            const speechStart = idx(90);
+            const speechEnd = idx(3400);
+            const coreStart = idx(180);
+            const coreEnd = idx(1200);
+
+            let speechSum = 0, speechCount = 0;
+            let coreSum = 0, coreCount = 0;
+            let noiseSum = 0, noiseCount = 0;
+
+            for (let i = 0; i < dataArray.length; i++) {
+                const v = dataArray[i];
+
+                if (i >= speechStart && i <= speechEnd) {
+                    speechSum += v;
+                    speechCount++;
+                } else {
+                    noiseSum += v;
+                    noiseCount++;
+                }
+
+                if (i >= coreStart && i <= coreEnd) {
+                    coreSum += v;
+                    coreCount++;
+                }
+            }
+
+            let energy = 0;
+            for (let i = 0; i < timeDomainArray.length; i++) {
+                const centered = (timeDomainArray[i] - 128) / 128;
+                energy += centered * centered;
+            }
+            const rms = Math.sqrt(energy / Math.max(1, timeDomainArray.length));
+
+            const speechAvg = speechSum / Math.max(1, speechCount);
+            const coreAvg = coreSum / Math.max(1, coreCount);
+            const noiseAvg = noiseSum / Math.max(1, noiseCount);
+            const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
+            const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
+
+            const isNearHumanSpeech =
+                rms > 0.015 &&            
+                speechAvg > 15 &&         
+                coreAvg > 18 &&
+                speechRatio > 0.60 &&     
+                coreVsNoise > 1.15;       
+
+            return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
 
         async function startWebSocket() {
@@ -1090,14 +1063,8 @@
                             if (!isRecording && consecutiveLoudFrames > 8) { 
                                 isRecording = true;
                                 clearTimeout(idleTimer); 
-                                liveUserText = ""; 
-                                finalTranscript = ""; 
-                                if (recognition) {
-                                    try { 
-                                        recognition.abort(); 
-                                        setTimeout(() => recognition.start(), 50); 
-                                    } catch(e) {}
-                                }
+                                // ⚡ WE DO NOT RESTART RECOGNIZER HERE ANYMORE! IT IS ALREADY RUNNING AND CAPTURING INSTANTLY!
+                                
                                 updateState('listening'); 
                                 
                                 if (socket.readyState === WebSocket.OPEN) {
@@ -1108,7 +1075,6 @@
                                     if (isRecording) {
                                         isRecording = false;
                                         consecutiveLoudFrames = 0;
-                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
                                         updateState('thinking');
                                         if (socket.readyState === WebSocket.OPEN) {
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
@@ -1132,8 +1098,6 @@
                                         if (isRecording) {
                                             isRecording = false;
                                             consecutiveLoudFrames = 0;
-                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                            clearTimeout(maxRecordingTimer);
                                             updateState('thinking');
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
@@ -1156,7 +1120,7 @@
                         hideLiveTranscript(0);
                         liveUserText = ""; 
                         finalTranscript = ""; 
-                        if (recognition) { try { recognition.abort(); } catch(e) {} }
+                        if (recognition && isRecognitionActive) { try { recognition.stop(); } catch(e){} }
                         
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) interimBox.innerText = "";
@@ -1231,7 +1195,13 @@
                         activeBotTextSpan = null;
 
                         const finalText = cleanDisplayText(data.botText || "").trim();
-                        const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
+                        
+                        let localDetect = null;
+                        if (finalText.toLowerCase().includes("virtual smile try-on") || finalText.toLowerCase().includes("virtual smile")) localDetect = "[LINK_VTRYON]";
+                        else if (finalText.toLowerCase().includes("locate the nearest") || finalText.toLowerCase().includes("find the nearest")) localDetect = "[LINK_DENTISTS]";
+                        else if (finalText.toLowerCase().includes("schedule your consultation")) localDetect = "[LINK_CONSULT]";
+
+                        const finalTag = data.tag || localDetect || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
                         if (finalText) {
                             if (botTarget) {
