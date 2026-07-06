@@ -417,6 +417,50 @@
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
 
+        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION ⚡
+        let recognition = null;
+        let uiFinalTranscript = ""; // ⚡ FIX: This memory block prevents words from disappearing!
+
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'hi-IN';
+
+            recognition.onresult = (event) => {
+                let uiInterimTranscript = '';
+
+                // Loop through results and glue them permanently to uiFinalTranscript
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        uiFinalTranscript += event.results[i][0].transcript + " ";
+                    } else {
+                        uiInterimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                
+                // Combine permanent memory + new typing words side-by-side
+                const fullLiveText = (uiFinalTranscript + uiInterimTranscript).trim();
+                
+                if (fullLiveText && currentAgentState === 'listening') {
+                    const interimBox = document.getElementById('usd-interim-text');
+                    if (interimBox) {
+                        interimBox.innerText = "You: " + fullLiveText;
+                        interimBox.style.color = "#D4AF37";
+                    }
+                }
+            };
+
+            recognition.onerror = (e) => {}; 
+            
+            // ⚡ FIX: If browser stops listening randomly but VAD hasn't fired, restart it!
+            recognition.onend = () => {
+                if (currentAgentState === 'listening' && isVoiceMode) {
+                    try { recognition.start(); } catch(e) {}
+                }
+            };
+        }
+
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist' },
@@ -489,10 +533,6 @@
             if (newState === 'speaking') {
                 if (isVoiceMode) {
                     visualizer.classList.add('active');
-                    if (interimBox && !interimBox.innerText.includes("You:") && !isReplyComplete) {
-                        interimBox.innerText = "Answering...";
-                        interimBox.style.color = "#ffffff";
-                    }
                 }
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
@@ -500,9 +540,11 @@
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
-                if (interimBox && !interimBox.innerText.includes("You:")) {
-                    interimBox.innerText = "Listening...";
-                    interimBox.style.color = "#D4AF37";
+                if (interimBox) {
+                    if (!interimBox.innerText.includes("You:")) {
+                        interimBox.innerText = "Listening...";
+                        interimBox.style.color = "#D4AF37";
+                    }
                 }
             } else {
                 isMicSoftwareMuted = true;
@@ -510,8 +552,15 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    interimBox.innerText = "Answering...";
-                    interimBox.style.color = "#ffffff";
+                    if (interimBox.innerText.includes("You:")) {
+                        if (!interimBox.innerText.includes("...")) {
+                            interimBox.innerText = interimBox.innerText + " ...";
+                        }
+                        interimBox.style.color = "#ffffff";
+                    } else {
+                        interimBox.innerText = "Answering...";
+                        interimBox.style.color = "#ffffff";
+                    }
                 }
             }
 
@@ -758,6 +807,8 @@
                     setTimeout(() => {
                         if (currentAgentState === 'cooldown') {
                             updateState('listening');
+                            // Kickstart UI listening again if needed
+                            if (recognition) { try { recognition.start(); } catch(e){} }
                         }
                     }, 400); 
                 }
@@ -824,7 +875,7 @@
 
         // ⚡ DISABLED INTERRUPTIONS FOR TESTING ⚡
         function interruptBot() {
-            // Intentionally empty!
+            // Intentionally empty. Assistant will finish speaking.
         }
 
         function toggleChatMode() {
@@ -1009,7 +1060,7 @@
                             analyser.fftSize || 512
                         );
 
-                        // ⚡ INTERRUPTIONS BYPASSED ENTIRELY ⚡
+                        // Skip VAD processing entirely if the agent is speaking
                         if (isSpeakingNow) {
                             requestAnimationFrame(detectVoice);
                             return;
@@ -1029,6 +1080,13 @@
                             if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
+                                    uiFinalTranscript = ""; // ⚡ WIPE FINAL FOR NEW SENTENCE ⚡
+                                    if (recognition) {
+                                        try { 
+                                            recognition.abort(); 
+                                            setTimeout(() => recognition.start(), 50); 
+                                        } catch(e) {}
+                                    }
                                     updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
@@ -1038,6 +1096,7 @@
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
+                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
                                             updateState('thinking');
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
@@ -1058,6 +1117,7 @@
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
+                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking');
                                         if (socket.readyState === WebSocket.OPEN) {
@@ -1078,6 +1138,8 @@
                     
                     if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
+                        uiFinalTranscript = ""; 
+                        if (recognition) { try { recognition.abort(); } catch(e) {} }
                         
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) interimBox.innerText = "";
@@ -1090,20 +1152,12 @@
                             logMessage('user', cleanUserText);
                             addUserHistoryIfNew(cleanUserText);
                             
-                            // ⚡ CLEAR LIVE TEXT ⚡
+                            // ⚡ WIPE FINAL BECAUSE IT IS LOGGED ⚡
+                            uiFinalTranscript = "";
                             const interimBox = document.getElementById('usd-interim-text');
                             if (interimBox && interimBox.innerText.includes("You:")) {
                                 interimBox.innerText = "Answering...";
                                 interimBox.style.color = "#ffffff";
-                            }
-                        }
-                    }
-                    else if (data.type === 'interim_transcript') {
-                        if (data.text) {
-                            const interimBox = document.getElementById('usd-interim-text');
-                            if (interimBox) {
-                                interimBox.innerText = "You: " + data.text;
-                                interimBox.style.color = "#D4AF37";
                             }
                         }
                     }
@@ -1141,8 +1195,9 @@
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
                         
+                        uiFinalTranscript = ""; 
                         const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox && interimBox.innerText === "Answering...") {
+                        if (interimBox) {
                             interimBox.innerText = "";
                         }
 
