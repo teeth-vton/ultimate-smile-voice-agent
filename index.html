@@ -399,8 +399,8 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        let isRecording = false; // ⚡ ADDED GLOBALLY
-        let idleTimer = null;    // ⚡ ADDED 15-20 SECOND IDLE TIMER GLOBALLY
+        let isRecording = false; 
+        let idleTimer = null;   
         
         let audioCtx = null;
         let audioChunkQueue = [];
@@ -420,7 +420,7 @@
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
 
-        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION ⚡
+        // ⚡ BROWSER NATIVE LIVE TRANSCRIPTION (FOR INSTANT "YOU: " POPUP) ⚡
         let recognition = null;
         let liveUserText = "";
         let finalTranscript = ""; 
@@ -561,7 +561,6 @@
                 interimBox.innerText = "";
             }
 
-            // ⚡ 15-20 SECOND SILENCE IDLE TIMER ⚡
             clearTimeout(idleTimer);
             if (newState === 'listening' && isVoiceMode && !isRecording) {
                 idleTimer = setTimeout(() => {
@@ -574,7 +573,7 @@
                             isVoiceMode: isVoiceMode 
                         }));
                     }
-                }, 20000); // 20-second pure silence trigger
+                }, 20000); 
             }
         }
 
@@ -880,9 +879,8 @@
             }, 3000);
         }
 
-        // ⚡ DISABLED INTERRUPTIONS FOR TESTING ⚡
         function interruptBot() {
-            // Disabled
+            // Disabled intentionally per user request
         }
 
         function toggleChatMode() {
@@ -1022,7 +1020,7 @@
                     let shortPauseTimer = null; 
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
-                    let consecutiveLoudFrames = 0; // ⚡ Used for Thud/Noise Protection
+                    let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1033,7 +1031,6 @@
                             pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
                         }
                         
-                        // ONLY streams audio to server when recording is fully active
                         if (socket && socket.readyState === WebSocket.OPEN && isRecording) {
                             socket.send(pcm16.buffer); 
                         }
@@ -1076,7 +1073,6 @@
                         if (currentAgentState === 'listening' && isVoiceMode) {
                             const inRestartHold = performance.now() < interruptRestartHoldUntil;
 
-                            // ⚡ INCREASED HEARING POWER: Lowered volume thresholds so it picks up softer voices ⚡
                             const canStartRecording = inRestartHold
                                 ? (
                                     speechProfile.isNearHumanSpeech &&
@@ -1085,17 +1081,15 @@
                                 )
                                 : (speechProfile.isNearHumanSpeech && humanVolume > 6); 
 
-                            // ⚡ THUD & COUGH PROTECTION: Requires continuous frames of speech ⚡
                             if (canStartRecording) {
                                 consecutiveLoudFrames++;
                             } else {
-                                consecutiveLoudFrames = Math.max(0, consecutiveLoudFrames - 2); // decays quickly on noise
+                                consecutiveLoudFrames = Math.max(0, consecutiveLoudFrames - 2);
                             }
 
-                            // Requires ~130ms of sustained speech to start (ignores instant thuds)
                             if (!isRecording && consecutiveLoudFrames > 8) { 
                                 isRecording = true;
-                                clearTimeout(idleTimer); // ⚡ Stop the 20s Idle timer since they started speaking!
+                                clearTimeout(idleTimer); 
                                 liveUserText = ""; 
                                 finalTranscript = ""; 
                                 if (recognition) {
@@ -1123,21 +1117,17 @@
                                 }, 14000); 
                             }
                             
-                            // ⚡ PREVENT CUTTING OFF MID-BREATH ⚡
                             if (isRecording) {
-                                // Keeps the mic open even if it drops to a low hum between words
                                 if (canStartRecording || humanVolume > 5) {
                                     clearTimeout(shortPauseTimer);
                                     clearTimeout(longPauseTimer);
                                     
-                                    // 1000ms delay to process interim text
                                     shortPauseTimer = setTimeout(() => {
                                         if (isRecording && socket.readyState === WebSocket.OPEN) {
                                             socket.send(JSON.stringify({ type: 'process_interim' }));
                                         }
                                     }, 1000); 
 
-                                    // 1500ms delay before completely stopping the voice turn
                                     longPauseTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
