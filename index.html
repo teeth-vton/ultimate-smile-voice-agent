@@ -419,46 +419,41 @@
 
         // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION ⚡
         let recognition = null;
-        let uiFinalTranscript = ""; // ⚡ FIX: This memory block prevents words from disappearing!
+        let liveUserText = "";
+        // ⚡ THE MAGIC FIX: This global string permanently locks in the words so they don't disappear! ⚡
+        let finalTranscript = ""; 
 
         if ('webkitSpeechRecognition' in window) {
             recognition = new webkitSpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
-            recognition.lang = 'hi-IN';
+            recognition.lang = 'hi-IN'; // Better detection for Indian English/Hindi
 
             recognition.onresult = (event) => {
-                let uiInterimTranscript = '';
+                let interimTranscript = '';
 
-                // Loop through results and glue them permanently to uiFinalTranscript
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     if (event.results[i].isFinal) {
-                        uiFinalTranscript += event.results[i][0].transcript + " ";
+                        // ⚡ Matures into permanent memory with a space ⚡
+                        finalTranscript += event.results[i][0].transcript + " ";
                     } else {
-                        uiInterimTranscript += event.results[i][0].transcript;
+                        interimTranscript += event.results[i][0].transcript;
                     }
                 }
                 
-                // Combine permanent memory + new typing words side-by-side
-                const fullLiveText = (uiFinalTranscript + uiInterimTranscript).trim();
+                // ⚡ Melds permanent memory + current live typing ⚡
+                liveUserText = (finalTranscript + interimTranscript).trim();
                 
-                if (fullLiveText && currentAgentState === 'listening') {
+                if (liveUserText) {
                     const interimBox = document.getElementById('usd-interim-text');
                     if (interimBox) {
-                        interimBox.innerText = "You: " + fullLiveText;
+                        interimBox.innerText = "You: " + liveUserText;
                         interimBox.style.color = "#D4AF37";
                     }
                 }
             };
 
-            recognition.onerror = (e) => {}; 
-            
-            // ⚡ FIX: If browser stops listening randomly but VAD hasn't fired, restart it!
-            recognition.onend = () => {
-                if (currentAgentState === 'listening' && isVoiceMode) {
-                    try { recognition.start(); } catch(e) {}
-                }
-            };
+            recognition.onerror = (e) => {}; // Fails silently
         }
 
         const usdLinks = {
@@ -509,7 +504,7 @@
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("", "g"), "");
+            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
@@ -541,7 +536,11 @@
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
                 if (interimBox) {
-                    if (!interimBox.innerText.includes("You:")) {
+                    // Show live text if available, else listening
+                    if (liveUserText) {
+                        interimBox.innerText = "You: " + liveUserText;
+                        interimBox.style.color = "#D4AF37";
+                    } else if (!interimBox.innerText.includes("You:")) {
                         interimBox.innerText = "Listening...";
                         interimBox.style.color = "#D4AF37";
                     }
@@ -552,10 +551,9 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    if (interimBox.innerText.includes("You:")) {
-                        if (!interimBox.innerText.includes("...")) {
-                            interimBox.innerText = interimBox.innerText + " ...";
-                        }
+                    // ⚡ FREEZE TEXT WHILE PROCESSING ⚡
+                    if (liveUserText) {
+                        interimBox.innerText = "You: " + liveUserText + " ...";
                         interimBox.style.color = "#ffffff";
                     } else {
                         interimBox.innerText = "Answering...";
@@ -671,11 +669,11 @@
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
             const isNearHumanSpeech =
-                rms > 0.020 &&            
+                rms > 0.015 &&            
                 speechAvg > 15 &&         
                 coreAvg > 18 &&
-                speechRatio > 0.70 &&     
-                coreVsNoise > 1.30;       
+                speechRatio > 0.60 &&     
+                coreVsNoise > 1.15;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -807,8 +805,6 @@
                     setTimeout(() => {
                         if (currentAgentState === 'cooldown') {
                             updateState('listening');
-                            // Kickstart UI listening again if needed
-                            if (recognition) { try { recognition.start(); } catch(e){} }
                         }
                     }, 400); 
                 }
@@ -875,7 +871,33 @@
 
         // ⚡ DISABLED INTERRUPTIONS FOR TESTING ⚡
         function interruptBot() {
-            // Intentionally empty. Assistant will finish speaking.
+            /*
+            audioChunkQueue = [];
+            isReplyComplete = false; 
+            nextPlayTime = 0; 
+            
+            interruptRestartHoldUntil = performance.now() + 180;
+            
+            // ⚡ CLEAR LIVE TEXT ⚡
+            liveUserText = "";
+            finalTranscript = "";
+            if (recognition) { try { recognition.abort(); } catch(e) {} }
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(JSON.stringify({ type: 'interrupt' }));
+                } catch (e) {}
+            }
+
+            activeSources.forEach(s => {
+                try { s.stop(); } catch(e) {}
+            });
+            activeSources = [];
+            hideLiveTranscript(0);
+            activeBotMessageDiv = null;
+            activeBotTextSpan = null;
+            lastAssistantStreamingText = "";
+            */
         }
 
         function toggleChatMode() {
@@ -1016,6 +1038,7 @@
                     let shortPauseTimer = null; 
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
+                    let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1060,7 +1083,7 @@
                             analyser.fftSize || 512
                         );
 
-                        // Skip VAD processing entirely if the agent is speaking
+                        // Skip VAD processing entirely if the agent is speaking (since interrupts are off)
                         if (isSpeakingNow) {
                             requestAnimationFrame(detectVoice);
                             return;
@@ -1080,7 +1103,8 @@
                             if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
-                                    uiFinalTranscript = ""; // ⚡ WIPE FINAL FOR NEW SENTENCE ⚡
+                                    liveUserText = ""; 
+                                    finalTranscript = ""; // ⚡ WIPE FINAL
                                     if (recognition) {
                                         try { 
                                             recognition.abort(); 
@@ -1138,7 +1162,8 @@
                     
                     if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
-                        uiFinalTranscript = ""; 
+                        liveUserText = ""; 
+                        finalTranscript = ""; // ⚡ WIPE FINAL
                         if (recognition) { try { recognition.abort(); } catch(e) {} }
                         
                         const interimBox = document.getElementById('usd-interim-text');
@@ -1152,12 +1177,23 @@
                             logMessage('user', cleanUserText);
                             addUserHistoryIfNew(cleanUserText);
                             
-                            // ⚡ WIPE FINAL BECAUSE IT IS LOGGED ⚡
-                            uiFinalTranscript = "";
+                            // ⚡ THE MAGIC FIX: Instantly erases the live text because Sarvam finished! ⚡
+                            liveUserText = "";
+                            finalTranscript = ""; // ⚡ WIPE FINAL
                             const interimBox = document.getElementById('usd-interim-text');
                             if (interimBox && interimBox.innerText.includes("You:")) {
                                 interimBox.innerText = "Answering...";
                                 interimBox.style.color = "#ffffff";
+                            }
+                        }
+                    }
+                    else if (data.type === 'interim_transcript') {
+                        // Skip updating UI if we are using native browser transcription
+                        if (!recognition && data.text) {
+                            const interimBox = document.getElementById('usd-interim-text');
+                            if (interimBox) {
+                                interimBox.innerText = "You: " + data.text;
+                                interimBox.style.color = "#D4AF37";
                             }
                         }
                     }
@@ -1195,7 +1231,9 @@
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
                         
-                        uiFinalTranscript = ""; 
+                        // ⚡ Clean up UI ⚡
+                        liveUserText = ""; 
+                        finalTranscript = ""; // ⚡ WIPE FINAL
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) {
                             interimBox.innerText = "";
