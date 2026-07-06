@@ -417,50 +417,6 @@
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
 
-        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION: RESTORED & BUG FIXED! ⚡
-        let recognition = null;
-        let uiFinalTranscript = ""; // The memory block that prevents words from overwriting!
-        let liveUserText = "";
-
-        if ('webkitSpeechRecognition' in window) {
-            recognition = new webkitSpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = 'hi-IN'; // Robust detection for Indian English/Hindi
-
-            recognition.onresult = (event) => {
-                let uiInterimTranscript = '';
-
-                // ⚡ PERFECT CONCATENATION: Loops exactly through new words to prevent duplicating! ⚡
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        uiFinalTranscript += event.results[i][0].transcript + ' ';
-                    } else {
-                        uiInterimTranscript += event.results[i][0].transcript;
-                    }
-                }
-                
-                liveUserText = (uiFinalTranscript + uiInterimTranscript).trim();
-                
-                if (liveUserText && currentAgentState === 'listening') {
-                    const interimBox = document.getElementById('usd-interim-text');
-                    if (interimBox) {
-                        interimBox.innerText = "You: " + liveUserText;
-                        interimBox.style.color = "#D4AF37";
-                    }
-                }
-            };
-
-            recognition.onerror = (e) => {}; // Fails silently
-            
-            // Restarts listening automatically if browser tries to pause it
-            recognition.onend = () => {
-                if (currentAgentState === 'listening' && isVoiceMode) {
-                    try { recognition.start(); } catch(e) {}
-                }
-            };
-        }
-
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist' },
@@ -541,10 +497,7 @@
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
                 if (interimBox) {
-                    if (liveUserText) {
-                        interimBox.innerText = "You: " + liveUserText;
-                        interimBox.style.color = "#D4AF37";
-                    } else if (!interimBox.innerText.includes("You:")) {
+                    if (!interimBox.innerText.includes("You:")) {
                         interimBox.innerText = "Listening...";
                         interimBox.style.color = "#D4AF37";
                     }
@@ -555,7 +508,6 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    // ⚡ FREEZES TEXT WHILE AI IS PROCESSING ⚡
                     if (interimBox.innerText.includes("You:")) {
                         if (!interimBox.innerText.includes("...")) {
                             interimBox.innerText = interimBox.innerText + " ...";
@@ -675,11 +627,11 @@
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
             const isNearHumanSpeech =
-                rms > 0.020 &&            
+                rms > 0.015 &&            
                 speechAvg > 15 &&         
                 coreAvg > 18 &&
-                speechRatio > 0.70 &&     
-                coreVsNoise > 1.30;       
+                speechRatio > 0.60 &&     
+                coreVsNoise > 1.15;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -811,8 +763,6 @@
                     setTimeout(() => {
                         if (currentAgentState === 'cooldown') {
                             updateState('listening');
-                            // Resurrect Browser Speech API if needed
-                            if (recognition) { try { recognition.start(); } catch(e){} }
                         }
                     }, 400); 
                 }
@@ -1064,7 +1014,7 @@
                             analyser.fftSize || 512
                         );
 
-                        // Skip VAD processing entirely if the agent is speaking
+                        // Skip VAD processing entirely if the agent is speaking (since interrupts are off)
                         if (isSpeakingNow) {
                             requestAnimationFrame(detectVoice);
                             return;
@@ -1084,17 +1034,6 @@
                             if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
-                                    
-                                    // ⚡ RESET LIVE TEXT ⚡
-                                    uiFinalTranscript = ""; 
-                                    liveUserText = "";
-                                    
-                                    if (recognition) {
-                                        try { 
-                                            recognition.abort(); 
-                                            setTimeout(() => recognition.start(), 50); 
-                                        } catch(e) {}
-                                    }
                                     updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
@@ -1104,7 +1043,6 @@
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
-                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
                                             updateState('thinking');
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
@@ -1125,7 +1063,6 @@
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
-                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking');
                                         if (socket.readyState === WebSocket.OPEN) {
@@ -1146,15 +1083,8 @@
                     
                     if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
-                        
-                        // ⚡ SAFE CLEAR ⚡
-                        uiFinalTranscript = ""; 
-                        liveUserText = "";
-                        if (recognition) { try { recognition.abort(); } catch(e) {} }
-                        
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) interimBox.innerText = "";
-                        
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
@@ -1163,9 +1093,6 @@
                             logMessage('user', cleanUserText);
                             addUserHistoryIfNew(cleanUserText);
                             
-                            // ⚡ Instantly clear live text because final text has arrived ⚡
-                            uiFinalTranscript = ""; 
-                            liveUserText = "";
                             const interimBox = document.getElementById('usd-interim-text');
                             if (interimBox && interimBox.innerText.includes("You:")) {
                                 interimBox.innerText = "Answering...";
@@ -1174,7 +1101,14 @@
                         }
                     }
                     else if (data.type === 'interim_transcript') {
-                        // Handled natively by Browser Speech API now!
+                        // ⚡ This prints perfectly from Gemini's Native Transcriber now! ⚡
+                        if (data.text) {
+                            const interimBox = document.getElementById('usd-interim-text');
+                            if (interimBox) {
+                                interimBox.innerText = "You: " + data.text;
+                                interimBox.style.color = "#D4AF37";
+                            }
+                        }
                     }
                     else if (data.type === 'text_stream') {
                         const streamedText = cleanDisplayText(data.text || "");
@@ -1210,9 +1144,6 @@
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
                         
-                        // ⚡ Clean up UI ⚡
-                        uiFinalTranscript = ""; 
-                        liveUserText = ""; 
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) {
                             interimBox.innerText = "";
