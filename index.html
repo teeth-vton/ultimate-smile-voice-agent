@@ -1187,14 +1187,11 @@
                             }
                         }
                     }
-                    else if (data.type === 'interim_transcript') {
-                        // Skip updating UI if we are using native browser transcription
-                        if (!recognition && data.text) {
-                            const interimBox = document.getElementById('usd-interim-text');
-                            if (interimBox) {
-                                interimBox.innerText = "You: " + data.text;
-                                interimBox.style.color = "#D4AF37";
-                            }
+                   else if (data.type === 'interim_transcript') {
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox && data.text) {
+                            interimBox.innerText = "You: " + data.text + " ...";
+                            interimBox.style.color = "#D4AF37";
                         }
                     }
                     else if (data.type === 'text_stream') {
