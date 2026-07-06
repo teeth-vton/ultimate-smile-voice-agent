@@ -1,1404 +1,2931 @@
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Ultimate Smile Design - Live Agent</title>
+
     <style>
+
         body {
+
             background-color: #000000;
+
             color: #ffffff;
+
             margin: 0;
+
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+
         }
+
         #usd-voice-widget {
+
             position: fixed;
+
             bottom: 30px;
+
             right: 30px;
+
             z-index: 99999;
+
             display: flex;
+
             flex-direction: column;
+
             align-items: flex-end;
+
         }
+
         #usd-tooltip {
+
             background: #D4AF37;
+
             color: #111;
+
             padding: 10px 15px;
+
             border-radius: 12px;
+
             font-size: 14px;
+
             font-weight: bold;
+
             margin-bottom: 15px;
+
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+
             animation: bounce 2s infinite;
+
             position: relative;
+
             cursor: pointer;
+
             display: block; 
+
             transition: opacity 0.3s ease-in-out;
+
             opacity: 1;
+
         }
+
         #usd-tooltip::after {
+
             content: '';
+
             position: absolute;
+
             bottom: -8px;
+
             right: 30px;
+
             border-width: 8px 8px 0;
+
             border-style: solid;
+
             border-color: #D4AF37 transparent transparent transparent;
+
         }
+
         @keyframes bounce {
+
             0%, 100% { transform: translateY(0); }
+
             50% { transform: translateY(-5px); }
+
         }
+
         @keyframes floatContainer {
+
             0% { transform: translateY(0px); }
+
             50% { transform: translateY(-8px); }
+
             100% { transform: translateY(0px); }
+
         }
+
         #usd-chat-container {
+
             width: 320px;
+
             max-height: 380px;
+
             background-color: #111111;
+
             border: 1px solid #333333; 
+
             border-radius: 15px;
+
             padding: 15px;
+
             margin-bottom: 15px;
+
             box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+
             display: none;
+
             flex-direction: column;
+
             position: relative; 
+
             animation: floatContainer 4s ease-in-out infinite;
+
             transform: translateZ(0);
+
             backface-visibility: hidden;
+
         }
+
         #usd-chat-header {
+
             display: flex;
+
             justify-content: space-between;
+
             align-items: center;
+
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
             padding-bottom: 10px;
+
             margin-bottom: 10px;
+
         }
+
         #usd-header-left {
+
             display: flex;
+
             align-items: center;
+
             gap: 10px;
+
         }
+
         #usd-status-box {
+
             color: #D4AF37;
+
             font-size: 13px;
+
             font-weight: bold;
+
         }
+
         #usd-header-right {
+
             display: flex;
+
             align-items: center;
+
             gap: 10px;
+
         }
+
         #usd-mode-toggle {
+
             background: #222;
+
             color: #D4AF37;
+
             border: 1px solid #D4AF37;
+
             border-radius: 20px;
+
             padding: 4px 10px;
+
             font-size: 11px;
+
             font-weight: bold;
+
             cursor: pointer;
+
             transition: all 0.2s;
+
         }
+
         #usd-mode-toggle:hover { background: #D4AF37; color: #111; }
+
         #usd-visualizer {
+
             display: flex;
+
             gap: 3px;
+
             align-items: center;
+
             height: 20px;
+
         }
+
         .usd-bar {
+
             width: 3px;
+
             background: #D4AF37;
+
             border-radius: 3px;
+
             height: 4px; 
+
             transition: height 0.2s ease;
+
         }
+
         #usd-visualizer.active .usd-bar { animation: usd-sound 0.4s ease-in-out infinite alternate; }
+
         #usd-visualizer.active .usd-bar:nth-child(1) { animation-delay: 0.0s; }
+
         #usd-visualizer.active .usd-bar:nth-child(2) { animation-delay: 0.2s; }
+
         #usd-visualizer.active .usd-bar:nth-child(3) { animation-delay: 0.1s; }
+
         #usd-visualizer.active .usd-bar:nth-child(4) { animation-delay: 0.3s; }
+
         #usd-visualizer.active .usd-bar:nth-child(5) { animation-delay: 0.1s; }
+
         @keyframes usd-sound { 0% { height: 4px; } 100% { height: 18px; } }
+
         #usd-close-btn {
+
             background: none;
+
             border: none;
+
             color: #888;
+
             font-size: 18px;
+
             cursor: pointer;
+
             padding: 0;
+
             transition: color 0.2s;
+
         }
+
         #usd-close-btn:hover { color: #ff4444; }
+
         #usd-chat-log {
+
             overflow-y: auto;
+
             flex-grow: 1;
+
             margin-bottom: 10px;
+
             max-height: 210px;
+
             padding-right: 5px;
+
         }
+
         #usd-chat-log::-webkit-scrollbar { width: 4px; }
+
         #usd-chat-log::-webkit-scrollbar-thumb { background: #D4AF37; border-radius: 10px; }
+
         .msg { margin-bottom: 8px; font-size: 13px; line-height: 1.4; }
+
         .msg-user { color: #ffffff; text-align: right; }
+
         .msg-bot { color: #D4AF37; text-align: left; }
+
         .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
+
         .usd-msg-text {
+
             white-space: pre-wrap;
+
             word-break: break-word;
+
             display: inline-block;
+
         }
+
         .usd-link-card {
+
             display: block;
+
             width: 100%;
+
             margin-top: 8px;
+
             padding: 10px;
+
             background: linear-gradient(135deg, #111111, #222222);
+
             border: 1px solid #D4AF37;
+
             color: #D4AF37;
+
             border-radius: 8px;
+
             font-size: 12px;
+
             font-weight: bold;
+
             text-align: center;
+
             cursor: pointer;
+
             box-sizing: border-box;
+
             transition: all 0.2s;
+
         }
+
         .usd-link-card:hover {
+
             background: #D4AF37;
+
             color: #111111;
+
             transform: translateY(-2px);
+
         }
+
         #usd-interim-text { text-align: right; font-style: italic; font-size: 12px; font-weight: bold; min-height: 16px; margin-bottom: 5px; transition: color 0.2s; }
+
         
+
         /* LIVE TRANSCRIPT POPUP */
+
         #usd-live-transcript-popup {
+
             display: none;
+
             margin-bottom: 10px;
+
             padding: 10px 12px;
+
             border-radius: 10px;
+
             background: rgba(212, 175, 55, 0.10);
+
             border: 1px solid rgba(212, 175, 55, 0.35);
+
             box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+
             position: relative;
+
             z-index: 5;
+
         }
+
         #usd-live-transcript-label {
+
             color: #D4AF37;
+
             font-size: 11px;
+
             font-weight: bold;
+
             text-transform: uppercase;
+
             letter-spacing: 0.6px;
+
             margin-bottom: 4px;
+
         }
+
         #usd-live-transcript-text {
+
             color: #ffffff;
+
             font-size: 13px;
+
             line-height: 1.45;
+
             white-space: pre-wrap;
+
             word-break: break-word;
+
             max-height: 70px;
+
             overflow-y: auto;
+
         }
+
         #usd-live-transcript-link-wrap {
+
             display: none;
+
             margin-top: 8px;
+
         }
+
         #usd-live-transcript-link-wrap .usd-link-card {
+
             margin-top: 0;
+
             font-size: 11px;
+
             padding: 9px 10px;
+
         }
+
+
 
         #usd-input-container {
+
             display: none; 
+
             border-top: 1px solid rgba(255,255,255,0.1);
+
             padding-top: 10px;
+
         }
+
         #usd-text-input {
+
             flex-grow: 1;
+
             background: #222;
+
             border: 1px solid #444;
+
             color: #fff;
+
             border-radius: 4px;
+
             padding: 6px 10px;
+
             font-size: 13px;
+
             outline: none;
+
         }
+
         #usd-text-input:focus { border-color: #D4AF37; }
+
         #usd-send-btn {
+
             background: #D4AF37;
+
             color: #111;
+
             border: none;
+
             border-radius: 4px;
+
             padding: 6px 12px;
+
             margin-left: 6px;
+
             cursor: pointer;
+
             font-weight: bold;
+
             font-size: 13px;
+
         }
+
         #usd-send-btn:hover { background: #FFF8DC; }
+
         
+
         #usd-bubble {
+
             width: 80px;
+
             height: 80px;
+
             background: linear-gradient(135deg, #FFD700, #B8860B);
+
             border-radius: 50%;
+
             cursor: pointer;
+
             --pulse-max: 20px; 
+
             box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7);
+
             animation: usd-pulse 2s infinite;
+
             display: flex;
+
             align-items: center;
+
             justify-content: center;
+
             border: 3px solid #111111;
+
             transition: transform 0.2s ease-in-out;
+
             user-select: none;
+
         }
+
         #usd-bubble:hover { transform: scale(1.05); }
+
         #usd-bubble:active { transform: scale(0.95); }
+
         @keyframes usd-pulse {
+
             0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); }
+
             70% { transform: scale(1); box-shadow: 0 0 0 var(--pulse-max) rgba(212, 175, 55, 0); }
+
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
+
         }
+
         #usd-inline-rating {
+
             display: none;
+
             border-top: 1px solid rgba(255,255,255,0.1);
+
             padding-top: 15px;
+
             text-align: center;
+
         }
+
         #usd-rating-title { color: #fff; font-size: 15px; margin-bottom: 12px; font-weight: bold; letter-spacing: 0.5px;}
+
         .usd-stars { display: flex; justify-content: center; gap: 12px; cursor: pointer; }
+
         .usd-star { 
+
             font-size: 28px; 
+
             color: #333333; 
+
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+
             transition: transform 0.2s, color 0.2s, text-shadow 0.2s; 
+
         }
+
         .usd-star:hover, .usd-star.active { 
+
             color: #FFD700; 
+
             transform: scale(1.2);
+
             text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+
         }
+
         #usd-rating-thanks { display: none; color: #D4AF37; font-size: 13px; margin-top: 12px; font-weight: bold; }
+
         #usd-end-confirm-overlay {
+
             position: absolute;
+
             top: 0; left: 0; right: 0; bottom: 0;
+
             background: rgba(10, 10, 10, 0.95);
+
             border-radius: 15px;
+
             display: none;
+
             flex-direction: column;
+
             align-items: center;
+
             justify-content: center;
+
             z-index: 101;
+
             text-align: center;
+
             padding: 20px;
+
         }
+
         .usd-confirm-title { color: #fff; font-size: 16px; margin-bottom: 20px; font-weight: bold; }
+
         .usd-confirm-btns { display: flex; gap: 15px; }
+
         .usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+
         .usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
 
+
+
         @media (max-width: 480px) {
+
             #usd-voice-widget { bottom: 15px; right: 15px; }
+
             #usd-bubble { width: 50px; height: 50px; } 
+
             #usd-bubble svg { width: 24px; height: 24px; }
+
             #usd-chat-container { 
+
                 width: calc(100vw - 40px); 
+
                 max-height: 380px; 
+
                 padding: 12px; 
+
                 margin-bottom: 10px; 
+
             }
+
             #usd-chat-log { max-height: 160px; } 
+
             #usd-tooltip { font-size: 12px; padding: 8px 12px; margin-bottom: 10px; }
+
             #usd-tooltip::after { right: 20px; }
+
         }
+
     </style>
+
 </head>
+
 <body>
 
+
+
     <div id="usd-voice-widget">
+
         <div id="usd-tooltip" onclick="openChat(false)">
+
             Namaste! Tap here to talk about your new smile!
+
         </div>
+
+
 
         <div id="usd-chat-container">
+
             <div id="usd-end-confirm-overlay">
+
                 <div class="usd-confirm-title">Want to end the call?</div>
+
                 <div class="usd-confirm-btns">
+
                     <button class="usd-btn-yes" onclick="confirmEndChat(true)">Yes</button>
+
                     <button class="usd-btn-no" onclick="confirmEndChat(false)">No</button>
+
                 </div>
+
             </div>
+
+
 
             <div id="usd-chat-inner-wrap" style="height: 100%; display: flex; flex-direction: column;">
+
                 <div id="usd-chat-header">
+
                     <div id="usd-header-left">
+
                         <img src="https://raw.githubusercontent.com/teeth-vton/sd-voice-backend/dab01d9f2e96be2fcda278af63db62dfef9e1559/Gemini_Generated_Image_67gd1767gd1767gd.png" alt="USD Assistant" width="24" height="24" style="object-fit: contain;">
+
                         <div id="usd-status-box">Connected 🟢</div>
+
                     </div>
+
                     <div id="usd-header-right">
+
                         <button id="usd-mode-toggle" onclick="toggleChatMode()">💬 Text</button>
+
                         <div id="usd-visualizer">
+
                             <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
+
                         </div>
+
                         <button id="usd-close-btn" onclick="closeChatBtnClicked()">✕</button>
+
                     </div>
+
                 </div>
+
+
 
                 <div id="usd-live-transcript-popup">
+
                     <div id="usd-live-transcript-label">Assistant speaking</div>
+
                     <div id="usd-live-transcript-text"></div>
+
                     <div id="usd-live-transcript-link-wrap"></div>
+
                 </div>
+
+
 
                 <div id="usd-chat-log"></div>
+
                 <div id="usd-interim-text"></div>
+
                 
+
                 <div id="usd-input-container">
+
                     <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
+
                     <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
+
                 </div>
+
+
 
                 <div id="usd-inline-rating">
+
                     <div id="usd-rating-title">Rate your experience</div>
+
                     <div class="usd-stars">
+
                         <span class="usd-star" onclick="submitRating(1)">★</span>
+
                         <span class="usd-star" onclick="submitRating(2)">★</span>
+
                         <span class="usd-star" onclick="submitRating(3)">★</span>
+
                         <span class="usd-star" onclick="submitRating(4)">★</span>
+
                         <span class="usd-star" onclick="submitRating(5)">★</span>
+
                     </div>
+
                     <div id="usd-rating-thanks">Thank you! Transcript sent to our team.</div>
+
                 </div>
+
             </div>
+
         </div>
+
         
+
         <div id="usd-bubble" onclick="openChat(false)">
+
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+
                 <line x1="12" y1="19" x2="12" y2="22"></line>
+
             </svg>
+
         </div>
+
     </div>
 
+
+
     <script>
+
         const RENDER_BACKEND_URL = "https://nikjoshi123-usd-voice-backend.hf.space";
+
         const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
 
+
+
         let currentAgentState = 'off'; 
+
         let chatHistory = [];
+
         let socket = null;
+
         let globalStream = null;
+
         let isVoiceMode = true; 
+
         
+
         let audioCtx = null;
+
         let audioChunkQueue = [];
+
         let isAudioPlaying = false;
+
         let activeSources = []; 
+
         let nextPlayTime = 0;   
+
         let isReplyComplete = false; 
+
         
+
         let activeTag = null; 
+
         let activeBotMessageDiv = null; 
+
         let activeBotTextSpan = null;
+
         let lastBotMessageDiv = null;
+
         let isMicSoftwareMuted = true; 
+
         let interruptRestartHoldUntil = 0;
+
         let liveTranscriptHideTimer = null;
+
         let currentLiveAssistantText = "";
+
         let currentLiveAssistantTag = null;
+
         let lastAssistantStreamingText = "";
 
+
+
+        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION ⚡
+
+        let recognition = null;
+
+        let liveUserText = "";
+
+        // ⚡ THE MAGIC FIX: This global string permanently locks in the words so they don't disappear! ⚡
+
+        let finalTranscript = ""; 
+
+
+
+        if ('webkitSpeechRecognition' in window) {
+
+            recognition = new webkitSpeechRecognition();
+
+            recognition.continuous = true;
+
+            recognition.interimResults = true;
+
+            recognition.lang = 'hi-IN'; // Better detection for Indian English/Hindi
+
+
+
+            recognition.onresult = (event) => {
+
+                let interimTranscript = '';
+
+
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+
+                    if (event.results[i].isFinal) {
+
+                        // ⚡ Matures into permanent memory with a space ⚡
+
+                        finalTranscript += event.results[i][0].transcript + " ";
+
+                    } else {
+
+                        interimTranscript += event.results[i][0].transcript;
+
+                    }
+
+                }
+
+                
+
+                // ⚡ Melds permanent memory + current live typing ⚡
+
+                liveUserText = (finalTranscript + interimTranscript).trim();
+
+                
+
+                if (liveUserText) {
+
+                    const interimBox = document.getElementById('usd-interim-text');
+
+                    if (interimBox) {
+
+                        interimBox.innerText = "You: " + liveUserText;
+
+                        interimBox.style.color = "#D4AF37";
+
+                    }
+
+                }
+
+            };
+
+
+
+            recognition.onerror = (e) => {}; // Fails silently
+
+        }
+
+
+
         const usdLinks = {
+
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
+
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist' },
+
             '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On' }, 
+
             '[LINK_BLOGS]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '📰 Read Our Blogs' }, 
+
             '[LINK_GALLERY]': { url: 'https://ultimatesmiledesign.com/gallery/', label: '🖼️ Check Out Gallery' },
+
             '[LINK_CONSULT]': { url: 'https://ultimatesmiledesign.com/consult-with-dentist/', label: '👨‍⚕️ Consult Expert Dentist' },
+
             '[LINK_CONTACT]': { url: 'https://ultimatesmiledesign.com/contact/', label: '📞 Contact Us' },
+
             '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist' }
+
         };
+
+
 
         window.onload = async () => {
+
             if (sessionStorage.getItem('usd_chat_active') === 'true') {
+
                 await openChat(true);
+
             }
+
         };
 
+
+
         let lastScrollY = window.scrollY || 0;
+
         let scrollTimeout = null;
 
+
+
         window.addEventListener('scroll', () => {
+
             const currentScrollY = window.scrollY || document.documentElement.scrollTop;
+
             const tooltip = document.getElementById('usd-tooltip');
+
             const bubble = document.getElementById('usd-bubble');
+
             
+
             if (currentScrollY > 30) {
+
                 tooltip.style.opacity = '0';
+
                 tooltip.style.pointerEvents = 'none';
+
             } else {
+
                 tooltip.style.opacity = '1';
+
                 tooltip.style.pointerEvents = 'auto';
+
             }
+
+
 
             let scrollSpeed = Math.abs(currentScrollY - lastScrollY);
+
             lastScrollY = currentScrollY;
 
+
+
             let dynamicPulseSize = Math.min(20 + (scrollSpeed * 1.5), 80);
+
             bubble.style.setProperty('--pulse-max', `${dynamicPulseSize}px`);
 
+
+
             clearTimeout(scrollTimeout);
+
             scrollTimeout = setTimeout(() => {
+
                 bubble.style.setProperty('--pulse-max', '20px');
+
             }, 150);
+
         });
 
+
+
         function cleanDisplayText(text = "") {
+
             let result = String(text || "");
+
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("", "g"), "");
+
+            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
+
             result = result.replace(new RegExp("\\s+", "g"), " ");
+
             return result.trim();
+
         }
+
+
 
         function updateState(newState, statusText = null) {
+
             currentAgentState = newState;
+
             const statusBox = document.getElementById('usd-status-box');
+
             const visualizer = document.getElementById('usd-visualizer');
+
             const interimBox = document.getElementById('usd-interim-text');
 
+
+
             if (statusBox) {
+
                 if (newState === 'connecting' || newState === 'off') {
+
                     if (statusText) statusBox.innerText = statusText;
+
                 } else if (isVoiceMode) {
+
                     statusBox.innerText = "Connected 🟢"; 
+
                 } else {
+
                     statusBox.innerText = "Chat Mode Active. Type below.";
+
                 }
+
             }
+
+
 
             if (newState === 'speaking') {
+
                 if (isVoiceMode) {
+
                     visualizer.classList.add('active');
-                    if (interimBox && !interimBox.innerText.includes("You:") && !isReplyComplete) {
-                        interimBox.innerText = "Answering...";
-                        interimBox.style.color = "#ffffff";
-                    }
+
                 }
+
             } else {
+
                 if (isVoiceMode) visualizer.classList.remove('active');
+
             }
+
+
 
             if (newState === 'listening' && isVoiceMode) {
+
                 isMicSoftwareMuted = false;
-                if (interimBox && !interimBox.innerText.includes("You:")) {
-                    interimBox.innerText = "Listening...";
-                    interimBox.style.color = "#D4AF37";
+
+                if (interimBox) {
+
+                    // Show live text if available, else listening
+
+                    if (liveUserText) {
+
+                        interimBox.innerText = "You: " + liveUserText;
+
+                        interimBox.style.color = "#D4AF37";
+
+                    } else if (!interimBox.innerText.includes("You:")) {
+
+                        interimBox.innerText = "Listening...";
+
+                        interimBox.style.color = "#D4AF37";
+
+                    }
+
                 }
+
             } else {
+
                 isMicSoftwareMuted = true;
+
             }
+
+
 
             if (newState === 'thinking') {
+
                 if (interimBox) {
-                    interimBox.innerText = "Answering...";
-                    interimBox.style.color = "#ffffff";
+
+                    // ⚡ FREEZE TEXT WHILE PROCESSING ⚡
+
+                    if (liveUserText) {
+
+                        interimBox.innerText = "You: " + liveUserText + " ...";
+
+                        interimBox.style.color = "#ffffff";
+
+                    } else {
+
+                        interimBox.innerText = "Answering...";
+
+                        interimBox.style.color = "#ffffff";
+
+                    }
+
                 }
+
             }
+
+
 
             if (!isVoiceMode && interimBox && newState !== 'thinking') {
+
                 interimBox.innerText = "";
+
             }
+
         }
+
+
 
         async function initAudio() {
+
             if (!audioCtx) {
+
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
             }
+
             if (audioCtx.state === 'suspended') {
+
                 audioCtx.resume();
+
             }
+
         }
+
+
 
         function syncTranscriptLabel() {
+
             const label = document.getElementById('usd-live-transcript-label');
+
             if (!label) return;
+
             label.innerText = isVoiceMode ? 'Assistant speaking' : 'Assistant typing';
+
         }
+
+
 
         function detectLocalTagFromText(input = '') {
+
             const text = cleanDisplayText(String(input || "").toLowerCase());
 
+
+
             if (
+
                 text.includes("end chat") || text.includes("goodbye") || text.includes("bye") || text.includes("take care") || text.includes("see you") ||
+
                 text.includes("अलविदा") || text.includes("बाय") || text.includes("फिर मिलेंगे") || text.includes("આવજો") || text.includes("બાય")
+
             ) return "[END_CHAT]";
 
+
+
             if (
+
                 text.includes("virtual smile") || text.includes("try on") || text.includes("try-on") || text.includes("smile try") || text.includes("smile makeover") ||
+
                 text.includes("design my smile") || text.includes("see how your smile") || text.includes("before and after") || text.includes("before/after") ||
+
                 text.includes("वर्चुअल स्माइल") || text.includes("વર્ચ્યુઅલ સ્માઇલ")
+
             ) return "[LINK_VTRYON]";
 
+
+
             if (
+
                 text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist") || text.includes("find a dentist") ||
+
                 text.includes("nearby dentist") || text.includes("locate dentist") || text.includes("dentist near") || text.includes("nearest clinic") ||
+
                 text.includes("सर्टिफाइड डेंटिस्ट") || text.includes("નજીકના ડેન્ટિસ્ટ") || text.includes("સર્ટિફાઇડ ડેન્ટિસ્ટ")
+
             ) return "[LINK_DENTISTS]";
 
+
+
             if (
+
                 text.includes("consultation") || text.includes("consult") || text.includes("schedule") || text.includes("appointment") || text.includes("book") ||
+
                 text.includes("visit the clinic") || text.includes("कंसल्टेशन") || text.includes("अपॉइंटमेंट") || text.includes("કન્સલ્ટેશન") || text.includes("એપોઇન્ટમેન્ટ")
+
             ) return "[LINK_CONSULT]";
 
+
+
             if (
+
                 text.includes("contact") || text.includes("reach out") || text.includes("get in touch") || text.includes("call us") || text.includes("phone number") ||
+
                 text.includes("संपर्क") || text.includes("સંપર્ક")
+
             ) return "[LINK_CONTACT]";
 
+
+
             if (
+
                 text.includes("dentist connect") || text.includes("become certified dentist") || text.includes("collaborate") || text.includes("partner") ||
+
                 text.includes("join our network") || text.includes("डेंटिस्ट कनेक्ट") || text.includes("ડેન્ટિસ્ટ કનેક્ટ")
+
             ) return "[LINK_CONNECT]";
 
+
+
             if (
+
                 text.includes("gallery") || text.includes("results") || text.includes("before and after") || text.includes("before/after") ||
+
                 text.includes("गैलरी") || text.includes("ગેલેરી")
+
             ) return "[LINK_GALLERY]";
 
+
+
             return null;
+
         }
 
-        // ⚡ PERFECT MIDDLE GROUND VAD ⚡
-        // Extremely sensitive for listening (so it responds quickly), but strictly gated for interruptions.
+
+
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
+
             const binHz = sampleRate / fftSize;
+
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
 
+
+
             const speechStart = idx(90);
+
             const speechEnd = idx(3400);
+
             const coreStart = idx(180);
+
             const coreEnd = idx(1200);
 
+
+
             let speechSum = 0, speechCount = 0;
+
             let coreSum = 0, coreCount = 0;
+
             let noiseSum = 0, noiseCount = 0;
 
+
+
             for (let i = 0; i < dataArray.length; i++) {
+
                 const v = dataArray[i];
 
+
+
                 if (i >= speechStart && i <= speechEnd) {
+
                     speechSum += v;
+
                     speechCount++;
+
                 } else {
+
                     noiseSum += v;
+
                     noiseCount++;
+
                 }
+
+
 
                 if (i >= coreStart && i <= coreEnd) {
+
                     coreSum += v;
+
                     coreCount++;
+
                 }
+
             }
+
+
 
             let energy = 0;
+
             for (let i = 0; i < timeDomainArray.length; i++) {
+
                 const centered = (timeDomainArray[i] - 128) / 128;
+
                 energy += centered * centered;
+
             }
+
             const rms = Math.sqrt(energy / Math.max(1, timeDomainArray.length));
 
+
+
             const speechAvg = speechSum / Math.max(1, speechCount);
+
             const coreAvg = coreSum / Math.max(1, coreCount);
+
             const noiseAvg = noiseSum / Math.max(1, noiseCount);
+
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
+
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // ⚡ Very sensitive threshold to effortlessly pick up your voice from 18 inches ⚡
+
+
             const isNearHumanSpeech =
-                rms > 0.010 &&            
-                speechAvg > 10 &&         
-                coreAvg > 12 &&
-                speechRatio > 0.50 &&     
-                coreVsNoise > 1.10;       
+
+                rms > 0.015 &&            
+
+                speechAvg > 15 &&         
+
+                coreAvg > 18 &&
+
+                speechRatio > 0.60 &&     
+
+                coreVsNoise > 1.15;       
+
+
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
+
         }
 
+
+
         function renderPopupLink(tag) {
+
             const wrap = document.getElementById('usd-live-transcript-link-wrap');
+
             if (!wrap) return;
+
+
 
             wrap.innerHTML = '';
 
+
+
             if (!tag || !usdLinks[tag]) {
+
                 wrap.style.display = 'none';
+
                 return;
+
             }
 
+
+
             const label = document.createElement('div');
+
             label.style.color = '#D4AF37';
+
             label.style.fontSize = '11px';
+
             label.style.fontWeight = 'bold';
+
             label.style.marginBottom = '6px';
+
             label.innerText = 'Suggested action';
 
+
+
             const btn = document.createElement('button');
+
             btn.className = 'usd-link-card';
+
             btn.innerText = usdLinks[tag].label;
+
             btn.onclick = () => handleLinkClick(tag);
 
+
+
             wrap.appendChild(label);
+
             wrap.appendChild(btn);
+
             wrap.style.display = 'block';
+
         }
 
+
+
         function updateLiveTranscript(text, tag = null, force = false) {
+
             const popup = document.getElementById('usd-live-transcript-popup');
+
             const popupText = document.getElementById('usd-live-transcript-text');
+
             if (!popup || !popupText) return;
+
+
 
             syncTranscriptLabel();
 
+
+
             const clean = cleanDisplayText(text || '');
 
+
+
             if (clean) {
+
                 currentLiveAssistantText = clean;
+
                 lastAssistantStreamingText = clean;
+
             } else if (force && currentLiveAssistantText) {
+
                 text = currentLiveAssistantText;
+
             }
+
+
 
             const finalText = cleanDisplayText(text || currentLiveAssistantText || '');
+
             const finalTag = tag || detectLocalTagFromText(finalText) || currentLiveAssistantTag;
 
+
+
             currentLiveAssistantTag = finalTag || null;
+
             popupText.textContent = finalText;
 
+
+
             if (finalText && isVoiceMode) {
+
                 popup.style.display = 'block';
+
                 renderPopupLink(finalTag);
+
             }
+
         }
+
+
 
         function hideLiveTranscript(delay = 0) {
+
             clearTimeout(liveTranscriptHideTimer);
+
             liveTranscriptHideTimer = setTimeout(() => {
+
                 const popup = document.getElementById('usd-live-transcript-popup');
+
                 const popupText = document.getElementById('usd-live-transcript-text');
+
                 const popupLinkWrap = document.getElementById('usd-live-transcript-link-wrap');
+
                 if (popup) popup.style.display = 'none';
+
                 if (popupText) popupText.textContent = '';
+
                 if (popupLinkWrap) {
+
                     popupLinkWrap.innerHTML = '';
+
                     popupLinkWrap.style.display = 'none';
+
                 }
+
                 currentLiveAssistantText = "";
+
                 currentLiveAssistantTag = null;
+
                 lastAssistantStreamingText = "";
+
             }, delay);
+
         }
+
+
 
         function createMessageDiv(sender, text) {
+
             const msgDiv = document.createElement('div');
+
             msgDiv.className = `msg msg-${sender}`;
 
+
+
             const span = document.createElement('span');
+
             span.className = 'usd-msg-text';
 
+
+
             if (sender === 'user') span.textContent = "You: " + text;
+
             else if (sender === 'bot') span.textContent = "Assistant: " + text;
+
             else span.textContent = text;
 
+
+
             msgDiv.appendChild(span);
+
             return msgDiv;
+
         }
+
+
 
         function appendLinkButton(targetEl, tag) {
+
             if (!targetEl || !tag || !usdLinks[tag]) return;
 
+
+
             const btn = document.createElement('button');
+
             btn.className = 'usd-link-card';
+
             btn.innerText = usdLinks[tag].label;
+
             btn.onclick = () => handleLinkClick(tag);
+
             targetEl.appendChild(btn);
+
         }
+
+
 
         function saveHistory() {
+
             sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
+
         }
+
+
 
         function addUserHistoryIfNew(text) {
+
             const clean = cleanDisplayText(text);
+
             if (!clean) return;
 
+
+
             const last = chatHistory[chatHistory.length - 1];
+
             if (last && last.role === 'user' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
 
+
+
             chatHistory.push({ role: "user", parts: [{ text: clean }] });
+
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+
             saveHistory();
+
         }
+
+
 
         function checkBotFinishedSpeaking() {
+
             if (isReplyComplete && audioChunkQueue.length === 0 && activeSources.length === 0) {
+
                 isReplyComplete = false;
+
                 nextPlayTime = 0; 
+
                 
+
                 if (activeTag === '[END_CHAT]') {
+
                     setTimeout(() => closeChat(true), 2000);
+
                 } else {
+
                     updateState('cooldown');
+
                     setTimeout(() => {
+
                         if (currentAgentState === 'cooldown') {
+
                             updateState('listening');
+
                         }
+
                     }, 400); 
+
                 }
+
                 activeTag = null;
+
                 hideLiveTranscript(2500);
+
             }
+
         }
+
+
 
         async function playAudioChunk(base64) {
+
             if (!base64) return;
+
             updateState('speaking');
 
+
+
             try {
+
                 const binaryString = window.atob(base64);
+
                 const bytes = new Uint8Array(binaryString.length);
+
                 for (let i = 0; i < binaryString.length; i++) {
+
                     bytes[i] = binaryString.charCodeAt(i);
+
                 }
+
                 
+
                 const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
+
                 const source = audioCtx.createBufferSource();
+
                 source.buffer = audioBuffer;
+
                 source.connect(audioCtx.destination);
+
                 source.playbackRate.value = 1.0; 
+
                 
+
                 if (nextPlayTime < audioCtx.currentTime) {
+
                     nextPlayTime = audioCtx.currentTime + 0.05; 
+
                 }
+
                 
+
                 source.start(nextPlayTime);
+
                 nextPlayTime += audioBuffer.duration; 
+
                 
+
                 activeSources.push(source);
+
                 
+
                 source.onended = () => {
+
                     activeSources = activeSources.filter(s => s !== source);
+
                     checkBotFinishedSpeaking(); 
+
                 };
+
             } catch (e) {
+
                 console.error("Audio Decode error:", e);
+
             }
+
         }
+
+
 
         async function processAudioQueue() {
+
             if (isAudioPlaying) return;
+
             isAudioPlaying = true;
+
             
+
             while (audioChunkQueue.length > 0) {
+
                  const chunk = audioChunkQueue.shift(); 
+
                  await playAudioChunk(chunk.audioBase64);
+
             }
+
             
+
             isAudioPlaying = false;
+
             checkBotFinishedSpeaking(); 
 
+
+
             setTimeout(() => {
+
                 if (currentAgentState === 'speaking' && activeSources.length === 0) {
+
                     isReplyComplete = false;
+
                     updateState('listening');
+
                     hideLiveTranscript(0);
+
                 }
+
             }, 3000);
+
         }
+
+
+
+        // ⚡ DISABLED INTERRUPTIONS FOR TESTING ⚡
 
         function interruptBot() {
+
+            /*
+
             audioChunkQueue = [];
+
             isReplyComplete = false; 
+
             nextPlayTime = 0; 
+
             
+
             interruptRestartHoldUntil = performance.now() + 180;
 
+            
+
+            // ⚡ CLEAR LIVE TEXT ⚡
+
+            liveUserText = "";
+
+            finalTranscript = "";
+
+            if (recognition) { try { recognition.abort(); } catch(e) {} }
+
+
+
             if (socket && socket.readyState === WebSocket.OPEN) {
+
                 try {
+
                     socket.send(JSON.stringify({ type: 'interrupt' }));
+
                 } catch (e) {}
+
             }
+
+
 
             activeSources.forEach(s => {
+
                 try { s.stop(); } catch(e) {}
+
             });
+
             activeSources = [];
+
             hideLiveTranscript(0);
+
             activeBotMessageDiv = null;
+
             activeBotTextSpan = null;
+
             lastAssistantStreamingText = "";
+
+            */
+
         }
+
+
 
         function toggleChatMode() {
+
             isVoiceMode = !isVoiceMode;
+
             const toggleBtn = document.getElementById('usd-mode-toggle');
+
             const visualizer = document.getElementById('usd-visualizer');
+
             const textControls = document.getElementById('usd-input-container');
+
             const micText = document.getElementById('usd-interim-text');
+
             const liveTranscript = document.getElementById('usd-live-transcript-popup');
+
             
+
             if (isVoiceMode) {
+
                 toggleBtn.innerText = "💬 Text";
+
                 visualizer.style.display = "flex";
+
                 textControls.style.display = "none";
+
                 micText.style.display = "block";
+
                 if (liveTranscript) liveTranscript.style.display = "none";
+
                 syncTranscriptLabel();
+
                 updateState('listening');
+
             } else {
+
                 toggleBtn.innerText = "🎙️ Voice";
+
                 visualizer.style.display = "none";
+
                 textControls.style.display = "flex";
+
                 micText.style.display = "none";
+
                 if (liveTranscript) liveTranscript.style.display = "none";
+
                 interruptBot();
+
                 syncTranscriptLabel();
+
                 updateState('listening');
+
             }
+
             sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
+
         }
+
+
 
         async function openChat(isRestore = false) {
+
             initAudio();
+
             interruptRestartHoldUntil = 0;
+
             const container = document.getElementById('usd-chat-container');
+
             const tooltip = document.getElementById('usd-tooltip');
+
             const bubble = document.getElementById('usd-bubble');
+
             
+
             if (currentAgentState === 'off' || isRestore) {
+
                 bubble.style.display = 'none'; 
+
                 container.style.display = 'flex';
+
                 tooltip.style.opacity = '0'; 
+
                 tooltip.style.pointerEvents = 'none';
+
                 
+
                 document.getElementById('usd-input-container').style.display = 'flex';
+
                 document.getElementById('usd-inline-rating').style.display = 'none';
+
                 document.getElementById('usd-mode-toggle').style.display = 'block';
+
                 hideLiveTranscript(0);
+
                 syncTranscriptLabel();
+
                 
+
                 if (isRestore) {
+
                     chatHistory = JSON.parse(sessionStorage.getItem('usd_chat_history') || '[]');
+
                     isVoiceMode = sessionStorage.getItem('usd_is_voice_mode') !== 'false';
+
                     
+
                     const toggleBtn = document.getElementById('usd-mode-toggle');
+
                     toggleBtn.innerText = isVoiceMode ? "💬 Text" : "🎙️ Voice";
+
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
+
                     else document.getElementById('usd-visualizer').style.display = 'none';
+
                     syncTranscriptLabel();
+
                     
+
                     document.getElementById('usd-chat-log').innerHTML = ""; 
+
                     chatHistory.forEach(turn => {
+
                         const sender = turn.role === 'model' ? 'bot' : 'user';
+
                         let cleanText = cleanDisplayText(turn.parts[0].text);
+
                         let foundTag = null;
+
                         if (turn.role === 'model') {
+
                             foundTag = detectLocalTagFromText(cleanText);
+
                         }
+
                         logMessage(sender, cleanText, foundTag);
+
                     });
+
+
 
                     updateState('thinking');
+
                     await startWebSocket();
+
                 } else {
+
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
+
                     document.getElementById('usd-chat-log').innerHTML = ""; 
+
                     chatHistory = [];
+
                     activeBotMessageDiv = null;
+
                     activeBotTextSpan = null;
+
                     lastBotMessageDiv = null;
+
                     
+
                     updateState('connecting', "Calling assistant... 🟡");
+
                     await new Promise(resolve => setTimeout(resolve, 1200));
+
                     
+
                     updateState('connecting', "Connected 🟢");
+
                     await new Promise(resolve => setTimeout(resolve, 600));
+
                     
+
                     sessionStorage.setItem('usd_chat_active', 'true');
+
                     await startWebSocket();
+
                 }
+
             }
+
         }
 
+
+
         async function startWebSocket() {
+
             try {
+
                 socket = new WebSocket(WS_URL);
 
+
+
                 socket.onopen = async () => {
+
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
+
                         audio: { 
+
                             echoCancellation: true, 
+
                             noiseSuppression: true, 
+
                             autoGainControl: true 
+
                         }
+
                     });
 
+
+
                     const streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+
                     const source = streamCtx.createMediaStreamSource(globalStream);
+
                     
+
                     const bufferSize = 4096;
+
                     const processor = streamCtx.createScriptProcessor(bufferSize, 1, 1);
+
                     const analyser = streamCtx.createAnalyser();
+
                     analyser.fftSize = 512;
 
+
+
                     const silenceGain = streamCtx.createGain();
+
                     silenceGain.gain.value = 0;
 
+
+
                     source.connect(analyser);
+
                     source.connect(processor);
+
                     processor.connect(silenceGain);
+
                     silenceGain.connect(streamCtx.destination);
 
+
+
                     if (chatHistory.length === 0) {
+
                         updateState('thinking'); 
+
                         if (socket.readyState === WebSocket.OPEN) {
+
                             socket.send(JSON.stringify({ 
+
                                 type: 'text_input', 
+
                                 text: "SYSTEM INSTRUCTION: Start the conversation by warmly saying EXACTLY this specific phrase and absolutely nothing else: 'Namaste! How can we assist you today? Let's start with your beautiful name, what is your name?'", 
+
                                 history: [],
+
                                 isVoiceMode: isVoiceMode 
+
                             }));
+
                         }
+
                     } else {
+
                         updateState('listening');
+
                     }
+
+
 
                     let isRecording = false;
+
                     let shortPauseTimer = null; 
+
                     let longPauseTimer = null; 
+
                     let maxRecordingTimer = null;
+
                     let consecutiveLoudFrames = 0; 
 
+
+
                     processor.onaudioprocess = (e) => {
+
                         if (isMicSoftwareMuted) return;
+
                         
+
                         const inputData = e.inputBuffer.getChannelData(0);
+
                         const pcm16 = new Int16Array(inputData.length);
+
                         for (let i = 0; i < inputData.length; i++) {
+
                             pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+
                         }
+
                         
+
                         if (socket && socket.readyState === WebSocket.OPEN && isRecording) {
+
                             socket.send(pcm16.buffer); 
+
                         }
+
                     };
 
+
+
                     function detectVoice() {
+
                         const isSpeakingNow = currentAgentState === 'speaking';
 
+
+
                         if (isMicSoftwareMuted && !isSpeakingNow) {
+
                             requestAnimationFrame(detectVoice);
+
                             return;
+
                         }
+
+
 
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
                         analyser.getByteFrequencyData(dataArray);
 
+
+
                         const timeDataArray = new Uint8Array(analyser.fftSize);
+
                         analyser.getByteTimeDomainData(timeDataArray);
+
                         
+
                         let voiceSum = 0;
+
                         let voiceBins = 0;
+
                         for (let i = 10; i < 96; i++) {
+
                             voiceSum += dataArray[i];
+
                             voiceBins++;
+
                         }
+
                         let humanVolume = voiceSum / Math.max(1, voiceBins);
 
+
+
                         const speechProfile = getHumanSpeechProfile(
+
                             dataArray,
+
                             timeDataArray,
+
                             streamCtx.sampleRate || 16000,
+
                             analyser.fftSize || 512
+
                         );
 
+
+
+                        // Skip VAD processing entirely if the agent is speaking (since interrupts are off)
+
                         if (isSpeakingNow) {
-                            // ⚡ STRICTION ON INTERRUPTION: Requires significantly louder/nearer voice for solid 300ms ⚡
-                            // Because it takes 10 consecutive frames, brief background noises or single words won't interrupt her!
-                            if (speechProfile.isNearHumanSpeech && humanVolume > 35) { 
-                                consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames >= 10) { 
-                                    consecutiveLoudFrames = 0;
 
-                                    clearTimeout(shortPauseTimer);
-                                    clearTimeout(longPauseTimer);
-                                    clearTimeout(maxRecordingTimer);
-                                    shortPauseTimer = null;
-                                    longPauseTimer = null;
-                                    maxRecordingTimer = null;
-
-                                    interruptBot();
-                                    updateState('listening');
-                                    isRecording = false;
-                                }
-                            } else {
-                                consecutiveLoudFrames = 0; 
-                            }
                             requestAnimationFrame(detectVoice);
+
                             return;
+
                         }
+
+
 
                         if (currentAgentState === 'listening' && isVoiceMode) {
+
                             const inRestartHold = performance.now() < interruptRestartHoldUntil;
 
+
+
                             const canStartRecording = inRestartHold
+
                                 ? (
+
                                     speechProfile.isNearHumanSpeech &&
+
                                     humanVolume > 40 &&
+
                                     speechProfile.speechRatio > 0.65
+
                                 )
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 10); // ⚡ Fast-reacting listening threshold
+
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 10); 
+
+
 
                             if (canStartRecording) { 
+
                                 if (!isRecording) {
+
                                     isRecording = true;
+
+                                    liveUserText = ""; 
+
+                                    finalTranscript = ""; // ⚡ WIPE FINAL
+
+                                    if (recognition) {
+
+                                        try { 
+
+                                            recognition.abort(); 
+
+                                            setTimeout(() => recognition.start(), 50); 
+
+                                        } catch(e) {}
+
+                                    }
+
                                     updateState('listening'); 
+
                                     
+
                                     if (socket.readyState === WebSocket.OPEN) {
+
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
+
                                     }
+
                                     
+
                                     maxRecordingTimer = setTimeout(() => {
+
                                         if (isRecording) {
+
                                             isRecording = false;
+
+                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
+
                                             updateState('thinking');
+
                                             if (socket.readyState === WebSocket.OPEN) {
+
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
+
                                             }
+
                                         }
+
                                     }, 14000); 
+
                                 }
+
                                 
+
                                 clearTimeout(shortPauseTimer);
+
                                 clearTimeout(longPauseTimer);
+
                                 
+
                                 shortPauseTimer = setTimeout(() => {
+
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
+
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
+
                                     }
+
                                 }, 600); 
 
-                                // ⚡ FAST TRANSITION: 800ms to immediately switch to "Answering..." when you stop talking
+
+
                                 longPauseTimer = setTimeout(() => {
+
                                     if (isRecording) {
+
                                         isRecording = false;
+
+                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
+
                                         clearTimeout(maxRecordingTimer);
+
                                         updateState('thinking');
+
                                         if (socket.readyState === WebSocket.OPEN) {
+
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
+
                                         }
+
                                     }
+
                                 }, 800); 
+
                             }
+
                         }
+
                         requestAnimationFrame(detectVoice);
+
                     }
+
                     
+
                     detectVoice();
+
                 };
 
+
+
                 socket.onmessage = async (event) => {
+
                     const data = JSON.parse(event.data);
+
                     
+
                     if (data.type === 'idle' || data.type === 'error') {
+
                         hideLiveTranscript(0);
-                        updateState('listening');
-                    }
-                    else if (data.type === 'user_spoken_text') {
-                        const cleanUserText = cleanDisplayText(data.text || "");
-                        if (cleanUserText) {
-                            logMessage('user', cleanUserText);
-                            addUserHistoryIfNew(cleanUserText);
-                        }
-                    }
-                    else if (data.type === 'interim_transcript') {
+
+                        liveUserText = ""; 
+
+                        finalTranscript = ""; // ⚡ WIPE FINAL
+
+                        if (recognition) { try { recognition.abort(); } catch(e) {} }
+
+                        
+
                         const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox) {
-                            interimBox.innerText = "You: " + data.text;
-                            interimBox.style.color = "#D4AF37";
-                        }
+
+                        if (interimBox) interimBox.innerText = "";
+
+                        
+
+                        updateState('listening');
+
                     }
+
+                    else if (data.type === 'user_spoken_text') {
+
+                        const cleanUserText = cleanDisplayText(data.text || "");
+
+                        if (cleanUserText) {
+
+                            logMessage('user', cleanUserText);
+
+                            addUserHistoryIfNew(cleanUserText);
+
+                            
+
+                            // ⚡ THE MAGIC FIX: Instantly erases the live text because Sarvam finished! ⚡
+
+                            liveUserText = "";
+
+                            finalTranscript = ""; // ⚡ WIPE FINAL
+
+                            const interimBox = document.getElementById('usd-interim-text');
+
+                            if (interimBox && interimBox.innerText.includes("You:")) {
+
+                                interimBox.innerText = "Answering...";
+
+                                interimBox.style.color = "#ffffff";
+
+                            }
+
+                        }
+
+                    }
+
+                    else if (data.type === 'interim_transcript') {
+
+                        // Skip updating UI if we are using native browser transcription
+
+                        if (!recognition && data.text) {
+
+                            const interimBox = document.getElementById('usd-interim-text');
+
+                            if (interimBox) {
+
+                                interimBox.innerText = "You: " + data.text;
+
+                                interimBox.style.color = "#D4AF37";
+
+                            }
+
+                        }
+
+                    }
+
                     else if (data.type === 'text_stream') {
+
                         const streamedText = cleanDisplayText(data.text || "");
+
                         if (!streamedText) return; 
+
+
 
                         lastAssistantStreamingText = streamedText;
 
+
+
                         if (!activeBotMessageDiv) {
+
                             activeBotMessageDiv = logMessage('bot', streamedText);
+
                             activeBotTextSpan = activeBotMessageDiv.querySelector('.usd-msg-text');
+
                         } else if (activeBotTextSpan) {
+
                             activeBotTextSpan.innerText = "Assistant: " + streamedText;
+
                         }
+
+
 
                         const previewTag = data.tag || detectLocalTagFromText(streamedText);
+
                         updateLiveTranscript(streamedText, previewTag);
 
+
+
                         if (previewTag && usdLinks[previewTag]) {
+
                             if (!activeBotMessageDiv.querySelector('.usd-link-card')) {
+
                                 appendLinkButton(activeBotMessageDiv, previewTag);
+
                             }
+
                         }
+
+
 
                         const log = document.getElementById('usd-chat-log');
+
                         log.scrollTop = log.scrollHeight;
+
                     }
+
                     else if (data.type === 'audio_chunk') {
+
                         if (isVoiceMode) {
+
                             audioChunkQueue.push(data);
+
                             processAudioQueue();
+
                         }
+
                     }
+
                     else if (data.type === 'reply_complete') {
+
                         isReplyComplete = true; 
+
                         
+
+                        // ⚡ Clean up UI ⚡
+
+                        liveUserText = ""; 
+
+                        finalTranscript = ""; // ⚡ WIPE FINAL
+
                         const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox && interimBox.innerText === "Answering...") {
+
+                        if (interimBox) {
+
                             interimBox.innerText = "";
+
                         }
+
+
 
                         const botTarget = activeBotMessageDiv; 
+
                         activeBotMessageDiv = null;
+
                         activeBotTextSpan = null;
 
+
+
                         const finalText = cleanDisplayText(
+
                             data.botText ||
+
                             lastAssistantStreamingText ||
+
                             currentLiveAssistantText ||
+
                             ""
+
                         ).trim();
+
+
 
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
+
+
                         if (finalText) {
+
                             if (botTarget) {
+
                                 const span = botTarget.querySelector('.usd-msg-text');
+
                                 if (span) span.innerText = "Assistant: " + finalText;
+
                             } else {
+
                                 lastBotMessageDiv = logMessage('bot', finalText);
+
                             }
+
+
 
                             const last = chatHistory[chatHistory.length - 1];
+
                             if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
+
                                 chatHistory.push({ role: "model", parts: [{ text: finalText }] });
+
                                 if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+
                                 saveHistory();
+
                             }
+
                             
+
                             updateLiveTranscript(finalText, finalTag, true);
+
                         }
+
+
 
                         activeTag = finalTag;
+
                         
+
                         const finalBotTarget = botTarget || lastBotMessageDiv;
+
                         if (activeTag && usdLinks[activeTag] && finalBotTarget) {
+
                             if (!finalBotTarget.querySelector('.usd-link-card')) {
+
                                 appendLinkButton(finalBotTarget, activeTag);
+
                             }
+
                             const log = document.getElementById('usd-chat-log');
+
                             log.scrollTop = log.scrollHeight;
+
                         }
+
+
 
                         if (!isVoiceMode) {
+
                             updateState('listening');
+
                             if (activeTag === '[END_CHAT]') setTimeout(() => closeChat(true), 2000);
+
                         } else {
+
                             checkBotFinishedSpeaking(); 
+
                         }
 
+
+
                         hideLiveTranscript(3500);
+
                     }
+
                 };
+
+
 
                 socket.onerror = () => { updateState('listening'); };
 
+
+
             } catch (err) {
+
                 updateState('listening');
+
             }
+
         }
+
+
 
         function closeChatBtnClicked() {
+
             document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
+
         }
+
+
 
         async function confirmEndChat(isYes) {
+
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+
             if (isYes) {
+
                 updateState('thinking');
+
                 interruptBot();
+
                 
+
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
+
                 logMessage('bot', goodbyeText);
+
                 
+
                 if (isVoiceMode) {
+
                     try {
+
                         const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
+
                             method: 'POST',
+
                             headers: { 'Content-Type': 'application/json' },
+
                             body: JSON.stringify({ text: goodbyeText, lang: 'en-IN' })
+
                         });
+
                         const data = await response.json();
+
                         
+
                         isReplyComplete = true; 
+
                         audioChunkQueue.push(data);
+
                         processAudioQueue();
+
                         
+
                         setTimeout(() => closeChat(true), 4000);
+
                     } catch(e) { closeChat(true); }
+
                 } else {
+
                     setTimeout(() => closeChat(true), 2000);
+
                 }
+
             }
+
         }
+
+
 
         function closeChat(showRating = false) {
+
             updateState('off');
+
             interruptBot();
+
             hideLiveTranscript(0);
+
             if (socket) socket.close();
+
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
+
             
+
             sessionStorage.removeItem('usd_chat_active');
+
             sessionStorage.removeItem('usd_chat_history');
+
             
+
             if (showRating) {
+
                 document.getElementById('usd-input-container').style.display = 'none';
+
                 document.getElementById('usd-mode-toggle').style.display = 'none';
+
                 document.getElementById('usd-visualizer').style.display = 'none';
+
                 document.getElementById('usd-inline-rating').style.display = 'block';
+
                 logMessage('system', 'The chat has ended. Please rate your experience below.');
+
             } else {
+
                 document.getElementById('usd-chat-container').style.display = 'none';
+
                 document.getElementById('usd-bubble').style.display = 'flex'; 
+
             }
+
         }
+
+
 
         async function submitRating(stars) {
+
             const starElements = document.querySelectorAll('.usd-star');
+
             starElements.forEach((s, index) => {
+
                 s.style.color = index < stars ? '#FFD700' : '#444';
+
                 s.style.textShadow = index < stars ? '0 0 10px rgba(255, 215, 0, 0.6)' : '0 2px 4px rgba(0,0,0,0.5)';
+
             });
+
             document.getElementById('usd-rating-thanks').style.display = 'block';
 
+
+
             try {
+
                 let transcript = "No chat history recorded.";
+
                 
-                // ⚡ FIX: Scrape the ENTIRE visual chat log from the UI instead of the 6-message Gemini array ⚡
+
                 const allMessages = document.querySelectorAll('#usd-chat-log .usd-msg-text');
+
                 if (allMessages.length > 0) {
+
                     transcript = Array.from(allMessages).map(msg => msg.innerText).join('\n\n');
+
                 }
 
+
+
                 await fetch('https://api.web3forms.com/submit', {
+
                     method: 'POST',
+
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+
                     body: JSON.stringify({ 
+
                         access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
+
                         subject: `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`, 
+
                         from_name: "Ultimate Smile Voice Agent", 
+
                         email: "noreply@ultimatesmiledesign.com",
+
                         message: `Transcript:\n\n${transcript}` 
+
                     })
+
                 });
+
             } catch(e) { }
 
+
+
             setTimeout(() => { closeChat(false); }, 3000);
+
         }
+
+
 
         async function submitTextMessage() {
+
             const inputEl = document.getElementById('usd-text-input');
+
             const userText = cleanDisplayText(inputEl.value.trim());
+
             if (!userText || currentAgentState === 'thinking' || currentAgentState === 'connecting') return;
 
+
+
             inputEl.value = ''; 
+
             interruptBot();
 
+
+
             updateState('thinking');
+
             
+
             logMessage('user', userText);
+
             addUserHistoryIfNew(userText);
 
+
+
             if (socket && socket.readyState === WebSocket.OPEN) {
+
                 socket.send(JSON.stringify({ 
+
                     type: 'text_input', 
+
                     text: userText, 
+
                     history: chatHistory,
+
                     isVoiceMode: isVoiceMode 
+
                 }));
+
             }
+
         }
+
+
 
         function handleKeyPress(event) {
+
             if (event.key === 'Enter') {
+
                 event.preventDefault(); 
+
                 submitTextMessage();
+
             }
+
         }
+
+
 
        async function handleLinkClick(tag) {
+
             const linkInfo = usdLinks[tag];
+
             if (!linkInfo) return;
+
             
+
             logMessage('bot', "Redirecting you now...");
+
             chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
+
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+
             saveHistory();
 
+
+
             window.open(linkInfo.url, '_blank');
+
             
+
             updateState('listening');
+
         }
+
         
+
         function logMessage(sender, text, tag = null) {
+
             const log = document.getElementById('usd-chat-log');
+
             const msgDiv = document.createElement('div');
+
             msgDiv.className = `msg msg-${sender}`;
+
             
+
             const span = document.createElement('span');
+
             span.className = 'usd-msg-text';
+
             if (sender === 'user') span.innerText = "You: " + text;
+
             else if (sender === 'bot') span.innerText = "Assistant: " + text;
+
             else span.innerText = text; 
+
             
+
             msgDiv.appendChild(span);
 
+
+
             if (tag && usdLinks[tag]) {
+
                 const btn = document.createElement('button');
+
                 btn.className = 'usd-link-card';
+
                 btn.innerText = usdLinks[tag].label;
+
                 btn.onclick = () => handleLinkClick(tag);
+
                 msgDiv.appendChild(btn);
+
             }
+
+
 
             log.appendChild(msgDiv);
+
             log.scrollTop = log.scrollHeight;
 
+
+
             if (sender === 'bot') {
+
                 lastBotMessageDiv = msgDiv;
+
             }
 
+
+
             return msgDiv;
+
         }
+
     </script>
+
 </body>
+
 </html>
