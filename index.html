@@ -139,7 +139,7 @@
             overflow-y: auto;
             flex-grow: 1;
             margin-bottom: 10px;
-            max-height: 230px;
+            max-height: 210px;
             padding-right: 5px;
         }
         #usd-chat-log::-webkit-scrollbar { width: 4px; }
@@ -174,7 +174,47 @@
             color: #111111;
             transform: translateY(-2px);
         }
+        #usd-interim-text { text-align: right; font-style: italic; font-size: 12px; font-weight: bold; min-height: 16px; margin-bottom: 5px; transition: color 0.2s; }
         
+        /* LIVE TRANSCRIPT POPUP */
+        #usd-live-transcript-popup {
+            display: none;
+            margin-bottom: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(212, 175, 55, 0.10);
+            border: 1px solid rgba(212, 175, 55, 0.35);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            position: relative;
+            z-index: 5;
+        }
+        #usd-live-transcript-label {
+            color: #D4AF37;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-bottom: 4px;
+        }
+        #usd-live-transcript-text {
+            color: #ffffff;
+            font-size: 13px;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 70px;
+            overflow-y: auto;
+        }
+        #usd-live-transcript-link-wrap {
+            display: none;
+            margin-top: 8px;
+        }
+        #usd-live-transcript-link-wrap .usd-link-card {
+            margin-top: 0;
+            font-size: 11px;
+            padding: 9px 10px;
+        }
+
         #usd-input-container {
             display: none; 
             border-top: 1px solid rgba(255,255,255,0.1);
@@ -312,7 +352,14 @@
                     </div>
                 </div>
 
+                <div id="usd-live-transcript-popup">
+                    <div id="usd-live-transcript-label">Assistant speaking</div>
+                    <div id="usd-live-transcript-text"></div>
+                    <div id="usd-live-transcript-link-wrap"></div>
+                </div>
+
                 <div id="usd-chat-log"></div>
+                <div id="usd-interim-text"></div>
                 
                 <div id="usd-input-container">
                     <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
@@ -360,13 +407,15 @@
         let isReplyComplete = false; 
         
         let activeTag = null; 
-        
-        // ⚡ THE LIVE BUBBLES ⚡
-        let liveUserDiv = null;
-        let liveBotDiv = null;
-
+        let activeBotMessageDiv = null; 
+        let activeBotTextSpan = null;
+        let lastBotMessageDiv = null;
         let isMicSoftwareMuted = true; 
         let interruptRestartHoldUntil = 0;
+        let liveTranscriptHideTimer = null;
+        let currentLiveAssistantText = "";
+        let currentLiveAssistantTag = null;
+        let lastAssistantStreamingText = "";
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
@@ -421,34 +470,58 @@
             return result.trim();
         }
 
-        // ⚡ UPDATED STATUS BOX (Clean Top Header) ⚡
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
             const visualizer = document.getElementById('usd-visualizer');
+            const interimBox = document.getElementById('usd-interim-text');
 
             if (statusBox) {
                 if (newState === 'connecting' || newState === 'off') {
                     if (statusText) statusBox.innerText = statusText;
                 } else if (isVoiceMode) {
-                    if (newState === 'listening') statusBox.innerText = "Listening... 🟢";
-                    else if (newState === 'thinking') statusBox.innerText = "Processing... 🟡";
-                    else statusBox.innerText = "Connected 🟢"; 
+                    statusBox.innerText = "Connected 🟢"; 
                 } else {
                     statusBox.innerText = "Chat Mode Active. Type below.";
                 }
             }
 
             if (newState === 'speaking') {
-                if (isVoiceMode) visualizer.classList.add('active');
+                if (isVoiceMode) {
+                    visualizer.classList.add('active');
+                }
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
             }
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
+                if (interimBox) {
+                    if (!interimBox.innerText.includes("You:")) {
+                        interimBox.innerText = "Listening...";
+                        interimBox.style.color = "#D4AF37";
+                    }
+                }
             } else {
                 isMicSoftwareMuted = true;
+            }
+
+            if (newState === 'thinking') {
+                if (interimBox) {
+                    if (interimBox.innerText.includes("You:")) {
+                        if (!interimBox.innerText.includes("...")) {
+                            interimBox.innerText = interimBox.innerText + " ...";
+                        }
+                        interimBox.style.color = "#ffffff";
+                    } else {
+                        interimBox.innerText = "Answering...";
+                        interimBox.style.color = "#ffffff";
+                    }
+                }
+            }
+
+            if (!isVoiceMode && interimBox && newState !== 'thinking') {
+                interimBox.innerText = "";
             }
         }
 
@@ -459,6 +532,12 @@
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
+        }
+
+        function syncTranscriptLabel() {
+            const label = document.getElementById('usd-live-transcript-label');
+            if (!label) return;
+            label.innerText = isVoiceMode ? 'Assistant speaking' : 'Assistant typing';
         }
 
         function detectLocalTagFromText(input = '') {
@@ -548,13 +627,87 @@
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
             const isNearHumanSpeech =
-                rms > 0.010 &&            
-                speechAvg > 10 &&         
-                coreAvg > 12 &&
-                speechRatio > 0.50 &&     
-                coreVsNoise > 1.10;       
+                rms > 0.015 &&            
+                speechAvg > 15 &&         
+                coreAvg > 18 &&
+                speechRatio > 0.60 &&     
+                coreVsNoise > 1.15;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
+        }
+
+        function renderPopupLink(tag) {
+            const wrap = document.getElementById('usd-live-transcript-link-wrap');
+            if (!wrap) return;
+
+            wrap.innerHTML = '';
+
+            if (!tag || !usdLinks[tag]) {
+                wrap.style.display = 'none';
+                return;
+            }
+
+            const label = document.createElement('div');
+            label.style.color = '#D4AF37';
+            label.style.fontSize = '11px';
+            label.style.fontWeight = 'bold';
+            label.style.marginBottom = '6px';
+            label.innerText = 'Suggested action';
+
+            const btn = document.createElement('button');
+            btn.className = 'usd-link-card';
+            btn.innerText = usdLinks[tag].label;
+            btn.onclick = () => handleLinkClick(tag);
+
+            wrap.appendChild(label);
+            wrap.appendChild(btn);
+            wrap.style.display = 'block';
+        }
+
+        function updateLiveTranscript(text, tag = null, force = false) {
+            const popup = document.getElementById('usd-live-transcript-popup');
+            const popupText = document.getElementById('usd-live-transcript-text');
+            if (!popup || !popupText) return;
+
+            syncTranscriptLabel();
+
+            const clean = cleanDisplayText(text || '');
+
+            if (clean) {
+                currentLiveAssistantText = clean;
+                lastAssistantStreamingText = clean;
+            } else if (force && currentLiveAssistantText) {
+                text = currentLiveAssistantText;
+            }
+
+            const finalText = cleanDisplayText(text || currentLiveAssistantText || '');
+            const finalTag = tag || detectLocalTagFromText(finalText) || currentLiveAssistantTag;
+
+            currentLiveAssistantTag = finalTag || null;
+            popupText.textContent = finalText;
+
+            if (finalText && isVoiceMode) {
+                popup.style.display = 'block';
+                renderPopupLink(finalTag);
+            }
+        }
+
+        function hideLiveTranscript(delay = 0) {
+            clearTimeout(liveTranscriptHideTimer);
+            liveTranscriptHideTimer = setTimeout(() => {
+                const popup = document.getElementById('usd-live-transcript-popup');
+                const popupText = document.getElementById('usd-live-transcript-text');
+                const popupLinkWrap = document.getElementById('usd-live-transcript-link-wrap');
+                if (popup) popup.style.display = 'none';
+                if (popupText) popupText.textContent = '';
+                if (popupLinkWrap) {
+                    popupLinkWrap.innerHTML = '';
+                    popupLinkWrap.style.display = 'none';
+                }
+                currentLiveAssistantText = "";
+                currentLiveAssistantTag = null;
+                lastAssistantStreamingText = "";
+            }, delay);
         }
 
         function createMessageDiv(sender, text) {
@@ -614,6 +767,7 @@
                     }, 400); 
                 }
                 activeTag = null;
+                hideLiveTranscript(2500);
             }
         }
 
@@ -668,13 +822,14 @@
                 if (currentAgentState === 'speaking' && activeSources.length === 0) {
                     isReplyComplete = false;
                     updateState('listening');
+                    hideLiveTranscript(0);
                 }
             }, 3000);
         }
 
-        // ⚡ INTERRUPTIONS BYPASSED TO ALLOW PEACEFUL TESTING ⚡
+        // ⚡ INTERRUPTIONS ARE DISABLED FOR TESTING ⚡
         function interruptBot() {
-            // Intentionally empty! She will never cut off until finished!
+            // Intentionally empty. The assistant will finish every sentence without cutting off!
         }
 
         function toggleChatMode() {
@@ -682,17 +837,25 @@
             const toggleBtn = document.getElementById('usd-mode-toggle');
             const visualizer = document.getElementById('usd-visualizer');
             const textControls = document.getElementById('usd-input-container');
+            const micText = document.getElementById('usd-interim-text');
+            const liveTranscript = document.getElementById('usd-live-transcript-popup');
             
             if (isVoiceMode) {
                 toggleBtn.innerText = "💬 Text";
                 visualizer.style.display = "flex";
                 textControls.style.display = "none";
+                micText.style.display = "block";
+                if (liveTranscript) liveTranscript.style.display = "none";
+                syncTranscriptLabel();
                 updateState('listening');
             } else {
                 toggleBtn.innerText = "🎙️ Voice";
                 visualizer.style.display = "none";
                 textControls.style.display = "flex";
+                micText.style.display = "none";
+                if (liveTranscript) liveTranscript.style.display = "none";
                 interruptBot();
+                syncTranscriptLabel();
                 updateState('listening');
             }
             sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
@@ -714,6 +877,8 @@
                 document.getElementById('usd-input-container').style.display = 'flex';
                 document.getElementById('usd-inline-rating').style.display = 'none';
                 document.getElementById('usd-mode-toggle').style.display = 'block';
+                hideLiveTranscript(0);
+                syncTranscriptLabel();
                 
                 if (isRestore) {
                     chatHistory = JSON.parse(sessionStorage.getItem('usd_chat_history') || '[]');
@@ -723,6 +888,7 @@
                     toggleBtn.innerText = isVoiceMode ? "💬 Text" : "🎙️ Voice";
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
                     else document.getElementById('usd-visualizer').style.display = 'none';
+                    syncTranscriptLabel();
                     
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory.forEach(turn => {
@@ -741,8 +907,9 @@
                     if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory = [];
-                    liveUserDiv = null;
-                    liveBotDiv = null;
+                    activeBotMessageDiv = null;
+                    activeBotTextSpan = null;
+                    lastBotMessageDiv = null;
                     
                     updateState('connecting', "Calling assistant... 🟡");
                     await new Promise(resolve => setTimeout(resolve, 1200));
@@ -803,7 +970,6 @@
                     let shortPauseTimer = null; 
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
-                    let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -848,7 +1014,6 @@
                             analyser.fftSize || 512
                         );
 
-                        // Skip VAD processing entirely if the agent is speaking (since interrupts are off)
                         if (isSpeakingNow) {
                             requestAnimationFrame(detectVoice);
                             return;
@@ -916,52 +1081,56 @@
                     const data = JSON.parse(event.data);
                     
                     if (data.type === 'idle' || data.type === 'error') {
-                        if (liveUserDiv) liveUserDiv = null;
-                        if (liveBotDiv) liveBotDiv = null;
+                        hideLiveTranscript(0);
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) interimBox.innerText = "";
                         updateState('listening');
                     }
-                    // ⚡ 1. LIVE USER TYPEWRITER EFFECT ⚡
-                    else if (data.type === 'interim_transcript_chunk') {
-                        if (data.text) {
-                            if (!liveUserDiv) {
-                                liveUserDiv = createMessageDiv('user', '');
-                                liveUserDiv.style.color = '#D4AF37'; // Gold while typing
-                                document.getElementById('usd-chat-log').appendChild(liveUserDiv);
-                            }
-                            // ⚡ MAGIC += FIX: Appends perfectly inline without deleting previous words!
-                            liveUserDiv.querySelector('.usd-msg-text').innerText += data.text;
-                            
-                            const log = document.getElementById('usd-chat-log');
-                            log.scrollTop = log.scrollHeight;
-                        }
-                    }
-                    // ⚡ 2. SARVAM OVERWRITES LIVE USER TEXT WITH HIGH ACCURACY ⚡
                     else if (data.type === 'user_spoken_text') {
                         const cleanUserText = cleanDisplayText(data.text || "");
                         if (cleanUserText) {
-                            if (liveUserDiv) {
-                                // Instant rewrite!
-                                liveUserDiv.querySelector('.usd-msg-text').innerText = "You: " + cleanUserText;
-                                liveUserDiv.style.color = '#ffffff'; // Turn white when permanent
-                                liveUserDiv = null;
-                            } else {
-                                logMessage('user', cleanUserText);
-                            }
+                            logMessage('user', cleanUserText);
                             addUserHistoryIfNew(cleanUserText);
+                            
+                            const interimBox = document.getElementById('usd-interim-text');
+                            if (interimBox && interimBox.innerText.includes("You:")) {
+                                interimBox.innerText = "Answering...";
+                                interimBox.style.color = "#ffffff";
+                            }
                         }
                     }
-                    // ⚡ 3. LIVE BOT TYPEWRITER EFFECT ⚡
-                    else if (data.type === 'text_stream_chunk') {
-                        const chunk = cleanDisplayText(data.text || "");
-                        if (!chunk) return; 
-
-                        if (!liveBotDiv) {
-                            liveBotDiv = createMessageDiv('bot', '');
-                            document.getElementById('usd-chat-log').appendChild(liveBotDiv);
+                    else if (data.type === 'interim_transcript') {
+                        // ⚡ THIS IS WHERE GEMINI LIVE NATIVE TEXT ARRIVES! ⚡
+                        if (data.text) {
+                            const interimBox = document.getElementById('usd-interim-text');
+                            if (interimBox) {
+                                interimBox.innerText = "You: " + data.text;
+                                interimBox.style.color = "#D4AF37";
+                            }
                         }
-                        
-                        liveBotDiv.querySelector('.usd-msg-text').innerText += " " + chunk;
-                        
+                    }
+                    else if (data.type === 'text_stream') {
+                        const streamedText = cleanDisplayText(data.text || "");
+                        if (!streamedText) return; 
+
+                        lastAssistantStreamingText = streamedText;
+
+                        if (!activeBotMessageDiv) {
+                            activeBotMessageDiv = logMessage('bot', streamedText);
+                            activeBotTextSpan = activeBotMessageDiv.querySelector('.usd-msg-text');
+                        } else if (activeBotTextSpan) {
+                            activeBotTextSpan.innerText = "Assistant: " + streamedText;
+                        }
+
+                        const previewTag = data.tag || detectLocalTagFromText(streamedText);
+                        updateLiveTranscript(streamedText, previewTag);
+
+                        if (previewTag && usdLinks[previewTag]) {
+                            if (!activeBotMessageDiv.querySelector('.usd-link-card')) {
+                                appendLinkButton(activeBotMessageDiv, previewTag);
+                            }
+                        }
+
                         const log = document.getElementById('usd-chat-log');
                         log.scrollTop = log.scrollHeight;
                     }
@@ -971,18 +1140,33 @@
                             processAudioQueue();
                         }
                     }
-                    // ⚡ 4. BOT FINISHED SPEAKING ⚡
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
                         
-                        const finalText = cleanDisplayText(data.botText || "").trim();
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) {
+                            interimBox.innerText = "";
+                        }
+
+                        const botTarget = activeBotMessageDiv; 
+                        activeBotMessageDiv = null;
+                        activeBotTextSpan = null;
+
+                        const finalText = cleanDisplayText(
+                            data.botText ||
+                            lastAssistantStreamingText ||
+                            currentLiveAssistantText ||
+                            ""
+                        ).trim();
+
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
                         if (finalText) {
-                            if (liveBotDiv) {
-                                liveBotDiv.querySelector('.usd-msg-text').innerText = "Assistant: " + finalText;
+                            if (botTarget) {
+                                const span = botTarget.querySelector('.usd-msg-text');
+                                if (span) span.innerText = "Assistant: " + finalText;
                             } else {
-                                liveBotDiv = logMessage('bot', finalText);
+                                lastBotMessageDiv = logMessage('bot', finalText);
                             }
 
                             const last = chatHistory[chatHistory.length - 1];
@@ -991,19 +1175,20 @@
                                 if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
                                 saveHistory();
                             }
+                            
+                            updateLiveTranscript(finalText, finalTag, true);
                         }
 
                         activeTag = finalTag;
                         
-                        if (activeTag && usdLinks[activeTag] && liveBotDiv) {
-                            if (!liveBotDiv.querySelector('.usd-link-card')) {
-                                appendLinkButton(liveBotDiv, activeTag);
+                        const finalBotTarget = botTarget || lastBotMessageDiv;
+                        if (activeTag && usdLinks[activeTag] && finalBotTarget) {
+                            if (!finalBotTarget.querySelector('.usd-link-card')) {
+                                appendLinkButton(finalBotTarget, activeTag);
                             }
                             const log = document.getElementById('usd-chat-log');
                             log.scrollTop = log.scrollHeight;
                         }
-
-                        liveBotDiv = null; // Unlink for next turn
 
                         if (!isVoiceMode) {
                             updateState('listening');
@@ -1011,6 +1196,8 @@
                         } else {
                             checkBotFinishedSpeaking(); 
                         }
+
+                        hideLiveTranscript(3500);
                     }
                 };
 
@@ -1058,6 +1245,7 @@
         function closeChat(showRating = false) {
             updateState('off');
             interruptBot();
+            hideLiveTranscript(0);
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
             
