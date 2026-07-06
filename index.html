@@ -1257,10 +1257,38 @@
          * ============================================================================
          * INTERRUPTION CONTROLLER
          * ============================================================================
+         * ⚡ FIXED: Properly clears audio and notifies the backend to drop processing ⚡
          */
         function interruptBot() {
-            // Disabled entirely per user instructions to avoid cutting off mid-sentence
-            // due to background anomalies.
+            if (!isVoiceMode) return;
+            
+            audioChunkQueue = [];
+            isReplyComplete = false; 
+            nextPlayTime = 0; 
+            
+            interruptRestartHoldUntil = performance.now() + 500; 
+            
+            liveUserText = "";
+            finalTranscript = "";
+            if (recognition) { try { recognition.abort(); } catch(e) {} }
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(JSON.stringify({ type: 'interrupt' }));
+                } catch (e) {}
+            }
+
+            activeSources.forEach(s => {
+                try { s.stop(); } catch(e) {}
+            });
+            activeSources = [];
+            
+            hideLiveTranscript(0);
+            activeBotMessageDiv = null;
+            activeBotTextSpan = null;
+            lastAssistantStreamingText = "";
+            
+            updateState('listening');
         }
 
         /**
@@ -1419,6 +1447,7 @@
                     
                     // Tracking continuous audio frames to absolutely ignore transient thuds
                     let consecutiveVoiceFrames = 0; 
+                    let consecutiveInterruptFrames = 0; // ⚡ FOR FOREGROUND VAD INTERRUPTION ⚡
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1463,7 +1492,25 @@
                             analyser.fftSize || 512
                         );
 
+                        // ⚡ FOREGROUND INTERRUPTION LOGIC ⚡
                         if (isSpeakingNow) {
+                            // Requires loud, sustained, very clear human voice directly into mic to interrupt
+                            const isForegroundVoice = speechProfile.isNearHumanSpeech && 
+                                                      humanVolume > 40 && 
+                                                      speechProfile.coreVsNoise > 1.8 &&
+                                                      speechProfile.speechRatio > 0.65;
+                                                      
+                            if (isForegroundVoice) {
+                                consecutiveInterruptFrames++;
+                                // Require ~250ms of sustained foreground speech to interrupt
+                                if (consecutiveInterruptFrames > 12) {
+                                    interruptBot();
+                                    consecutiveInterruptFrames = 0;
+                                }
+                            } else {
+                                // Allow micro-pauses but otherwise reset the interruption intent quickly
+                                consecutiveInterruptFrames = Math.max(0, consecutiveInterruptFrames - 1);
+                            }
                             requestAnimationFrame(detectVoice);
                             return;
                         }
