@@ -417,16 +417,15 @@
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
 
-        // ⚡ NEW: BROWSER NATIVE LIVE TRANSCRIPTION STATE ⚡
+        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION ⚡
         let recognition = null;
         let liveUserText = "";
 
-        // ⚡ INITIALIZE WEB SPEECH API FOR ZERO-LATENCY STREAMING ⚡
         if ('webkitSpeechRecognition' in window) {
             recognition = new webkitSpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
-            recognition.lang = 'en-IN'; // Highly robust for Hinglish and Indian accents
+            recognition.lang = 'hi-IN'; // Better detection for Indian English/Hindi
 
             recognition.onresult = (event) => {
                 let interimTranscript = '';
@@ -451,9 +450,7 @@
                 }
             };
 
-            recognition.onerror = (e) => {
-                // Fails gracefully in background
-            };
+            recognition.onerror = (e) => {}; // Fails silently
         }
 
         const usdLinks = {
@@ -504,12 +501,11 @@
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
+            result = result.replace(new RegExp("", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
 
-        // ⚡ UPDATED UI TEXT LOGIC FOR LIVE STREAMING TEXT ⚡
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
@@ -537,7 +533,6 @@
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
                 if (interimBox) {
-                    // Show live streaming text if it exists, otherwise just "Listening..."
                     if (liveUserText) {
                         interimBox.innerText = "You: " + liveUserText;
                         interimBox.style.color = "#D4AF37";
@@ -552,7 +547,7 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    // ⚡ FREEZES LIVE TEXT ON SCREEN AS IT THINKS (Like ElevenLabs/Vapi) ⚡
+                    // ⚡ Freezes the live text to indicate processing ⚡
                     if (liveUserText) {
                         interimBox.innerText = "You: " + liveUserText + " ...";
                         interimBox.style.color = "#ffffff";
@@ -626,6 +621,7 @@
             return null;
         }
 
+        // ⚡ STRICT OFFICE VAD ⚡
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -876,8 +872,8 @@
             nextPlayTime = 0; 
             
             interruptRestartHoldUntil = performance.now() + 180;
-
-            // ⚡ CLEAR LIVE TEXT ON INTERRUPT ⚡
+            
+            // ⚡ CLEAR LIVE TEXT ⚡
             liveUserText = "";
             if (recognition) { try { recognition.abort(); } catch(e) {} }
 
@@ -1118,7 +1114,7 @@
                             if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
-                                    liveUserText = ""; // ⚡ WIPE OLD TRANSCRIPT ON NEW SPEECH ⚡
+                                    liveUserText = ""; 
                                     if (recognition) {
                                         try { 
                                             recognition.abort(); 
@@ -1176,8 +1172,13 @@
                     
                     if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
-                        liveUserText = ""; // ⚡ CLEAR
+                        liveUserText = ""; 
                         if (recognition) { try { recognition.abort(); } catch(e) {} }
+                        
+                        // ⚡ WIPES ANY STUCK TEXT ⚡
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) interimBox.innerText = "";
+                        
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
@@ -1185,6 +1186,14 @@
                         if (cleanUserText) {
                             logMessage('user', cleanUserText);
                             addUserHistoryIfNew(cleanUserText);
+                            
+                            // ⚡ THE MAGIC FIX: Instantly erases the live text because Sarvam finished! ⚡
+                            liveUserText = "";
+                            const interimBox = document.getElementById('usd-interim-text');
+                            if (interimBox && interimBox.innerText.includes("You:")) {
+                                interimBox.innerText = "Answering...";
+                                interimBox.style.color = "#ffffff";
+                            }
                         }
                     }
                     else if (data.type === 'text_stream') {
@@ -1220,11 +1229,12 @@
                     }
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
-                        liveUserText = ""; // ⚡ CLEAR TEXT ONCE FINISHED
                         
+                        // ⚡ CLEAR ALL INTERIM TEXT SO IT IS PERFECTLY CLEAN FOR NEXT TURN ⚡
+                        liveUserText = ""; 
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) {
-                            interimBox.innerText = ""; // Immediately wipes the interim box so nothing gets stuck
+                            interimBox.innerText = "";
                         }
 
                         const botTarget = activeBotMessageDiv; 
@@ -1354,7 +1364,6 @@
             try {
                 let transcript = "No chat history recorded.";
                 
-                // ⚡ GRAB THE ENTIRE VISUAL LOG FOR GMAIL ⚡
                 const allMessages = document.querySelectorAll('#usd-chat-log .usd-msg-text');
                 if (allMessages.length > 0) {
                     transcript = Array.from(allMessages).map(msg => msg.innerText).join('\n\n');
