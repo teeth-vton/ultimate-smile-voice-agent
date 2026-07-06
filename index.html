@@ -417,6 +417,45 @@
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
 
+        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION ⚡
+        let recognition = null;
+        let liveUserText = "";
+        // ⚡ THE MAGIC FIX: This global string permanently locks in the words so they don't disappear! ⚡
+        let finalTranscript = ""; 
+
+        if ('webkitSpeechRecognition' in window) {
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'hi-IN'; // Better detection for Indian English/Hindi
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        // ⚡ Matures into permanent memory with a space ⚡
+                        finalTranscript += event.results[i][0].transcript + " ";
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                
+                // ⚡ Melds permanent memory + current live typing ⚡
+                liveUserText = (finalTranscript + interimTranscript).trim();
+                
+                if (liveUserText) {
+                    const interimBox = document.getElementById('usd-interim-text');
+                    if (interimBox) {
+                        interimBox.innerText = "You: " + liveUserText;
+                        interimBox.style.color = "#D4AF37";
+                    }
+                }
+            };
+
+            recognition.onerror = (e) => {}; // Fails silently
+        }
+
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist' },
@@ -497,7 +536,11 @@
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
                 if (interimBox) {
-                    if (!interimBox.innerText.includes("You:")) {
+                    // Show live text if available, else listening
+                    if (liveUserText) {
+                        interimBox.innerText = "You: " + liveUserText;
+                        interimBox.style.color = "#D4AF37";
+                    } else if (!interimBox.innerText.includes("You:")) {
                         interimBox.innerText = "Listening...";
                         interimBox.style.color = "#D4AF37";
                     }
@@ -508,10 +551,9 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    if (interimBox.innerText.includes("You:")) {
-                        if (!interimBox.innerText.includes("...")) {
-                            interimBox.innerText = interimBox.innerText + " ...";
-                        }
+                    // ⚡ FREEZE TEXT WHILE PROCESSING ⚡
+                    if (liveUserText) {
+                        interimBox.innerText = "You: " + liveUserText + " ...";
                         interimBox.style.color = "#ffffff";
                     } else {
                         interimBox.innerText = "Answering...";
@@ -827,9 +869,35 @@
             }, 3000);
         }
 
-        // ⚡ INTERRUPTIONS ARE DISABLED FOR TESTING ⚡
+        // ⚡ DISABLED INTERRUPTIONS FOR TESTING ⚡
         function interruptBot() {
-            // Intentionally empty. The assistant will finish every sentence without cutting off!
+            /*
+            audioChunkQueue = [];
+            isReplyComplete = false; 
+            nextPlayTime = 0; 
+            
+            interruptRestartHoldUntil = performance.now() + 180;
+            
+            // ⚡ CLEAR LIVE TEXT ⚡
+            liveUserText = "";
+            finalTranscript = "";
+            if (recognition) { try { recognition.abort(); } catch(e) {} }
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(JSON.stringify({ type: 'interrupt' }));
+                } catch (e) {}
+            }
+
+            activeSources.forEach(s => {
+                try { s.stop(); } catch(e) {}
+            });
+            activeSources = [];
+            hideLiveTranscript(0);
+            activeBotMessageDiv = null;
+            activeBotTextSpan = null;
+            lastAssistantStreamingText = "";
+            */
         }
 
         function toggleChatMode() {
@@ -970,6 +1038,7 @@
                     let shortPauseTimer = null; 
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
+                    let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1014,6 +1083,7 @@
                             analyser.fftSize || 512
                         );
 
+                        // Skip VAD processing entirely if the agent is speaking (since interrupts are off)
                         if (isSpeakingNow) {
                             requestAnimationFrame(detectVoice);
                             return;
@@ -1033,6 +1103,14 @@
                             if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
+                                    liveUserText = ""; 
+                                    finalTranscript = ""; // ⚡ WIPE FINAL
+                                    if (recognition) {
+                                        try { 
+                                            recognition.abort(); 
+                                            setTimeout(() => recognition.start(), 50); 
+                                        } catch(e) {}
+                                    }
                                     updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
@@ -1042,6 +1120,7 @@
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
+                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
                                             updateState('thinking');
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
@@ -1062,6 +1141,7 @@
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
+                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking');
                                         if (socket.readyState === WebSocket.OPEN) {
@@ -1082,8 +1162,13 @@
                     
                     if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
+                        liveUserText = ""; 
+                        finalTranscript = ""; // ⚡ WIPE FINAL
+                        if (recognition) { try { recognition.abort(); } catch(e) {} }
+                        
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) interimBox.innerText = "";
+                        
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
@@ -1092,6 +1177,9 @@
                             logMessage('user', cleanUserText);
                             addUserHistoryIfNew(cleanUserText);
                             
+                            // ⚡ THE MAGIC FIX: Instantly erases the live text because Sarvam finished! ⚡
+                            liveUserText = "";
+                            finalTranscript = ""; // ⚡ WIPE FINAL
                             const interimBox = document.getElementById('usd-interim-text');
                             if (interimBox && interimBox.innerText.includes("You:")) {
                                 interimBox.innerText = "Answering...";
@@ -1100,8 +1188,8 @@
                         }
                     }
                     else if (data.type === 'interim_transcript') {
-                        // ⚡ THIS IS WHERE GEMINI LIVE NATIVE TEXT ARRIVES! ⚡
-                        if (data.text) {
+                        // Skip updating UI if we are using native browser transcription
+                        if (!recognition && data.text) {
                             const interimBox = document.getElementById('usd-interim-text');
                             if (interimBox) {
                                 interimBox.innerText = "You: " + data.text;
@@ -1143,6 +1231,9 @@
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
                         
+                        // ⚡ Clean up UI ⚡
+                        liveUserText = ""; 
+                        finalTranscript = ""; // ⚡ WIPE FINAL
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) {
                             interimBox.innerText = "";
