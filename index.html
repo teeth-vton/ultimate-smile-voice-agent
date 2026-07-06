@@ -1228,9 +1228,8 @@
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
                         
-                        // ⚡ Clean up UI ⚡
                         liveUserText = ""; 
-                        finalTranscript = ""; // ⚡ WIPE FINAL
+                        finalTranscript = "";
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) {
                             interimBox.innerText = "";
@@ -1240,13 +1239,8 @@
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
 
-                        const finalText = cleanDisplayText(
-                            data.botText ||
-                            lastAssistantStreamingText ||
-                            currentLiveAssistantText ||
-                            ""
-                        ).trim();
-
+                        // FIX: Trust the backend's text. DO NOT fallback to lastAssistantStreamingText!
+                        const finalText = cleanDisplayText(data.botText || "").trim();
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
                         if (finalText) {
@@ -1265,8 +1259,14 @@
                             }
                             
                             updateLiveTranscript(finalText, finalTag, true);
+                        } else if (botTarget) {
+                            // FIX: If it was a phantom turn, delete the empty UI bubble
+                            botTarget.remove();
                         }
 
+                        // FIX: Wipe the cache so text never leaks into the next chat bubble
+                        lastAssistantStreamingText = "";
+                        currentLiveAssistantText = "";
                         activeTag = finalTag;
                         
                         const finalBotTarget = botTarget || lastBotMessageDiv;
