@@ -417,39 +417,6 @@
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
 
-        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION ⚡
-        let recognition = null;
-        let liveUserText = "";
-        let finalTranscript = ""; 
-
-        if ('webkitSpeechRecognition' in window) {
-            recognition = new webkitSpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = 'hi-IN'; // Better detection for Indian English/Hindi
-
-            recognition.onresult = (event) => {
-                let interimTranscript = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript + " ";
-                    } else {
-                        interimTranscript += event.results[i][0].transcript;
-                    }
-                }
-                liveUserText = (finalTranscript + interimTranscript).trim();
-                
-                if (liveUserText) {
-                    const interimBox = document.getElementById('usd-interim-text');
-                    if (interimBox) {
-                        interimBox.innerText = "You: " + liveUserText;
-                        interimBox.style.color = "#D4AF37";
-                    }
-                }
-            };
-            recognition.onerror = (e) => {}; // Fails silently
-        }
-
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
             '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist' },
@@ -498,7 +465,7 @@
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
+            result = result.replace(new RegExp("", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
@@ -522,6 +489,10 @@
             if (newState === 'speaking') {
                 if (isVoiceMode) {
                     visualizer.classList.add('active');
+                    if (interimBox && !interimBox.innerText.includes("You:") && !isReplyComplete) {
+                        interimBox.innerText = "Answering...";
+                        interimBox.style.color = "#ffffff";
+                    }
                 }
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
@@ -529,14 +500,9 @@
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
-                if (interimBox) {
-                    if (liveUserText) {
-                        interimBox.innerText = "You: " + liveUserText;
-                        interimBox.style.color = "#D4AF37";
-                    } else if (!interimBox.innerText.includes("You:")) {
-                        interimBox.innerText = "Listening...";
-                        interimBox.style.color = "#D4AF37";
-                    }
+                if (interimBox && !interimBox.innerText.includes("You:")) {
+                    interimBox.innerText = "Listening...";
+                    interimBox.style.color = "#D4AF37";
                 }
             } else {
                 isMicSoftwareMuted = true;
@@ -544,13 +510,8 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    if (liveUserText) {
-                        interimBox.innerText = "You: " + liveUserText + " ...";
-                        interimBox.style.color = "#ffffff";
-                    } else {
-                        interimBox.innerText = "Answering...";
-                        interimBox.style.color = "#ffffff";
-                    }
+                    interimBox.innerText = "Answering...";
+                    interimBox.style.color = "#ffffff";
                 }
             }
 
@@ -576,16 +537,49 @@
 
         function detectLocalTagFromText(input = '') {
             const text = cleanDisplayText(String(input || "").toLowerCase());
-            if (text.includes("end chat") || text.includes("goodbye") || text.includes("bye") || text.includes("take care") || text.includes("see you")) return "[END_CHAT]";
-            if (text.includes("virtual smile") || text.includes("try on") || text.includes("smile try") || text.includes("design my smile")) return "[LINK_VTRYON]";
-            if (text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist") || text.includes("locate dentist")) return "[LINK_DENTISTS]";
-            if (text.includes("consultation") || text.includes("consult") || text.includes("appointment") || text.includes("visit the clinic")) return "[LINK_CONSULT]";
-            if (text.includes("contact") || text.includes("reach out") || text.includes("get in touch") || text.includes("call us")) return "[LINK_CONTACT]";
-            if (text.includes("dentist connect") || text.includes("collaborate") || text.includes("partner")) return "[LINK_CONNECT]";
-            if (text.includes("gallery") || text.includes("results") || text.includes("before and after")) return "[LINK_GALLERY]";
+
+            if (
+                text.includes("end chat") || text.includes("goodbye") || text.includes("bye") || text.includes("take care") || text.includes("see you") ||
+                text.includes("अलविदा") || text.includes("बाय") || text.includes("फिर मिलेंगे") || text.includes("આવજો") || text.includes("બાય")
+            ) return "[END_CHAT]";
+
+            if (
+                text.includes("virtual smile") || text.includes("try on") || text.includes("try-on") || text.includes("smile try") || text.includes("smile makeover") ||
+                text.includes("design my smile") || text.includes("see how your smile") || text.includes("before and after") || text.includes("before/after") ||
+                text.includes("वर्चुअल स्माइल") || text.includes("વર્ચ્યુઅલ સ્માઇલ")
+            ) return "[LINK_VTRYON]";
+
+            if (
+                text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist") || text.includes("find a dentist") ||
+                text.includes("nearby dentist") || text.includes("locate dentist") || text.includes("dentist near") || text.includes("nearest clinic") ||
+                text.includes("सर्टिफाइड डेंटिस्ट") || text.includes("નજીકના ડેન્ટિસ્ટ") || text.includes("સર્ટિફાઇડ ડેન્ટિસ્ટ")
+            ) return "[LINK_DENTISTS]";
+
+            if (
+                text.includes("consultation") || text.includes("consult") || text.includes("schedule") || text.includes("appointment") || text.includes("book") ||
+                text.includes("visit the clinic") || text.includes("कंसल्टेशन") || text.includes("अपॉइंटमेंट") || text.includes("કન્સલ્ટેશન") || text.includes("એપોઇન્ટમેન્ટ")
+            ) return "[LINK_CONSULT]";
+
+            if (
+                text.includes("contact") || text.includes("reach out") || text.includes("get in touch") || text.includes("call us") || text.includes("phone number") ||
+                text.includes("संपर्क") || text.includes("સંપર્ક")
+            ) return "[LINK_CONTACT]";
+
+            if (
+                text.includes("dentist connect") || text.includes("become certified dentist") || text.includes("collaborate") || text.includes("partner") ||
+                text.includes("join our network") || text.includes("डेंटिस्ट कनेक्ट") || text.includes("ડેન્ટિસ્ટ કનેક્ટ")
+            ) return "[LINK_CONNECT]";
+
+            if (
+                text.includes("gallery") || text.includes("results") || text.includes("before and after") || text.includes("before/after") ||
+                text.includes("गैलरी") || text.includes("ગેલેરી")
+            ) return "[LINK_GALLERY]";
+
             return null;
         }
 
+        // ⚡ PERFECT MIDDLE GROUND VAD ⚡
+        // Extremely sensitive for listening (so it responds quickly), but strictly gated for interruptions.
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -601,9 +595,19 @@
 
             for (let i = 0; i < dataArray.length; i++) {
                 const v = dataArray[i];
-                if (i >= speechStart && i <= speechEnd) { speechSum += v; speechCount++; } 
-                else { noiseSum += v; noiseCount++; }
-                if (i >= coreStart && i <= coreEnd) { coreSum += v; coreCount++; }
+
+                if (i >= speechStart && i <= speechEnd) {
+                    speechSum += v;
+                    speechCount++;
+                } else {
+                    noiseSum += v;
+                    noiseCount++;
+                }
+
+                if (i >= coreStart && i <= coreEnd) {
+                    coreSum += v;
+                    coreCount++;
+                }
             }
 
             let energy = 0;
@@ -619,13 +623,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // ⚡ UPDATED: MUCH MORE SENSITIVE VAD FOR EASIER LISTENING
+            // ⚡ Very sensitive threshold to effortlessly pick up your voice from 18 inches ⚡
             const isNearHumanSpeech =
-                rms > 0.005 &&            
-                speechAvg > 8 &&         
-                coreAvg > 10 &&
+                rms > 0.010 &&            
+                speechAvg > 10 &&         
+                coreAvg > 12 &&
                 speechRatio > 0.50 &&     
-                coreVsNoise > 1.05;       
+                coreVsNoise > 1.10;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -633,11 +637,14 @@
         function renderPopupLink(tag) {
             const wrap = document.getElementById('usd-live-transcript-link-wrap');
             if (!wrap) return;
+
             wrap.innerHTML = '';
+
             if (!tag || !usdLinks[tag]) {
                 wrap.style.display = 'none';
                 return;
             }
+
             const label = document.createElement('div');
             label.style.color = '#D4AF37';
             label.style.fontSize = '11px';
@@ -661,7 +668,9 @@
             if (!popup || !popupText) return;
 
             syncTranscriptLabel();
+
             const clean = cleanDisplayText(text || '');
+
             if (clean) {
                 currentLiveAssistantText = clean;
                 lastAssistantStreamingText = clean;
@@ -671,6 +680,7 @@
 
             const finalText = cleanDisplayText(text || currentLiveAssistantText || '');
             const finalTag = tag || detectLocalTagFromText(finalText) || currentLiveAssistantTag;
+
             currentLiveAssistantTag = finalTag || null;
             popupText.textContent = finalText;
 
@@ -688,7 +698,10 @@
                 const popupLinkWrap = document.getElementById('usd-live-transcript-link-wrap');
                 if (popup) popup.style.display = 'none';
                 if (popupText) popupText.textContent = '';
-                if (popupLinkWrap) { popupLinkWrap.innerHTML = ''; popupLinkWrap.style.display = 'none'; }
+                if (popupLinkWrap) {
+                    popupLinkWrap.innerHTML = '';
+                    popupLinkWrap.style.display = 'none';
+                }
                 currentLiveAssistantText = "";
                 currentLiveAssistantTag = null;
                 lastAssistantStreamingText = "";
@@ -698,17 +711,21 @@
         function createMessageDiv(sender, text) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `msg msg-${sender}`;
+
             const span = document.createElement('span');
             span.className = 'usd-msg-text';
+
             if (sender === 'user') span.textContent = "You: " + text;
             else if (sender === 'bot') span.textContent = "Assistant: " + text;
             else span.textContent = text;
+
             msgDiv.appendChild(span);
             return msgDiv;
         }
 
         function appendLinkButton(targetEl, tag) {
             if (!targetEl || !tag || !usdLinks[tag]) return;
+
             const btn = document.createElement('button');
             btn.className = 'usd-link-card';
             btn.innerText = usdLinks[tag].label;
@@ -723,8 +740,10 @@
         function addUserHistoryIfNew(text) {
             const clean = cleanDisplayText(text);
             if (!clean) return;
+
             const last = chatHistory[chatHistory.length - 1];
             if (last && last.role === 'user' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
+
             chatHistory.push({ role: "user", parts: [{ text: clean }] });
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
             saveHistory();
@@ -806,9 +825,27 @@
             }, 3000);
         }
 
-        // ⚡ DISABLED INTERRUPTIONS (100% EMPTY) ⚡
         function interruptBot() {
-            // "no intruption" -> user explicitly requested AI shouldn't stop when user speaks.
+            audioChunkQueue = [];
+            isReplyComplete = false; 
+            nextPlayTime = 0; 
+            
+            interruptRestartHoldUntil = performance.now() + 180;
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(JSON.stringify({ type: 'interrupt' }));
+                } catch (e) {}
+            }
+
+            activeSources.forEach(s => {
+                try { s.stop(); } catch(e) {}
+            });
+            activeSources = [];
+            hideLiveTranscript(0);
+            activeBotMessageDiv = null;
+            activeBotTextSpan = null;
+            lastAssistantStreamingText = "";
         }
 
         function toggleChatMode() {
@@ -833,6 +870,7 @@
                 textControls.style.display = "flex";
                 micText.style.display = "none";
                 if (liveTranscript) liveTranscript.style.display = "none";
+                interruptBot();
                 syncTranscriptLabel();
                 updateState('listening');
             }
@@ -873,7 +911,9 @@
                         const sender = turn.role === 'model' ? 'bot' : 'user';
                         let cleanText = cleanDisplayText(turn.parts[0].text);
                         let foundTag = null;
-                        if (turn.role === 'model') foundTag = detectLocalTagFromText(cleanText);
+                        if (turn.role === 'model') {
+                            foundTag = detectLocalTagFromText(cleanText);
+                        }
                         logMessage(sender, cleanText, foundTag);
                     });
 
@@ -905,7 +945,11 @@
 
                 socket.onopen = async () => {
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                        audio: { 
+                            echoCancellation: true, 
+                            noiseSuppression: true, 
+                            autoGainControl: true 
+                        }
                     });
 
                     const streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
@@ -942,6 +986,7 @@
                     let shortPauseTimer = null; 
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
+                    let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -958,14 +1003,9 @@
                     };
 
                     function detectVoice() {
-                        // ⚡ STRICT INTERRUPTION FIX ⚡ 
-                        // If Bot is speaking or thinking, COMPLETELY IGNORE SOUND (Do not try to interrupt)
-                        if (currentAgentState === 'speaking' || currentAgentState === 'thinking') {
-                            requestAnimationFrame(detectVoice);
-                            return;
-                        }
+                        const isSpeakingNow = currentAgentState === 'speaking';
 
-                        if (isMicSoftwareMuted) {
+                        if (isMicSoftwareMuted && !isSpeakingNow) {
                             requestAnimationFrame(detectVoice);
                             return;
                         }
@@ -991,38 +1031,61 @@
                             analyser.fftSize || 512
                         );
 
+                        if (isSpeakingNow) {
+                            // ⚡ STRICTION ON INTERRUPTION: Requires significantly louder/nearer voice for solid 300ms ⚡
+                            // Because it takes 10 consecutive frames, brief background noises or single words won't interrupt her!
+                            if (speechProfile.isNearHumanSpeech && humanVolume > 35) { 
+                                consecutiveLoudFrames++;
+                                if (consecutiveLoudFrames >= 10) { 
+                                    consecutiveLoudFrames = 0;
+
+                                    clearTimeout(shortPauseTimer);
+                                    clearTimeout(longPauseTimer);
+                                    clearTimeout(maxRecordingTimer);
+                                    shortPauseTimer = null;
+                                    longPauseTimer = null;
+                                    maxRecordingTimer = null;
+
+                                    interruptBot();
+                                    updateState('listening');
+                                    isRecording = false;
+                                }
+                            } else {
+                                consecutiveLoudFrames = 0; 
+                            }
+                            requestAnimationFrame(detectVoice);
+                            return;
+                        }
+
                         if (currentAgentState === 'listening' && isVoiceMode) {
-                            // ⚡ MORE SENSITIVE RECORDING START ⚡
-                            const canStartRecording = speechProfile.isNearHumanSpeech && humanVolume > 5; 
+                            const inRestartHold = performance.now() < interruptRestartHoldUntil;
+
+                            const canStartRecording = inRestartHold
+                                ? (
+                                    speechProfile.isNearHumanSpeech &&
+                                    humanVolume > 40 &&
+                                    speechProfile.speechRatio > 0.65
+                                )
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 10); // ⚡ Fast-reacting listening threshold
 
                             if (canStartRecording) { 
                                 if (!isRecording) {
                                     isRecording = true;
-                                    liveUserText = ""; 
-                                    finalTranscript = ""; // ⚡ WIPE FINAL
-                                    if (recognition) {
-                                        try { 
-                                            recognition.abort(); 
-                                            setTimeout(() => recognition.start(), 50); 
-                                        } catch(e) {}
-                                    }
                                     updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
                                     
-                                    // Give user plenty of time to speak
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
-                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
                                             updateState('thinking');
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                             }
                                         }
-                                    }, 20000); 
+                                    }, 14000); 
                                 }
                                 
                                 clearTimeout(shortPauseTimer);
@@ -1032,20 +1095,19 @@
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
-                                }, 1000); 
+                                }, 600); 
 
-                                // ⚡ INCREASED LONG PAUSE SO IT DOESN'T CUT USER OFF TOO FAST ⚡
+                                // ⚡ FAST TRANSITION: 800ms to immediately switch to "Answering..." when you stop talking
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
-                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking');
                                         if (socket.readyState === WebSocket.OPEN) {
                                             socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                         }
                                     }
-                                }, 2000); 
+                                }, 800); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
@@ -1059,38 +1121,20 @@
                     
                     if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
-                        liveUserText = ""; 
-                        finalTranscript = ""; 
-                        if (recognition) { try { recognition.abort(); } catch(e) {} }
-                        
-                        const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox) interimBox.innerText = "";
-                        
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
-                        // ⚡ THIS IS WHERE YOUR POPUP CHAT LOG GETS THE TRANSCRIBE! ⚡
                         const cleanUserText = cleanDisplayText(data.text || "");
                         if (cleanUserText) {
                             logMessage('user', cleanUserText);
                             addUserHistoryIfNew(cleanUserText);
-                            
-                            liveUserText = "";
-                            finalTranscript = ""; 
-                            const interimBox = document.getElementById('usd-interim-text');
-                            if (interimBox && interimBox.innerText.includes("You:")) {
-                                interimBox.innerText = "Answering...";
-                                interimBox.style.color = "#ffffff";
-                            }
                         }
                     }
                     else if (data.type === 'interim_transcript') {
-                        if (!recognition && data.text) {
-                            const interimBox = document.getElementById('usd-interim-text');
-                            if (interimBox) {
-                                interimBox.innerText = "You: " + data.text;
-                                interimBox.style.color = "#D4AF37";
-                            }
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) {
+                            interimBox.innerText = "You: " + data.text;
+                            interimBox.style.color = "#D4AF37";
                         }
                     }
                     else if (data.type === 'text_stream') {
@@ -1127,10 +1171,8 @@
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
                         
-                        liveUserText = ""; 
-                        finalTranscript = ""; 
                         const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox) {
+                        if (interimBox && interimBox.innerText === "Answering...") {
                             interimBox.innerText = "";
                         }
 
@@ -1202,6 +1244,7 @@
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
                 updateState('thinking');
+                interruptBot();
                 
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
                 logMessage('bot', goodbyeText);
@@ -1229,6 +1272,7 @@
 
         function closeChat(showRating = false) {
             updateState('off');
+            interruptBot();
             hideLiveTranscript(0);
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
@@ -1258,10 +1302,10 @@
 
             try {
                 let transcript = "No chat history recorded.";
-                const allMessages = document.querySelectorAll('#usd-chat-log .usd-msg-text');
-                if (allMessages.length > 0) {
-                    transcript = Array.from(allMessages).map(msg => msg.innerText).join('\n\n');
+                if (chatHistory && chatHistory.length > 0) {
+                    transcript = chatHistory.map(turn => `${turn.role === 'user' ? 'User' : 'Agent'}: ${turn.parts[0].text}`).join('\n\n');
                 }
+
                 await fetch('https://api.web3forms.com/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -1284,6 +1328,7 @@
             if (!userText || currentAgentState === 'thinking' || currentAgentState === 'connecting') return;
 
             inputEl.value = ''; 
+            interruptBot();
 
             updateState('thinking');
             
@@ -1317,6 +1362,7 @@
             saveHistory();
 
             window.open(linkInfo.url, '_blank');
+            
             updateState('listening');
         }
         
