@@ -399,9 +399,6 @@
         let globalStream = null;
         let isVoiceMode = true; 
         
-        let isRecording = false; // ⚡ ADDED GLOBALLY
-        let idleTimer = null;    // ⚡ ADDED 15-20 SECOND IDLE TIMER GLOBALLY
-        
         let audioCtx = null;
         let audioChunkQueue = [];
         let isAudioPlaying = false;
@@ -419,39 +416,6 @@
         let currentLiveAssistantText = "";
         let currentLiveAssistantTag = null;
         let lastAssistantStreamingText = "";
-
-        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION ⚡
-        let recognition = null;
-        let liveUserText = "";
-        let finalTranscript = ""; 
-
-        if ('webkitSpeechRecognition' in window) {
-            recognition = new webkitSpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = 'hi-IN';
-
-            recognition.onresult = (event) => {
-                let interimTranscript = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript + " ";
-                    } else {
-                        interimTranscript += event.results[i][0].transcript;
-                    }
-                }
-                liveUserText = (finalTranscript + interimTranscript).trim();
-                
-                if (liveUserText) {
-                    const interimBox = document.getElementById('usd-interim-text');
-                    if (interimBox) {
-                        interimBox.innerText = "You: " + liveUserText;
-                        interimBox.style.color = "#D4AF37";
-                    }
-                }
-            };
-            recognition.onerror = (e) => {}; 
-        }
 
         const usdLinks = {
             '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
@@ -501,7 +465,7 @@
         function cleanDisplayText(text = "") {
             let result = String(text || "");
             result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
-            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
+            result = result.replace(new RegExp("", "g"), "");
             result = result.replace(new RegExp("\\s+", "g"), " ");
             return result.trim();
         }
@@ -525,6 +489,10 @@
             if (newState === 'speaking') {
                 if (isVoiceMode) {
                     visualizer.classList.add('active');
+                    if (interimBox && !interimBox.innerText.includes("You:") && !isReplyComplete) {
+                        interimBox.innerText = "Answering...";
+                        interimBox.style.color = "#ffffff";
+                    }
                 }
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
@@ -532,14 +500,9 @@
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
-                if (interimBox) {
-                    if (liveUserText) {
-                        interimBox.innerText = "You: " + liveUserText;
-                        interimBox.style.color = "#D4AF37";
-                    } else if (!interimBox.innerText.includes("You:")) {
-                        interimBox.innerText = "Listening...";
-                        interimBox.style.color = "#D4AF37";
-                    }
+                if (interimBox && !interimBox.innerText.includes("You:")) {
+                    interimBox.innerText = "Listening...";
+                    interimBox.style.color = "#D4AF37";
                 }
             } else {
                 isMicSoftwareMuted = true;
@@ -547,34 +510,13 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    if (liveUserText) {
-                        interimBox.innerText = "You: " + liveUserText + " ...";
-                        interimBox.style.color = "#ffffff";
-                    } else {
-                        interimBox.innerText = "Answering...";
-                        interimBox.style.color = "#ffffff";
-                    }
+                    interimBox.innerText = "Answering...";
+                    interimBox.style.color = "#ffffff";
                 }
             }
 
             if (!isVoiceMode && interimBox && newState !== 'thinking') {
                 interimBox.innerText = "";
-            }
-
-            // ⚡ 15-20 SECOND SILENCE IDLE TIMER ⚡
-            clearTimeout(idleTimer);
-            if (newState === 'listening' && isVoiceMode && !isRecording) {
-                idleTimer = setTimeout(() => {
-                    if (currentAgentState === 'listening' && !isRecording && socket && socket.readyState === WebSocket.OPEN) {
-                        updateState('thinking');
-                        socket.send(JSON.stringify({ 
-                            type: 'text_input', 
-                            text: "SYSTEM INSTRUCTION: The user has been completely silent for 20 seconds. Ask them politely if they are still there and if they have any questions.", 
-                            history: chatHistory,
-                            isVoiceMode: isVoiceMode 
-                        }));
-                    }
-                }, 20000); // 20-second pure silence trigger
             }
         }
 
@@ -636,6 +578,8 @@
             return null;
         }
 
+        // ⚡ PERFECT MIDDLE GROUND VAD ⚡
+        // Extremely sensitive for listening (so it responds quickly), but strictly gated for interruptions.
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
@@ -679,12 +623,13 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
+            // ⚡ Very sensitive threshold to effortlessly pick up your voice from 18 inches ⚡
             const isNearHumanSpeech =
-                rms > 0.015 &&            
-                speechAvg > 15 &&         
-                coreAvg > 18 &&
-                speechRatio > 0.60 &&     
-                coreVsNoise > 1.15;       
+                rms > 0.010 &&            
+                speechAvg > 10 &&         
+                coreAvg > 12 &&
+                speechRatio > 0.50 &&     
+                coreVsNoise > 1.10;       
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -880,9 +825,27 @@
             }, 3000);
         }
 
-        // ⚡ DISABLED INTERRUPTIONS FOR TESTING ⚡
         function interruptBot() {
-            // Disabled
+            audioChunkQueue = [];
+            isReplyComplete = false; 
+            nextPlayTime = 0; 
+            
+            interruptRestartHoldUntil = performance.now() + 180;
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(JSON.stringify({ type: 'interrupt' }));
+                } catch (e) {}
+            }
+
+            activeSources.forEach(s => {
+                try { s.stop(); } catch(e) {}
+            });
+            activeSources = [];
+            hideLiveTranscript(0);
+            activeBotMessageDiv = null;
+            activeBotTextSpan = null;
+            lastAssistantStreamingText = "";
         }
 
         function toggleChatMode() {
@@ -1019,10 +982,11 @@
                         updateState('listening');
                     }
 
+                    let isRecording = false;
                     let shortPauseTimer = null; 
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
-                    let consecutiveLoudFrames = 0; // ⚡ Used for Thud/Noise Protection
+                    let consecutiveLoudFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1033,7 +997,6 @@
                             pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
                         }
                         
-                        // ONLY streams audio to server when recording is fully active
                         if (socket && socket.readyState === WebSocket.OPEN && isRecording) {
                             socket.send(pcm16.buffer); 
                         }
@@ -1069,6 +1032,27 @@
                         );
 
                         if (isSpeakingNow) {
+                            // ⚡ STRICTION ON INTERRUPTION: Requires significantly louder/nearer voice for solid 300ms ⚡
+                            // Because it takes 10 consecutive frames, brief background noises or single words won't interrupt her!
+                            if (speechProfile.isNearHumanSpeech && humanVolume > 35) { 
+                                consecutiveLoudFrames++;
+                                if (consecutiveLoudFrames >= 10) { 
+                                    consecutiveLoudFrames = 0;
+
+                                    clearTimeout(shortPauseTimer);
+                                    clearTimeout(longPauseTimer);
+                                    clearTimeout(maxRecordingTimer);
+                                    shortPauseTimer = null;
+                                    longPauseTimer = null;
+                                    maxRecordingTimer = null;
+
+                                    interruptBot();
+                                    updateState('listening');
+                                    isRecording = false;
+                                }
+                            } else {
+                                consecutiveLoudFrames = 0; 
+                            }
                             requestAnimationFrame(detectVoice);
                             return;
                         }
@@ -1076,81 +1060,54 @@
                         if (currentAgentState === 'listening' && isVoiceMode) {
                             const inRestartHold = performance.now() < interruptRestartHoldUntil;
 
-                            // ⚡ INCREASED HEARING POWER: Lowered volume thresholds so it picks up softer voices ⚡
                             const canStartRecording = inRestartHold
                                 ? (
                                     speechProfile.isNearHumanSpeech &&
-                                    humanVolume > 20 && 
+                                    humanVolume > 40 &&
                                     speechProfile.speechRatio > 0.65
                                 )
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 6); 
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 10); // ⚡ Fast-reacting listening threshold
 
-                            // ⚡ THUD & COUGH PROTECTION: Requires continuous frames of speech ⚡
-                            if (canStartRecording) {
-                                consecutiveLoudFrames++;
-                            } else {
-                                consecutiveLoudFrames = Math.max(0, consecutiveLoudFrames - 2); // decays quickly on noise
-                            }
-
-                            // Requires ~130ms of sustained speech to start (ignores instant thuds)
-                            if (!isRecording && consecutiveLoudFrames > 8) { 
-                                isRecording = true;
-                                clearTimeout(idleTimer); // ⚡ Stop the 20s Idle timer since they started speaking!
-                                liveUserText = ""; 
-                                finalTranscript = ""; 
-                                if (recognition) {
-                                    try { 
-                                        recognition.abort(); 
-                                        setTimeout(() => recognition.start(), 50); 
-                                    } catch(e) {}
-                                }
-                                updateState('listening'); 
-                                
-                                if (socket.readyState === WebSocket.OPEN) {
-                                    socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                }
-                                
-                                maxRecordingTimer = setTimeout(() => {
-                                    if (isRecording) {
-                                        isRecording = false;
-                                        consecutiveLoudFrames = 0;
-                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                        updateState('thinking');
-                                        if (socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
-                                        }
-                                    }
-                                }, 14000); 
-                            }
-                            
-                            // ⚡ PREVENT CUTTING OFF MID-BREATH ⚡
-                            if (isRecording) {
-                                // Keeps the mic open even if it drops to a low hum between words
-                                if (canStartRecording || humanVolume > 5) {
-                                    clearTimeout(shortPauseTimer);
-                                    clearTimeout(longPauseTimer);
+                            if (canStartRecording) { 
+                                if (!isRecording) {
+                                    isRecording = true;
+                                    updateState('listening'); 
                                     
-                                    // 1000ms delay to process interim text
-                                    shortPauseTimer = setTimeout(() => {
-                                        if (isRecording && socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ type: 'process_interim' }));
-                                        }
-                                    }, 1000); 
-
-                                    // 1500ms delay before completely stopping the voice turn
-                                    longPauseTimer = setTimeout(() => {
+                                    if (socket.readyState === WebSocket.OPEN) {
+                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
+                                    }
+                                    
+                                    maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
-                                            consecutiveLoudFrames = 0;
-                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                            clearTimeout(maxRecordingTimer);
                                             updateState('thinking');
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
                                             }
                                         }
-                                    }, 1500); 
+                                    }, 14000); 
                                 }
+                                
+                                clearTimeout(shortPauseTimer);
+                                clearTimeout(longPauseTimer);
+                                
+                                shortPauseTimer = setTimeout(() => {
+                                    if (isRecording && socket.readyState === WebSocket.OPEN) {
+                                        socket.send(JSON.stringify({ type: 'process_interim' }));
+                                    }
+                                }, 600); 
+
+                                // ⚡ FAST TRANSITION: 800ms to immediately switch to "Answering..." when you stop talking
+                                longPauseTimer = setTimeout(() => {
+                                    if (isRecording) {
+                                        isRecording = false;
+                                        clearTimeout(maxRecordingTimer);
+                                        updateState('thinking');
+                                        if (socket.readyState === WebSocket.OPEN) {
+                                            socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
+                                        }
+                                    }
+                                }, 800); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
@@ -1164,13 +1121,6 @@
                     
                     if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
-                        liveUserText = ""; 
-                        finalTranscript = ""; 
-                        if (recognition) { try { recognition.abort(); } catch(e) {} }
-                        
-                        const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox) interimBox.innerText = "";
-                        
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
@@ -1178,20 +1128,12 @@
                         if (cleanUserText) {
                             logMessage('user', cleanUserText);
                             addUserHistoryIfNew(cleanUserText);
-                            
-                            liveUserText = "";
-                            finalTranscript = ""; 
-                            const interimBox = document.getElementById('usd-interim-text');
-                            if (interimBox && interimBox.innerText.includes("You:")) {
-                                interimBox.innerText = "Answering...";
-                                interimBox.style.color = "#ffffff";
-                            }
                         }
                     }
-                   else if (data.type === 'interim_transcript') {
+                    else if (data.type === 'interim_transcript') {
                         const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox && data.text) {
-                            interimBox.innerText = "You: " + data.text + " ...";
+                        if (interimBox) {
+                            interimBox.innerText = "You: " + data.text;
                             interimBox.style.color = "#D4AF37";
                         }
                     }
@@ -1229,10 +1171,8 @@
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
                         
-                        liveUserText = ""; 
-                        finalTranscript = "";
                         const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox) {
+                        if (interimBox && interimBox.innerText === "Answering...") {
                             interimBox.innerText = "";
                         }
 
@@ -1240,7 +1180,13 @@
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
 
-                        const finalText = cleanDisplayText(data.botText || "").trim();
+                        const finalText = cleanDisplayText(
+                            data.botText ||
+                            lastAssistantStreamingText ||
+                            currentLiveAssistantText ||
+                            ""
+                        ).trim();
+
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
                         if (finalText) {
@@ -1259,12 +1205,8 @@
                             }
                             
                             updateLiveTranscript(finalText, finalTag, true);
-                        } else if (botTarget) {
-                            botTarget.remove();
                         }
 
-                        lastAssistantStreamingText = "";
-                        currentLiveAssistantText = "";
                         activeTag = finalTag;
                         
                         const finalBotTarget = botTarget || lastBotMessageDiv;
@@ -1330,7 +1272,6 @@
 
         function closeChat(showRating = false) {
             updateState('off');
-            clearTimeout(idleTimer);
             interruptBot();
             hideLiveTranscript(0);
             if (socket) socket.close();
@@ -1362,6 +1303,7 @@
             try {
                 let transcript = "No chat history recorded.";
                 
+                // ⚡ FIX: Scrape the ENTIRE visual chat log from the UI instead of the 6-message Gemini array ⚡
                 const allMessages = document.querySelectorAll('#usd-chat-log .usd-msg-text');
                 if (allMessages.length > 0) {
                     transcript = Array.from(allMessages).map(msg => msg.innerText).join('\n\n');
