@@ -1257,7 +1257,6 @@
          * ============================================================================
          * INTERRUPTION CONTROLLER (BARGE-IN)
          * ============================================================================
-         * ⚡ FIX: Requests an explicit backend barge-in sequence
          */
         function interruptBot() {
             if (!isVoiceMode) return;
@@ -1498,7 +1497,6 @@
                             analyser.fftSize || 512
                         );
 
-                        // ⚡ 1.5s FOREGROUND INTERRUPTION LOGIC ⚡
                         if (isSpeakingNow) {
                             const isForegroundVoice = speechProfile.isNearHumanSpeech && 
                                                       humanVolume > 25 && 
@@ -1610,7 +1608,6 @@
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    // ⚡ FIX: Instant flush if the backend confirms interception
                     if (data.type === 'bot_interrupted') {
                         audioChunkQueue = [];
                         if (window.activeAudioSourceNode) {
