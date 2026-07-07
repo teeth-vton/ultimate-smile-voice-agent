@@ -718,22 +718,44 @@
 
         /**
          * ============================================================================
+         * 10-SECOND SILENCE TIMEOUT ENGINE
+         * ============================================================================
+         */
+        window.silenceTimeout = null;
+
+        window.resetSilenceTimer = () => {
+            clearTimeout(window.silenceTimeout);
+            window.silenceTimeout = setTimeout(() => {
+                if (currentAgentState === 'listening' && isVoiceMode) {
+                    updateState('thinking');
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({
+                            type: 'text_input',
+                            text: "SYSTEM INSTRUCTION: The user has been completely silent for 10 seconds. Ask them politely: 'Are you still there? Please let me know if you have any questions.' Do not say anything else.",
+                            history: chatHistory,
+                            isVoiceMode: true
+                        }));
+                    }
+                }
+            }, 10000);
+        };
+
+        window.clearSilenceTimer = () => {
+            clearTimeout(window.silenceTimeout);
+        };
+
+        /**
+         * ============================================================================
          * NATIVE BROWSER SPEECH RECOGNITION INIT
          * ============================================================================
-         * Attempts to mount the webkitSpeechRecognition API to enable live transcription
-         * of the user's speech as an overlay text, providing feedback before backend finishes.
          */
         if ('webkitSpeechRecognition' in window) {
             recognition = new webkitSpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
             
-            // Allow browser to auto-detect context and language rather than forcing translation
-            // recognition.lang = 'hi-IN'; 
-
             recognition.onresult = (event) => {
                 let interimTranscript = '';
-
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     if (event.results[i].isFinal) {
                         finalTranscript += event.results[i][0].transcript + " ";
@@ -752,10 +774,7 @@
                     }
                 }
             };
-
-            recognition.onerror = (e) => {
-                // Fail silently to avoid interrupting UX
-            }; 
+            recognition.onerror = (e) => {}; 
         }
 
         /**
@@ -822,7 +841,6 @@
          * ============================================================================
          * TEXT SANITIZATION
          * ============================================================================
-         * Cleans incoming and outgoing text to ensure no raw HTML or tags leak.
          */
         function cleanDisplayText(text = "") {
             let result = String(text || "");
@@ -836,8 +854,6 @@
          * ============================================================================
          * UI STATE MANAGEMENT
          * ============================================================================
-         * Controls the active elements in the chat header, the visualizer, and the 
-         * underlying status logic indicating listening, speaking, or thinking.
          */
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
@@ -856,15 +872,16 @@
             }
 
             if (newState === 'speaking') {
-                if (isVoiceMode) {
-                    visualizer.classList.add('active');
-                }
+                if (isVoiceMode) visualizer.classList.add('active');
             } else {
                 if (isVoiceMode) visualizer.classList.remove('active');
             }
 
+            // ⚡ TIMEOUT CONTROLLER INJECTED HERE ⚡
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
+                if (window.resetSilenceTimer) window.resetSilenceTimer(); // Start 10s timer
+
                 if (interimBox) {
                     if (liveUserText) {
                         interimBox.innerText = "You: " + liveUserText;
@@ -875,15 +892,15 @@
                     }
                 }
             } else if (newState === 'speaking' && isVoiceMode) {
-                // KEEP MIC UNMUTED DURING SPEAKING SO BARGE-IN WORKS
                 isMicSoftwareMuted = false;
+                if (window.clearSilenceTimer) window.clearSilenceTimer(); // Stop timer
             } else {
                 isMicSoftwareMuted = true;
+                if (window.clearSilenceTimer) window.clearSilenceTimer(); // Stop timer
             }
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    // FREEZE TEXT WHILE PROCESSING
                     if (liveUserText) {
                         interimBox.innerText = "You: " + liveUserText + " ...";
                         interimBox.style.color = "#ffffff";
@@ -928,7 +945,6 @@
          * ============================================================================
          * LOCAL KEYWORD & TAG DETECTION
          * ============================================================================
-         * Identifies specific keywords to trigger frontend action buttons.
          */
         function detectLocalTagFromText(input = '') {
             const text = cleanDisplayText(String(input || "").toLowerCase());
@@ -977,8 +993,6 @@
          * ============================================================================
          * VOICE ACTIVITY DETECTION (VAD) ENGINE
          * ============================================================================
-         * Analyzes raw audio frequencies via FFT to determine if a human is speaking,
-         * filtering out background noise, bumps, and thuds by comparing core averages.
          */
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
@@ -1496,21 +1510,24 @@
                             analyser.fftSize || 512
                         );
 
-                        // ⚡ 1.5s FOREGROUND INTERRUPTION LOGIC ⚡
+                        // ⚡ 1.2s-1.5s SMART FOREGROUND INTERRUPTION LOGIC ⚡
                         if (isSpeakingNow) {
+                            // Easily triggered by normal conversation, completely ignores thuds
                             const isForegroundVoice = speechProfile.isNearHumanSpeech && 
-                                                      humanVolume > 25 && 
-                                                      speechProfile.rms > 0.02 &&
-                                                      speechProfile.coreVsNoise > 2.0 &&
-                                                      speechProfile.speechRatio > 0.70;
+                                                      humanVolume > 15 && 
+                                                      speechProfile.rms > 0.01 &&
+                                                      speechProfile.coreVsNoise > 1.5 &&
+                                                      speechProfile.speechRatio > 0.60;
                                                       
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
-                                if (consecutiveInterruptFrames > 75) {
+                                // ~1.2 seconds of speech required to interrupt. No more shouting.
+                                if (consecutiveInterruptFrames > 60) {
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
                             } else {
+                                // Decay prevents micro-pauses from breaking the interruption logic
                                 consecutiveInterruptFrames = Math.max(0, consecutiveInterruptFrames - 1);
                             }
                             requestAnimationFrame(detectVoice);
@@ -1519,6 +1536,11 @@
 
                         if (currentAgentState === 'listening' && isVoiceMode) {
                             
+                            // Reset silence timer because the user is making sound
+                            if (humanVolume > 10 && window.resetSilenceTimer) {
+                                window.resetSilenceTimer();
+                            }
+
                             const volumeIsGood = humanVolume > 15; 
                             const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
 
@@ -1608,7 +1630,6 @@
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    // ⚡ FIX: Instant flush if the backend confirms interception
                     if (data.type === 'bot_interrupted') {
                         audioChunkQueue = [];
                         if (window.activeAudioSourceNode) {
