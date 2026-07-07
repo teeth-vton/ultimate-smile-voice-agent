@@ -731,7 +731,7 @@
             recognition.continuous = true;
             recognition.interimResults = true;
             
-            // ⚡ NOT FORCING HINDI ANYMORE: Allows browser to auto-detect context better
+            // Allow browser to auto-detect context and language rather than forcing translation
             // recognition.lang = 'hi-IN'; 
 
             recognition.onresult = (event) => {
@@ -1492,23 +1492,25 @@
                             analyser.fftSize || 512
                         );
 
-                        // ⚡ FOREGROUND INTERRUPTION LOGIC ⚡
+                        // ⚡ 1.5s FOREGROUND INTERRUPTION LOGIC ⚡
                         if (isSpeakingNow) {
-                            // Requires loud, sustained, very clear human voice directly into mic to interrupt
+                            // Requires very clear human voice directly into mic to interrupt
+                            // Not too loud, but very high clarity (coreVsNoise) to reject far background
                             const isForegroundVoice = speechProfile.isNearHumanSpeech && 
-                                                      humanVolume > 40 && 
-                                                      speechProfile.coreVsNoise > 1.8 &&
-                                                      speechProfile.speechRatio > 0.65;
+                                                      humanVolume > 25 && 
+                                                      speechProfile.rms > 0.02 &&
+                                                      speechProfile.coreVsNoise > 2.0 &&
+                                                      speechProfile.speechRatio > 0.70;
                                                       
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
-                                // Require ~250ms of sustained foreground speech to interrupt
-                                if (consecutiveInterruptFrames > 12) {
+                                // Require ~1.5 seconds (approx 75 frames at 60fps) of sustained foreground speech
+                                if (consecutiveInterruptFrames > 75) {
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
                             } else {
-                                // Allow micro-pauses but otherwise reset the interruption intent quickly
+                                // Drop slowly so micro-pauses between words don't instantly reset the 1.5s timer
                                 consecutiveInterruptFrames = Math.max(0, consecutiveInterruptFrames - 1);
                             }
                             requestAnimationFrame(detectVoice);
@@ -1629,7 +1631,7 @@
                     }
                     else if (data.type === 'user_spoken_text') {
                         // ⚡ THIS IS THE SINGLE SOURCE OF TRUTH. 
-                        // Backend echoes the fast-track string or Sarvam string instantly. ⚡
+                        // Backend echoes the fast-track string or Sarvam/Groq string instantly. ⚡
                         const cleanUserText = cleanDisplayText(data.text || "");
                         
                         if (cleanUserText) {
