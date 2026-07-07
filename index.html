@@ -1522,7 +1522,7 @@
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
                                 // ~1.2 seconds of speech required to interrupt. No more shouting.
-                                if (consecutiveInterruptFrames > 25) {
+                                if (consecutiveInterruptFrames > 50) {
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
