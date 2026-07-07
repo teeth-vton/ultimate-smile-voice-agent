@@ -1511,28 +1511,12 @@
                         );
 
                         // ⚡ 1.2s-1.5s SMART FOREGROUND INTERRUPTION LOGIC ⚡
-                        if (isSpeakingNow) {
-                            // Easily triggered by normal conversation, completely ignores thuds
-                            const isForegroundVoice = speechProfile.isNearHumanSpeech && 
-                                                      humanVolume > 15 && 
-                                                      speechProfile.rms > 0.01 &&
-                                                      speechProfile.coreVsNoise > 1.5 &&
-                                                      speechProfile.speechRatio > 0.60;
-                                                      
-                            if (isForegroundVoice) {
-                                consecutiveInterruptFrames++;
-                                // ~1.2 seconds of speech required to interrupt. No more shouting.
-                                if (consecutiveInterruptFrames > 50) {
-                                    interruptBot();
-                                    consecutiveInterruptFrames = 0;
-                                }
-                            } else {
-                                // Decay prevents micro-pauses from breaking the interruption logic
-                                consecutiveInterruptFrames = Math.max(0, consecutiveInterruptFrames - 1);
-                            }
-                            requestAnimationFrame(detectVoice);
-                            return;
-                        }
+                        // ⚡ INTERRUPTION COMPLETELY DISABLED ⚡
+if (isSpeakingNow) {
+    // Ignore all mic input while the bot is speaking
+    requestAnimationFrame(detectVoice);
+    return;
+}
 
                         if (currentAgentState === 'listening' && isVoiceMode) {
                             
