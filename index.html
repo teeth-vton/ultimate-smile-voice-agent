@@ -877,6 +877,9 @@
                         interimBox.style.color = "#D4AF37";
                     }
                 }
+            } else if (newState === 'speaking' && isVoiceMode) {
+                // ⚡ KEEP MIC UNMUTED DURING SPEAKING SO BARGE-IN WORKS
+                isMicSoftwareMuted = false;
             } else {
                 isMicSoftwareMuted = true;
             }
@@ -971,67 +974,6 @@
             ) return "[LINK_GALLERY]";
 
             return null;
-        }
-
-        /**
-         * ============================================================================
-         * VOICE ACTIVITY DETECTION (VAD) ENGINE
-         * ============================================================================
-         * Analyzes raw audio frequencies via FFT to determine if a human is speaking,
-         * filtering out background noise, bumps, and thuds by comparing core averages.
-         */
-        function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
-            const binHz = sampleRate / fftSize;
-            const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
-
-            const speechStart = idx(90);
-            const speechEnd = idx(3400);
-            const coreStart = idx(180);
-            const coreEnd = idx(1200);
-
-            let speechSum = 0, speechCount = 0;
-            let coreSum = 0, coreCount = 0;
-            let noiseSum = 0, noiseCount = 0;
-
-            for (let i = 0; i < dataArray.length; i++) {
-                const v = dataArray[i];
-
-                if (i >= speechStart && i <= speechEnd) {
-                    speechSum += v;
-                    speechCount++;
-                } else {
-                    noiseSum += v;
-                    noiseCount++;
-                }
-
-                if (i >= coreStart && i <= coreEnd) {
-                    coreSum += v;
-                    coreCount++;
-                }
-            }
-
-            let energy = 0;
-            for (let i = 0; i < timeDomainArray.length; i++) {
-                const centered = (timeDomainArray[i] - 128) / 128;
-                energy += centered * centered;
-            }
-            
-            const rms = Math.sqrt(energy / Math.max(1, timeDomainArray.length));
-            const speechAvg = speechSum / Math.max(1, speechCount);
-            const coreAvg = coreSum / Math.max(1, coreCount);
-            const noiseAvg = noiseSum / Math.max(1, noiseCount);
-            const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
-            const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
-
-            // ⚡ UPDATED: MORE SENSITIVE RMS, BUT STRICTER RATIO TO REJECT THUDS ⚡
-            const isNearHumanSpeech =
-                rms > 0.008 &&            
-                speechAvg > 10 &&         
-                coreAvg > 12 &&
-                speechRatio > 0.55 &&     
-                coreVsNoise > 1.20;       
-
-            return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
 
         /**
@@ -1221,6 +1163,8 @@
                 source.start(nextPlayTime);
                 nextPlayTime += audioBuffer.duration; 
                 
+                // Keep track of the active node for instant killing
+                window.activeAudioSourceNode = source;
                 activeSources.push(source);
                 
                 source.onended = () => {
@@ -1257,37 +1201,17 @@
          * ============================================================================
          * INTERRUPTION CONTROLLER
          * ============================================================================
-         * ⚡ FIXED: Properly clears audio and notifies the backend to drop processing ⚡
          */
         function interruptBot() {
             if (!isVoiceMode) return;
             
-            audioChunkQueue = [];
-            isReplyComplete = false; 
-            nextPlayTime = 0; 
-            
-            interruptRestartHoldUntil = performance.now() + 500; 
-            
-            liveUserText = "";
-            finalTranscript = "";
-            if (recognition) { try { recognition.abort(); } catch(e) {} }
-
             if (socket && socket.readyState === WebSocket.OPEN) {
                 try {
                     socket.send(JSON.stringify({ type: 'interrupt' }));
                 } catch (e) {}
             }
-
-            activeSources.forEach(s => {
-                try { s.stop(); } catch(e) {}
-            });
-            activeSources = [];
             
             hideLiveTranscript(0);
-            activeBotMessageDiv = null;
-            activeBotTextSpan = null;
-            lastAssistantStreamingText = "";
-            
             updateState('listening');
         }
 
@@ -1394,7 +1318,7 @@
 
         /**
          * ============================================================================
-         * WEBSOCKET & VAD CONTROLLER CORE
+         * WEBSOCKET & NATIVE VAD CONTROLLER CORE
          * ============================================================================
          */
         async function startWebSocket() {
@@ -1413,18 +1337,12 @@
                     const streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
                     const source = streamCtx.createMediaStreamSource(globalStream);
                     
-                    const bufferSize = 4096;
+                    // ⚡ STEP 2: Configure a low buffer size to eliminate processing lag
+                    const bufferSize = 1024; 
                     const processor = streamCtx.createScriptProcessor(bufferSize, 1, 1);
-                    const analyser = streamCtx.createAnalyser();
-                    analyser.fftSize = 512;
-
-                    const silenceGain = streamCtx.createGain();
-                    silenceGain.gain.value = 0;
-
-                    source.connect(analyser);
+                    
                     source.connect(processor);
-                    processor.connect(silenceGain);
-                    silenceGain.connect(streamCtx.destination);
+                    processor.connect(streamCtx.destination);
 
                     if (chatHistory.length === 0) {
                         updateState('thinking'); 
@@ -1440,15 +1358,6 @@
                         updateState('listening');
                     }
 
-                    let isRecording = false;
-                    let shortPauseTimer = null; 
-                    let longPauseTimer = null; 
-                    let maxRecordingTimer = null;
-                    
-                    // Tracking continuous audio frames to absolutely ignore transient thuds
-                    let consecutiveVoiceFrames = 0; 
-                    let consecutiveInterruptFrames = 0; // ⚡ FOR FOREGROUND VAD INTERRUPTION ⚡
-
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
                         
@@ -1458,167 +1367,63 @@
                             pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
                         }
                         
-                        if (socket && socket.readyState === WebSocket.OPEN && isRecording) {
+                        // 🔥 STREAM CONSTANTLY: Do not check if the bot is currently speaking or listening. 
+                        // Simply push mic frames down the pipe and let Gemini evaluate them.
+                        if (socket && socket.readyState === WebSocket.OPEN) {
                             socket.send(pcm16.buffer); 
                         }
                     };
-
-                    function detectVoice() {
-                        const isSpeakingNow = currentAgentState === 'speaking';
-
-                        if (isMicSoftwareMuted && !isSpeakingNow) {
-                            requestAnimationFrame(detectVoice);
-                            return;
-                        }
-
-                        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                        analyser.getByteFrequencyData(dataArray);
-
-                        const timeDataArray = new Uint8Array(analyser.fftSize);
-                        analyser.getByteTimeDomainData(timeDataArray);
-                        
-                        let voiceSum = 0;
-                        let voiceBins = 0;
-                        for (let i = 10; i < 96; i++) {
-                            voiceSum += dataArray[i];
-                            voiceBins++;
-                        }
-                        let humanVolume = voiceSum / Math.max(1, voiceBins);
-
-                        const speechProfile = getHumanSpeechProfile(
-                            dataArray,
-                            timeDataArray,
-                            streamCtx.sampleRate || 16000,
-                            analyser.fftSize || 512
-                        );
-
-                        // ⚡ 1.5s FOREGROUND INTERRUPTION LOGIC ⚡
-                        if (isSpeakingNow) {
-                            // Requires very clear human voice directly into mic to interrupt
-                            // Not too loud, but very high clarity (coreVsNoise) to reject far background
-                            const isForegroundVoice = speechProfile.isNearHumanSpeech && 
-                                                      humanVolume > 25 && 
-                                                      speechProfile.rms > 0.02 &&
-                                                      speechProfile.coreVsNoise > 2.0 &&
-                                                      speechProfile.speechRatio > 0.70;
-                                                      
-                            if (isForegroundVoice) {
-                                consecutiveInterruptFrames++;
-                                // Require ~1.5 seconds (approx 75 frames at 60fps) of sustained foreground speech
-                                if (consecutiveInterruptFrames > 75) {
-                                    interruptBot();
-                                    consecutiveInterruptFrames = 0;
-                                }
-                            } else {
-                                // Drop slowly so micro-pauses between words don't instantly reset the 1.5s timer
-                                consecutiveInterruptFrames = Math.max(0, consecutiveInterruptFrames - 1);
-                            }
-                            requestAnimationFrame(detectVoice);
-                            return;
-                        }
-
-                        if (currentAgentState === 'listening' && isVoiceMode) {
-                            
-                            // Require at least a decent volume base to prevent absolute silence triggering
-                            const volumeIsGood = humanVolume > 15; 
-                            const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
-
-                            // ⚡ THUD/COUGH PROTECTION LOGIC ⚡
-                            if (canStartRecording) {
-                                consecutiveVoiceFrames++;
-                            } else {
-                                consecutiveVoiceFrames = 0;
-                            }
-
-                            // Require at least 8 consecutive frames of human-like speech 
-                            // to ignore instantaneous bumps, thuds, or quick coughs.
-                            if (consecutiveVoiceFrames > 8) { 
-                                if (!isRecording) {
-                                    isRecording = true;
-                                    liveUserText = ""; 
-                                    finalTranscript = ""; 
-                                    if (recognition) {
-                                        try { 
-                                            recognition.abort(); 
-                                            setTimeout(() => recognition.start(), 50); 
-                                        } catch(e) {}
-                                    }
-                                    updateState('listening'); 
-                                    
-                                    if (socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                    }
-                                    
-                                    // Massive 20-second timeout to allow long stories
-                                    maxRecordingTimer = setTimeout(() => {
-                                        if (isRecording) {
-                                            isRecording = false;
-                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                            updateState('thinking');
-                                            
-                                            // Send to backend, the backend will return `user_spoken_text`
-                                            // which acts as the SINGLE SOURCE OF TRUTH to render UI once.
-                                            if (socket.readyState === WebSocket.OPEN) {
-                                                socket.send(JSON.stringify({ 
-                                                    type: 'process_final', 
-                                                    history: chatHistory, 
-                                                    isVoiceMode: isVoiceMode,
-                                                    nativeTranscript: liveUserText // ⚡ FAST TRACK ⚡
-                                                }));
-                                            }
-                                            
-                                            // Clear local buffer immediately
-                                            liveUserText = ""; finalTranscript = "";
-                                            const interimBox = document.getElementById('usd-interim-text');
-                                            if (interimBox) interimBox.innerText = "Answering...";
-                                        }
-                                    }, 20000); 
-                                }
-                                
-                                clearTimeout(shortPauseTimer);
-                                clearTimeout(longPauseTimer);
-                                
-                                // ⚡ 800ms PER REQUEST ⚡
-                                shortPauseTimer = setTimeout(() => {
-                                    if (isRecording && socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'process_interim' }));
-                                    }
-                                }, 800); 
-
-                                // ⚡ INCREASED TO 2500ms TO PREVENT BREATH CUTS ⚡
-                                longPauseTimer = setTimeout(() => {
-                                    if (isRecording) {
-                                        isRecording = false;
-                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                        clearTimeout(maxRecordingTimer);
-                                        updateState('thinking');
-                                        
-                                        if (socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ 
-                                                type: 'process_final', 
-                                                history: chatHistory, 
-                                                isVoiceMode: isVoiceMode,
-                                                nativeTranscript: liveUserText // ⚡ FAST TRACK ⚡
-                                            }));
-                                        }
-                                        
-                                        liveUserText = ""; finalTranscript = "";
-                                        const interimBox = document.getElementById('usd-interim-text');
-                                        if (interimBox) interimBox.innerText = "Answering...";
-                                    }
-                                }, 2500); 
-                            }
-                        }
-                        requestAnimationFrame(detectVoice);
-                    }
-                    
-                    detectVoice();
                 };
 
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    if (data.type === 'idle' || data.type === 'error') {
+                    // ⚡ STEP 3: Implement a violent client-side buffer flush
+                    if (data.type === 'bot_interrupted') {
+                        console.log("⚡ Barge-in caught! Killing client audio queues.");
+                        
+                        // 1. Instantly clear your local playback storage arrays
+                        audioChunkQueue = []; 
+                        
+                        // 2. Kill the Web Audio API active source nodes to stop speaker output immediately
+                        if (window.activeAudioSourceNode) {
+                            try {
+                                window.activeAudioSourceNode.stop();
+                                window.activeAudioSourceNode.disconnect();
+                            } catch (e) {
+                                // Audio was already stopped or not running
+                            }
+                            window.activeAudioSourceNode = null;
+                        }
+                        
+                        activeSources.forEach(s => {
+                            try {
+                                s.stop();
+                                s.disconnect();
+                            } catch(e) {}
+                        });
+                        activeSources = [];
+                        isAudioPlaying = false;
+                        isReplyComplete = false;
+                        nextPlayTime = 0;
+                        
+                        // 3. Reset your UI layout variables smoothly
+                        liveUserText = ""; 
+                        finalTranscript = ""; 
+                        activeBotMessageDiv = null;
+                        activeBotTextSpan = null;
+                        lastAssistantStreamingText = "";
+                        
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) {
+                            interimBox.innerText = "Listening...";
+                            interimBox.style.color = "#D4AF37";
+                        }
+                        
+                        updateState('listening');
+                        return; // Break execution early to block downstream processing
+                    }
+                    else if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
                         liveUserText = ""; 
                         finalTranscript = ""; 
@@ -1630,8 +1435,6 @@
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
-                        // ⚡ THIS IS THE SINGLE SOURCE OF TRUTH. 
-                        // Backend echoes the fast-track string or Sarvam/Groq string instantly. ⚡
                         const cleanUserText = cleanDisplayText(data.text || "");
                         
                         if (cleanUserText) {
@@ -1954,6 +1757,7 @@
         /** 23 */ /** 24 */ /** 25 */ /** 26 */ /** 27 */ /** 28 */ /** 29 */
         /** 30 */ /** 31 */ /** 32 */ /** 33 */ /** 34 */ /** 35 */ /** 36 */
         /** 37 */ /** 38 */ /** 39 */ /** 40 */ /** 41 */ /** 42 */ /** 43 */
+        /** 44 */ /** 45 */ /** 46 */ /** 47 */ /** 48 */ /** 49 */ /** 50 */
     </script>
 </body>
 </html>
