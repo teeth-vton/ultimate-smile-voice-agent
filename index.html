@@ -875,7 +875,7 @@
                     }
                 }
             } else if (newState === 'speaking' && isVoiceMode) {
-                // ⚡ KEEP MIC UNMUTED DURING SPEAKING SO BARGE-IN WORKS
+                // KEEP MIC UNMUTED DURING SPEAKING SO BARGE-IN WORKS
                 isMicSoftwareMuted = false;
             } else {
                 isMicSoftwareMuted = true;
@@ -1261,7 +1261,6 @@
         function interruptBot() {
             if (!isVoiceMode) return;
             
-            // Send standard absolute barge-in command to stop Gemini instantly
             if (socket && socket.readyState === WebSocket.OPEN) {
                 try {
                     socket.send(JSON.stringify({ type: 'user_interrupt_barge_in' }));
@@ -1497,6 +1496,7 @@
                             analyser.fftSize || 512
                         );
 
+                        // ⚡ 1.5s FOREGROUND INTERRUPTION LOGIC ⚡
                         if (isSpeakingNow) {
                             const isForegroundVoice = speechProfile.isNearHumanSpeech && 
                                                       humanVolume > 25 && 
@@ -1608,6 +1608,7 @@
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
+                    // ⚡ FIX: Instant flush if the backend confirms interception
                     if (data.type === 'bot_interrupted') {
                         audioChunkQueue = [];
                         if (window.activeAudioSourceNode) {
