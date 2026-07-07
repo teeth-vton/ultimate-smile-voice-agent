@@ -822,6 +822,7 @@
          * ============================================================================
          * TEXT SANITIZATION
          * ============================================================================
+         * Cleans incoming and outgoing text to ensure no raw HTML or tags leak.
          */
         function cleanDisplayText(text = "") {
             let result = String(text || "");
@@ -835,6 +836,8 @@
          * ============================================================================
          * UI STATE MANAGEMENT
          * ============================================================================
+         * Controls the active elements in the chat header, the visualizer, and the 
+         * underlying status logic indicating listening, speaking, or thinking.
          */
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
@@ -925,6 +928,7 @@
          * ============================================================================
          * LOCAL KEYWORD & TAG DETECTION
          * ============================================================================
+         * Identifies specific keywords to trigger frontend action buttons.
          */
         function detectLocalTagFromText(input = '') {
             const text = cleanDisplayText(String(input || "").toLowerCase());
@@ -973,6 +977,8 @@
          * ============================================================================
          * VOICE ACTIVITY DETECTION (VAD) ENGINE
          * ============================================================================
+         * Analyzes raw audio frequencies via FFT to determine if a human is speaking,
+         * filtering out background noise, bumps, and thuds by comparing core averages.
          */
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
@@ -1251,26 +1257,26 @@
          * ============================================================================
          * INTERRUPTION CONTROLLER (BARGE-IN)
          * ============================================================================
-         * Instantly stops playback and alerts the backend to drop processing.
+         * ⚡ FIX: Requests an explicit backend barge-in sequence
          */
         function interruptBot() {
             if (!isVoiceMode) return;
             
+            // Send standard absolute barge-in command to stop Gemini instantly
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    socket.send(JSON.stringify({ type: 'user_interrupt_barge_in' }));
+                } catch (e) {}
+            }
+            
             audioChunkQueue = [];
             isReplyComplete = false; 
             nextPlayTime = 0; 
-            
             interruptRestartHoldUntil = performance.now() + 500; 
             
             liveUserText = "";
             finalTranscript = "";
             if (recognition) { try { recognition.abort(); } catch(e) {} }
-
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                try {
-                    socket.send(JSON.stringify({ type: 'interrupt' }));
-                } catch (e) {}
-            }
 
             if (window.activeAudioSourceNode) {
                 try {
@@ -1446,9 +1452,8 @@
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
                     
-                    // Tracking continuous audio frames to absolutely ignore transient thuds
                     let consecutiveVoiceFrames = 0; 
-                    let consecutiveInterruptFrames = 0; // ⚡ FOR FOREGROUND VAD INTERRUPTION ⚡
+                    let consecutiveInterruptFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1495,8 +1500,6 @@
 
                         // ⚡ 1.5s FOREGROUND INTERRUPTION LOGIC ⚡
                         if (isSpeakingNow) {
-                            // Requires very clear human voice directly into mic to interrupt
-                            // Not too loud, but very high clarity (coreVsNoise) to reject far background
                             const isForegroundVoice = speechProfile.isNearHumanSpeech && 
                                                       humanVolume > 25 && 
                                                       speechProfile.rms > 0.02 &&
@@ -1505,13 +1508,11 @@
                                                       
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
-                                // Require ~1.5 seconds (approx 75 frames at 60fps) of sustained foreground speech
                                 if (consecutiveInterruptFrames > 75) {
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
                             } else {
-                                // Drop slowly so micro-pauses between words don't instantly reset the 1.5s timer
                                 consecutiveInterruptFrames = Math.max(0, consecutiveInterruptFrames - 1);
                             }
                             requestAnimationFrame(detectVoice);
@@ -1520,18 +1521,15 @@
 
                         if (currentAgentState === 'listening' && isVoiceMode) {
                             
-                            // Require at least a decent volume base to prevent absolute silence triggering
                             const volumeIsGood = humanVolume > 15; 
                             const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
 
-                            // ⚡ THUD/COUGH PROTECTION LOGIC ⚡
                             if (canStartRecording) {
                                 consecutiveVoiceFrames++;
                             } else {
                                 consecutiveVoiceFrames = 0;
                             }
 
-                            // Require at least 8 consecutive frames of human-like speech 
                             if (consecutiveVoiceFrames > 8) { 
                                 if (!isRecording) {
                                     isRecording = true;
@@ -1549,7 +1547,6 @@
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                     }
                                     
-                                    // Massive 20-second timeout to allow long stories
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
@@ -1560,9 +1557,14 @@
                                                 socket.send(JSON.stringify({ 
                                                     type: 'process_final', 
                                                     history: chatHistory, 
-                                                    isVoiceMode: isVoiceMode
+                                                    isVoiceMode: isVoiceMode,
+                                                    nativeTranscript: liveUserText 
                                                 }));
                                             }
+                                            
+                                            liveUserText = ""; finalTranscript = "";
+                                            const interimBox = document.getElementById('usd-interim-text');
+                                            if (interimBox) interimBox.innerText = "Answering...";
                                         }
                                     }, 20000); 
                                 }
@@ -1570,14 +1572,12 @@
                                 clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
                                 
-                                // ⚡ 800ms PER REQUEST ⚡
                                 shortPauseTimer = setTimeout(() => {
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
                                 }, 800); 
 
-                                // ⚡ INCREASED TO 2500ms TO PREVENT BREATH CUTS ⚡
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -1589,9 +1589,14 @@
                                             socket.send(JSON.stringify({ 
                                                 type: 'process_final', 
                                                 history: chatHistory, 
-                                                isVoiceMode: isVoiceMode
+                                                isVoiceMode: isVoiceMode,
+                                                nativeTranscript: liveUserText 
                                             }));
                                         }
+                                        
+                                        liveUserText = ""; finalTranscript = "";
+                                        const interimBox = document.getElementById('usd-interim-text');
+                                        if (interimBox) interimBox.innerText = "Answering...";
                                     }
                                 }, 2500); 
                             }
@@ -1605,7 +1610,29 @@
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    if (data.type === 'idle' || data.type === 'error') {
+                    // ⚡ FIX: Instant flush if the backend confirms interception
+                    if (data.type === 'bot_interrupted') {
+                        audioChunkQueue = [];
+                        if (window.activeAudioSourceNode) {
+                            try { window.activeAudioSourceNode.stop(); window.activeAudioSourceNode.disconnect(); } catch (e) {}
+                            window.activeAudioSourceNode = null;
+                        }
+                        activeSources.forEach(s => {
+                            try { s.stop(); s.disconnect(); } catch(e) {}
+                        });
+                        activeSources = [];
+                        isAudioPlaying = false;
+                        isReplyComplete = false;
+                        nextPlayTime = 0;
+                        
+                        liveUserText = ""; finalTranscript = ""; activeBotMessageDiv = null; activeBotTextSpan = null; lastAssistantStreamingText = "";
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
+                        
+                        updateState('listening');
+                        return; 
+                    }
+                    else if (data.type === 'idle' || data.type === 'error') {
                         hideLiveTranscript(0);
                         liveUserText = ""; 
                         finalTranscript = ""; 
@@ -1617,14 +1644,12 @@
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
-                        // ⚡ THIS IS THE SINGLE SOURCE OF TRUTH. ⚡
                         const cleanUserText = cleanDisplayText(data.text || "");
                         
                         if (cleanUserText) {
                             const last = chatHistory[chatHistory.length - 1];
                             const alreadyInHistory = last && last.role === 'user' && last.parts && last.parts[0] && cleanUserText === last.parts[0].text;
                             
-                            // Prevent duplicate bubbles permanently
                             if (!alreadyInHistory) {
                                 logMessage('user', cleanUserText);
                                 addUserHistoryIfNew(cleanUserText);
