@@ -1482,25 +1482,12 @@
                             dataArray, timeDataArray, streamCtx.sampleRate || 16000, analyser.fftSize || 512
                         );
 
-                        if (isSpeakingNow) {
-                            const isForegroundVoice = speechProfile.isNearHumanSpeech && 
-                                                      humanVolume > 15 && 
-                                                      speechProfile.rms > 0.01 &&
-                                                      speechProfile.coreVsNoise > 1.5 &&
-                                                      speechProfile.speechRatio > 0.60;
-                                                      
-                            if (isForegroundVoice) {
-                                consecutiveInterruptFrames++;
-                                if (consecutiveInterruptFrames > 25) {
-                                    interruptBot();
-                                    consecutiveInterruptFrames = 0;
-                                }
-                            } else {
-                                consecutiveInterruptFrames = Math.max(0, consecutiveInterruptFrames - 1);
-                            }
-                            requestAnimationFrame(detectVoice);
-                            return;
-                        }
+                       // ⚡ INTERRUPTION COMPLETELY DISABLED ⚡
+if (isSpeakingNow) {
+    // Ignore all mic input while the bot is speaking
+    requestAnimationFrame(detectVoice);
+    return;
+}
 
                         if (currentAgentState === 'listening' && isVoiceMode) {
                             if (humanVolume > 10 && window.resetSilenceTimer) {
