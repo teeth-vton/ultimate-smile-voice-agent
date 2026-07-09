@@ -15,13 +15,20 @@
          */
         :root {
             --font-Glida-Display: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            --usd-gold-primary: #D4AF37;
+            --usd-gold-light: #fbefac;
+            --usd-gold-dark: #aa803c;
+            --usd-bg-dark: #000000;
+            --usd-bg-panel: #111111;
         }
 
         body {
-            background-color: #000000;
+            background-color: var(--usd-bg-dark);
             color: #ffffff;
             margin: 0;
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-family: var(--font-Glida-Display);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         /**
@@ -52,7 +59,7 @@
         .voice_chat_bot_container {
             width: 344px;
             height: 520px;
-            background-color: #000000;
+            background-color: var(--usd-bg-dark);
             box-shadow: 0px 0px 25px 0px rgba(0, 0, 0, 0.9);
             border: 1px solid rgba(212, 175, 55, 0.15);
             border-radius: 16px;
@@ -141,7 +148,7 @@
             letter-spacing: 1.5px;
             font-family: var(--font-Glida-Display);
             font-weight: 600;
-            color: #D4AF37; 
+            color: var(--usd-gold-primary);
         }
 
         #usd-status-box {
@@ -274,8 +281,8 @@
             margin-top: 8px;
             padding: 10px;
             background: linear-gradient(135deg, #111111, #222222);
-            border: 1px solid #D4AF37;
-            color: #D4AF37;
+            border: 1px solid var(--usd-gold-primary);
+            color: var(--usd-gold-primary);
             border-radius: 8px;
             font-size: 12px;
             font-weight: bold;
@@ -286,7 +293,7 @@
         }
 
         .usd-link-card:hover {
-            background: #D4AF37;
+            background: var(--usd-gold-primary);
             color: #111111;
             transform: translateY(-2px);
         }
@@ -478,14 +485,14 @@
         }
 
         .usd-star:hover, .usd-star.active { 
-            color: #FFD700; 
+            color: var(--usd-gold-primary); 
             transform: scale(1.2);
             text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
         }
 
         #usd-rating-thanks { 
             display: none; 
-            color: #D4AF37; 
+            color: var(--usd-gold-primary); 
             font-size: 12px; 
             margin-top: 10px; 
             font-weight: bold; 
@@ -935,46 +942,8 @@
         let isMicSoftwareMuted = true; 
         let interruptRestartHoldUntil = 0;
         
-        let recognition = null;
+        // ⚡ Removed webkitSpeechRecognition completely to fix the repeating beep ⚡
         let liveUserText = "";
-        let finalTranscript = ""; 
-
-        /**
-         * ============================================================================
-         * SCREEN WAKE LOCK ENGINE (KEEPS SCREEN AWAKE)
-         * ============================================================================
-         */
-        let wakeLock = null;
-
-        async function requestWakeLock() {
-            if ('wakeLock' in navigator) {
-                try {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                    console.log('Screen Wake Lock is active 🌞');
-                    
-                    wakeLock.addEventListener('release', () => {
-                        console.log('Screen Wake Lock was released');
-                    });
-                } catch (err) {
-                    console.error(`Wake Lock error: ${err.name}, ${err.message}`);
-                }
-            }
-        }
-
-        function releaseWakeLock() {
-            if (wakeLock !== null) {
-                wakeLock.release().then(() => {
-                    wakeLock = null;
-                });
-            }
-        }
-
-        // Re-acquire lock if user switches tabs and comes back while chat is active
-        document.addEventListener('visibilitychange', async () => {
-            if (wakeLock !== null && document.visibilityState === 'visible' && currentAgentState !== 'off') {
-                await requestWakeLock();
-            }
-        });
 
         /**
          * ============================================================================
@@ -1006,34 +975,31 @@
 
         /**
          * ============================================================================
-         * NATIVE BROWSER SPEECH RECOGNITION INIT
+         * SCREEN WAKE LOCK ENGINE
          * ============================================================================
          */
-        if ('webkitSpeechRecognition' in window) {
-            recognition = new webkitSpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            
-            recognition.onresult = (event) => {
-                let interimTranscript = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript + " ";
-                    } else {
-                        interimTranscript += event.results[i][0].transcript;
-                    }
-                }
-                liveUserText = (finalTranscript + interimTranscript).trim();
-                if (liveUserText) {
-                    const interimBox = document.getElementById('usd-interim-text');
-                    if (interimBox) {
-                        interimBox.innerText = "You: " + liveUserText;
-                        interimBox.style.color = "#D4AF37";
-                    }
-                }
-            };
-            recognition.onerror = (e) => {}; 
+        let wakeLock = null;
+
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Screen Wake Lock is active 🌞');
+                } catch (err) { }
+            }
         }
+
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release().then(() => { wakeLock = null; });
+            }
+        }
+
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible' && currentAgentState !== 'off') {
+                await requestWakeLock();
+            }
+        });
 
         /**
          * ============================================================================
@@ -1097,13 +1063,8 @@
                 isMicSoftwareMuted = false;
                 if (window.resetSilenceTimer) window.resetSilenceTimer();
                 if (interimBox) {
-                    if (liveUserText) {
-                        interimBox.innerText = "You: " + liveUserText;
-                        interimBox.style.color = "#D4AF37";
-                    } else if (!interimBox.innerText.includes("You:")) {
-                        interimBox.innerText = "Listening...";
-                        interimBox.style.color = "#D4AF37";
-                    }
+                    interimBox.innerText = "Listening...";
+                    interimBox.style.color = "#D4AF37";
                 }
             } else if (newState === 'speaking' && isVoiceMode) {
                 isMicSoftwareMuted = false;
@@ -1115,13 +1076,8 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    if (liveUserText) {
-                        interimBox.innerText = "You: " + liveUserText + " ...";
-                        interimBox.style.color = "#ffffff";
-                    } else {
-                        interimBox.innerText = "Answering...";
-                        interimBox.style.color = "#ffffff";
-                    }
+                    interimBox.innerText = "Answering...";
+                    interimBox.style.color = "#ffffff";
                 }
             }
 
@@ -1298,8 +1254,6 @@
             interruptRestartHoldUntil = performance.now() + 500; 
             
             liveUserText = "";
-            finalTranscript = "";
-            if (recognition) { try { recognition.abort(); } catch(e) {} }
 
             if (window.activeAudioSourceNode) {
                 try { window.activeAudioSourceNode.stop(); window.activeAudioSourceNode.disconnect(); } catch(e) {}
@@ -1314,11 +1268,6 @@
             updateState('listening');
         }
 
-        /**
-         * ============================================================================
-         * ⚡ UI TOGGLE ENGINE: MANAGES HEADERS AND FOOTERS
-         * ============================================================================
-         */
         function toggleChatMode() {
             isVoiceMode = !isVoiceMode;
             
@@ -1353,12 +1302,11 @@
             }
             sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
         }
-        
-            async function openChat(isRestore = false) {
+
+        async function openChat(isRestore = false) {
             initAudio();
-            requestWakeLock(); // ⚡ ADD THIS LINE HERE
+            requestWakeLock();
             interruptRestartHoldUntil = 0;
-            // ... rest of the code
             const container = document.getElementById('usd-chat-container');
             const bubble = document.getElementById('usd-bubble');
             
@@ -1539,7 +1487,8 @@
                                 window.resetSilenceTimer();
                             }
 
-                            const volumeIsGood = humanVolume > 15; 
+                            // ⚡ FIX: Lowered required volume to pickup soft voices better
+                            const volumeIsGood = humanVolume > 10; 
                             const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
 
                             if (canStartRecording) {
@@ -1552,10 +1501,6 @@
                                 if (!isRecording) {
                                     isRecording = true;
                                     liveUserText = ""; 
-                                    finalTranscript = ""; 
-                                    if (recognition) {
-                                        try { recognition.abort(); setTimeout(() => recognition.start(), 50); } catch(e) {}
-                                    }
                                     updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
@@ -1565,14 +1510,13 @@
                                     maxRecordingTimer = setTimeout(() => {
                                         if (isRecording) {
                                             isRecording = false;
-                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
                                             updateState('thinking');
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ 
                                                     type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode, nativeTranscript: liveUserText 
                                                 }));
                                             }
-                                            liveUserText = ""; finalTranscript = "";
+                                            liveUserText = ""; 
                                             const interimBox = document.getElementById('usd-interim-text');
                                             if (interimBox) interimBox.innerText = "Answering...";
                                         }
@@ -1591,7 +1535,6 @@
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
-                                        if (recognition) { try { recognition.stop(); } catch(e) {} }
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking');
                                         
@@ -1601,7 +1544,7 @@
                                             }));
                                         }
                                         
-                                        liveUserText = ""; finalTranscript = "";
+                                        liveUserText = ""; 
                                         const interimBox = document.getElementById('usd-interim-text');
                                         if (interimBox) interimBox.innerText = "Answering...";
                                     }
@@ -1629,7 +1572,7 @@
                         isReplyComplete = false;
                         nextPlayTime = 0;
                         
-                        liveUserText = ""; finalTranscript = ""; activeBotMessageDiv = null; activeBotTextSpan = null; lastAssistantStreamingText = "";
+                        liveUserText = ""; activeBotMessageDiv = null; activeBotTextSpan = null; lastAssistantStreamingText = "";
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
                         
@@ -1638,8 +1581,12 @@
                     }
                     else if (data.type === 'idle' || data.type === 'error') {
                         if (data.type === 'error') console.error("Backend Error:", data.error);
-                        liveUserText = ""; finalTranscript = ""; 
-                        if (recognition) { try { recognition.abort(); } catch(e) {} }
+                        liveUserText = ""; 
+                        
+                        // ⚡ CLEAR ANSWERING STATE ON ERROR TO UNFREEZE UX
+                        isReplyComplete = false;
+                        audioChunkQueue = [];
+
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) interimBox.innerText = "";
                         updateState('listening');
@@ -1653,7 +1600,7 @@
                                 logMessage('user', cleanUserText);
                                 addUserHistoryIfNew(cleanUserText);
                             }
-                            liveUserText = ""; finalTranscript = ""; 
+                            liveUserText = ""; 
                             const interimBox = document.getElementById('usd-interim-text');
                             if (interimBox && interimBox.innerText.includes("You:")) {
                                 interimBox.innerText = "Answering...";
@@ -1699,7 +1646,7 @@
                     }
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
-                        liveUserText = ""; finalTranscript = "";
+                        liveUserText = ""; 
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) { interimBox.innerText = ""; }
 
@@ -1789,13 +1736,11 @@
         }
     }
 
-  function closeChat(showRating = false) {
-            updateState('off');
-            interruptBot();
-            hideLiveTranscript(0);
-            releaseWakeLock(); // ⚡ ADD THIS LINE HERE
-            if (socket) socket.close();
-            // ... rest of the code
+    function closeChat(showRating = false) {
+        updateState('off');
+        interruptBot();
+        releaseWakeLock(); 
+        if (socket) socket.close();
         if (globalStream) globalStream.getTracks().forEach(track => track.stop());
         
         sessionStorage.removeItem('usd_chat_active');
