@@ -1185,7 +1185,6 @@
             
             chatHistory.push({ role: "user", parts: [{ text: clean }] });
             
-            // Limit to exact 6 slices per user request to save tokens
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
             saveHistory();
         }
@@ -1491,7 +1490,7 @@
                                                       
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
-                                if (consecutiveInterruptFrames > 9999) {
+                                if (consecutiveInterruptFrames > 25) {
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
@@ -1603,7 +1602,6 @@
                         if (data.type === 'error') console.error("Backend Error:", data.error);
                         liveUserText = ""; finalTranscript = ""; 
                         
-                        // CLEAR ANSWERING STATE ON ERROR TO UNFREEZE UX
                         isReplyComplete = false;
                         audioChunkQueue = [];
 
@@ -1726,6 +1724,7 @@
         document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
     }
 
+    // ⚡ FIX: Removed API TTS completely. It uses Native Gemini Websocket ⚡
     async function confirmEndChat(isYes) {
         document.getElementById('usd-end-confirm-overlay').style.display = 'none';
         if (isYes) {
@@ -1736,20 +1735,15 @@
             logMessage('bot', goodbyeText);
             
             if (isVoiceMode) {
-                try {
-                    const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: goodbyeText, lang: 'en-IN' })
-                    });
-                    const data = await response.json();
-                    
-                    isReplyComplete = true; 
-                    audioChunkQueue.push(data);
-                    processAudioQueue();
-                    
-                    setTimeout(() => closeChat(true), 4000);
-                } catch(e) { closeChat(true); }
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ 
+                        type: 'text_input', 
+                        text: "SYSTEM INSTRUCTION: The user has ended the chat. Please say warmly: 'Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.'", 
+                        history: chatHistory,
+                        isVoiceMode: true 
+                    }));
+                }
+                setTimeout(() => closeChat(true), 4000);
             } else {
                 setTimeout(() => closeChat(true), 2000);
             }
