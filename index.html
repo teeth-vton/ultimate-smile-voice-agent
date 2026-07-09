@@ -864,7 +864,7 @@
             </div>
         </div>
         
-        <!-- FLOATING BUBBLE BUTTON -->
+      <!-- FLOATING BUBBLE BUTTON -->
         <div id="usd-bubble" class="voice_chat_bot_icon_container" onclick="openChat(false)">
             <!-- ⚡ Premium Glassy Siri Orb (Matched to your image) ⚡ -->
             <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="home_screen_bot_icon">
@@ -941,9 +941,14 @@
         let lastBotMessageDiv = null;
         let isMicSoftwareMuted = true; 
         let interruptRestartHoldUntil = 0;
-        
-        // ⚡ Removed webkitSpeechRecognition completely to fix the repeating beep ⚡
+        let liveTranscriptHideTimer = null;
+        let currentLiveAssistantText = "";
+        let currentLiveAssistantTag = null;
+        let lastAssistantStreamingText = "";
+
+        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION COMPLETELY REMOVED TO STOP BEEP ⚡
         let liveUserText = "";
+        let finalTranscript = ""; 
 
         /**
          * ============================================================================
@@ -1063,8 +1068,13 @@
                 isMicSoftwareMuted = false;
                 if (window.resetSilenceTimer) window.resetSilenceTimer();
                 if (interimBox) {
-                    interimBox.innerText = "Listening...";
-                    interimBox.style.color = "#D4AF37";
+                    if (liveUserText) {
+                        interimBox.innerText = "You: " + liveUserText;
+                        interimBox.style.color = "#D4AF37";
+                    } else if (!interimBox.innerText.includes("You:")) {
+                        interimBox.innerText = "Listening...";
+                        interimBox.style.color = "#D4AF37";
+                    }
                 }
             } else if (newState === 'speaking' && isVoiceMode) {
                 isMicSoftwareMuted = false;
@@ -1076,8 +1086,13 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    interimBox.innerText = "Answering...";
-                    interimBox.style.color = "#ffffff";
+                    if (liveUserText) {
+                        interimBox.innerText = "You: " + liveUserText + " ...";
+                        interimBox.style.color = "#ffffff";
+                    } else {
+                        interimBox.innerText = "Answering...";
+                        interimBox.style.color = "#ffffff";
+                    }
                 }
             }
 
@@ -1164,9 +1179,13 @@
         function addUserHistoryIfNew(text) {
             const clean = cleanDisplayText(text);
             if (!clean) return;
+            
             const last = chatHistory[chatHistory.length - 1];
             if (last && last.role === 'user' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
+            
             chatHistory.push({ role: "user", parts: [{ text: clean }] });
+            
+            // Limit to exact 6 slices per user request to save tokens
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
             saveHistory();
         }
@@ -1254,6 +1273,7 @@
             interruptRestartHoldUntil = performance.now() + 500; 
             
             liveUserText = "";
+            finalTranscript = "";
 
             if (window.activeAudioSourceNode) {
                 try { window.activeAudioSourceNode.stop(); window.activeAudioSourceNode.disconnect(); } catch(e) {}
@@ -1487,8 +1507,7 @@
                                 window.resetSilenceTimer();
                             }
 
-                            // ⚡ FIX: Lowered required volume to pickup soft voices better
-                            const volumeIsGood = humanVolume > 10; 
+                            const volumeIsGood = humanVolume > 15; 
                             const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
 
                             if (canStartRecording) {
@@ -1501,6 +1520,7 @@
                                 if (!isRecording) {
                                     isRecording = true;
                                     liveUserText = ""; 
+                                    finalTranscript = ""; 
                                     updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
@@ -1516,7 +1536,7 @@
                                                     type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode, nativeTranscript: liveUserText 
                                                 }));
                                             }
-                                            liveUserText = ""; 
+                                            liveUserText = ""; finalTranscript = "";
                                             const interimBox = document.getElementById('usd-interim-text');
                                             if (interimBox) interimBox.innerText = "Answering...";
                                         }
@@ -1544,7 +1564,7 @@
                                             }));
                                         }
                                         
-                                        liveUserText = ""; 
+                                        liveUserText = ""; finalTranscript = "";
                                         const interimBox = document.getElementById('usd-interim-text');
                                         if (interimBox) interimBox.innerText = "Answering...";
                                     }
@@ -1572,7 +1592,7 @@
                         isReplyComplete = false;
                         nextPlayTime = 0;
                         
-                        liveUserText = ""; activeBotMessageDiv = null; activeBotTextSpan = null; lastAssistantStreamingText = "";
+                        liveUserText = ""; finalTranscript = ""; activeBotMessageDiv = null; activeBotTextSpan = null; lastAssistantStreamingText = "";
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
                         
@@ -1581,9 +1601,9 @@
                     }
                     else if (data.type === 'idle' || data.type === 'error') {
                         if (data.type === 'error') console.error("Backend Error:", data.error);
-                        liveUserText = ""; 
+                        liveUserText = ""; finalTranscript = ""; 
                         
-                        // ⚡ CLEAR ANSWERING STATE ON ERROR TO UNFREEZE UX
+                        // CLEAR ANSWERING STATE ON ERROR TO UNFREEZE UX
                         isReplyComplete = false;
                         audioChunkQueue = [];
 
@@ -1600,7 +1620,7 @@
                                 logMessage('user', cleanUserText);
                                 addUserHistoryIfNew(cleanUserText);
                             }
-                            liveUserText = ""; 
+                            liveUserText = ""; finalTranscript = ""; 
                             const interimBox = document.getElementById('usd-interim-text');
                             if (interimBox && interimBox.innerText.includes("You:")) {
                                 interimBox.innerText = "Answering...";
@@ -1646,7 +1666,7 @@
                     }
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
-                        liveUserText = ""; 
+                        liveUserText = ""; finalTranscript = "";
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) { interimBox.innerText = ""; }
 
