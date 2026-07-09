@@ -699,7 +699,7 @@
             <!-- State classes are dynamically toggled on usd-chat-inner-wrap to trigger organic voice morph animations -->
             <div id="usd-chat-inner-wrap" style="height: 100%; display: flex; flex-direction: column; position: relative; z-index: 10;">
                 
-                <!-- ⚡ FIXED HEADER WITH NEW TEXT MODE CONTROLS ⚡ -->
+                <!-- ⚡ FIXED HEADER WITH TEXT MODE CONTROLS ⚡ -->
                 <div class="voice_icon_title_and_close_icon_main">
                     
                     <!-- Text Mode Only: Back to Voice Mic Icon (Left) -->
@@ -864,7 +864,7 @@
             </div>
         </div>
         
-      <!-- FLOATING BUBBLE BUTTON -->
+        <!-- FLOATING BUBBLE BUTTON -->
         <div id="usd-bubble" class="voice_chat_bot_icon_container" onclick="openChat(false)">
             <!-- ⚡ Premium Glassy Siri Orb (Matched to your image) ⚡ -->
             <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="home_screen_bot_icon">
@@ -941,14 +941,9 @@
         let lastBotMessageDiv = null;
         let isMicSoftwareMuted = true; 
         let interruptRestartHoldUntil = 0;
-        let liveTranscriptHideTimer = null;
-        let currentLiveAssistantText = "";
-        let currentLiveAssistantTag = null;
-        let lastAssistantStreamingText = "";
-
+        
         // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION COMPLETELY REMOVED TO STOP BEEP ⚡
         let liveUserText = "";
-        let finalTranscript = ""; 
 
         /**
          * ============================================================================
@@ -1068,13 +1063,8 @@
                 isMicSoftwareMuted = false;
                 if (window.resetSilenceTimer) window.resetSilenceTimer();
                 if (interimBox) {
-                    if (liveUserText) {
-                        interimBox.innerText = "You: " + liveUserText;
-                        interimBox.style.color = "#D4AF37";
-                    } else if (!interimBox.innerText.includes("You:")) {
-                        interimBox.innerText = "Listening...";
-                        interimBox.style.color = "#D4AF37";
-                    }
+                    interimBox.innerText = "Listening...";
+                    interimBox.style.color = "#D4AF37";
                 }
             } else if (newState === 'speaking' && isVoiceMode) {
                 isMicSoftwareMuted = false;
@@ -1086,13 +1076,8 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    if (liveUserText) {
-                        interimBox.innerText = "You: " + liveUserText + " ...";
-                        interimBox.style.color = "#ffffff";
-                    } else {
-                        interimBox.innerText = "Answering...";
-                        interimBox.style.color = "#ffffff";
-                    }
+                    interimBox.innerText = "Answering...";
+                    interimBox.style.color = "#ffffff";
                 }
             }
 
@@ -1179,13 +1164,9 @@
         function addUserHistoryIfNew(text) {
             const clean = cleanDisplayText(text);
             if (!clean) return;
-            
             const last = chatHistory[chatHistory.length - 1];
             if (last && last.role === 'user' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
-            
             chatHistory.push({ role: "user", parts: [{ text: clean }] });
-            
-            // Limit to exact 6 slices per user request to save tokens
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
             saveHistory();
         }
@@ -1273,7 +1254,6 @@
             interruptRestartHoldUntil = performance.now() + 500; 
             
             liveUserText = "";
-            finalTranscript = "";
 
             if (window.activeAudioSourceNode) {
                 try { window.activeAudioSourceNode.stop(); window.activeAudioSourceNode.disconnect(); } catch(e) {}
@@ -1284,7 +1264,6 @@
             
             activeBotMessageDiv = null;
             activeBotTextSpan = null;
-            lastAssistantStreamingText = "";
             updateState('listening');
         }
 
@@ -1507,7 +1486,7 @@
                                 window.resetSilenceTimer();
                             }
 
-                            const volumeIsGood = humanVolume > 15; 
+                            const volumeIsGood = humanVolume > 10; 
                             const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
 
                             if (canStartRecording) {
@@ -1520,7 +1499,6 @@
                                 if (!isRecording) {
                                     isRecording = true;
                                     liveUserText = ""; 
-                                    finalTranscript = ""; 
                                     updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
@@ -1536,7 +1514,7 @@
                                                     type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode, nativeTranscript: liveUserText 
                                                 }));
                                             }
-                                            liveUserText = ""; finalTranscript = "";
+                                            liveUserText = ""; 
                                             const interimBox = document.getElementById('usd-interim-text');
                                             if (interimBox) interimBox.innerText = "Answering...";
                                         }
@@ -1564,7 +1542,7 @@
                                             }));
                                         }
                                         
-                                        liveUserText = ""; finalTranscript = "";
+                                        liveUserText = ""; 
                                         const interimBox = document.getElementById('usd-interim-text');
                                         if (interimBox) interimBox.innerText = "Answering...";
                                     }
@@ -1592,7 +1570,7 @@
                         isReplyComplete = false;
                         nextPlayTime = 0;
                         
-                        liveUserText = ""; finalTranscript = ""; activeBotMessageDiv = null; activeBotTextSpan = null; lastAssistantStreamingText = "";
+                        liveUserText = ""; activeBotMessageDiv = null; activeBotTextSpan = null; 
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
                         
@@ -1601,9 +1579,8 @@
                     }
                     else if (data.type === 'idle' || data.type === 'error') {
                         if (data.type === 'error') console.error("Backend Error:", data.error);
-                        liveUserText = ""; finalTranscript = ""; 
+                        liveUserText = ""; 
                         
-                        // CLEAR ANSWERING STATE ON ERROR TO UNFREEZE UX
                         isReplyComplete = false;
                         audioChunkQueue = [];
 
@@ -1620,7 +1597,7 @@
                                 logMessage('user', cleanUserText);
                                 addUserHistoryIfNew(cleanUserText);
                             }
-                            liveUserText = ""; finalTranscript = ""; 
+                            liveUserText = ""; 
                             const interimBox = document.getElementById('usd-interim-text');
                             if (interimBox && interimBox.innerText.includes("You:")) {
                                 interimBox.innerText = "Answering...";
@@ -1638,8 +1615,6 @@
                     else if (data.type === 'text_stream') {
                         const streamedText = cleanDisplayText(data.text || "");
                         if (!streamedText) return; 
-
-                        lastAssistantStreamingText = streamedText;
 
                         if (!activeBotMessageDiv) {
                             activeBotMessageDiv = logMessage('bot', streamedText);
@@ -1666,7 +1641,7 @@
                     }
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
-                        liveUserText = ""; finalTranscript = "";
+                        liveUserText = ""; 
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) { interimBox.innerText = ""; }
 
@@ -1695,8 +1670,6 @@
                             botTarget.remove();
                         }
 
-                        lastAssistantStreamingText = "";
-                        currentLiveAssistantText = "";
                         activeTag = finalTag;
                         
                         const finalBotTarget = botTarget || lastBotMessageDiv;
@@ -1897,7 +1870,6 @@
         return msgDiv;
     }
 
-    // Attach to window so HTML inline events can access them
     window.openChat = openChat;
     window.closeChat = closeChat;
     window.confirmEndChat = confirmEndChat;
