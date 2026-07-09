@@ -1485,14 +1485,14 @@
 
                         if (isSpeakingNow) {
                             const isForegroundVoice = speechProfile.isNearHumanSpeech && 
-                                                      humanVolume > 15 && 
-                                                      speechProfile.rms > 0.01 &&
-                                                      speechProfile.coreVsNoise > 1.5 &&
-                                                      speechProfile.speechRatio > 0.60;
+                                                      humanVolume > 90 &&  // ⚡ FIX: Increased from 15 to 90 to prevent accidental barge-in
+                                                      speechProfile.rms > 0.5 &&  // ⚡ FIX: Increased from 0.01 to 0.5 to prevent accidental barge-in
+                                                      speechProfile.coreVsNoise > 3.0 && 
+                                                      speechProfile.speechRatio > 0.90;
                                                       
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
-                                if (consecutiveInterruptFrames > 25) {
+                                if (consecutiveInterruptFrames > 99999) { // ⚡ FIX: Increased from 25 to 99999 to practically disable interrupts during speech
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
