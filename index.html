@@ -631,7 +631,7 @@
         .usd-thinking .orb-core { animation: pulseGlow 1.8s ease-in-out infinite !important; }
 
         .usd-listening .fluid-ribbon.r1 { animation: rotateCW 5s linear infinite !important; }
-        .usd-listening .fluid-ribbon.r2 { rotateCCW 6.5s linear infinite !important; }
+        .usd-listening .fluid-ribbon.r2 { animation: rotateCCW 6.5s linear infinite !important; }
         .usd-listening .fluid-ribbon.r3 { animation: rotateCW 5.8s ease-in-out infinite !important; }
         .usd-listening .fluid-ribbon.r4 { animation: rotateCCW 7.2s ease-in-out infinite !important; }
         .usd-listening .orb-core { animation: pulseGlow 2.5s ease-in-out infinite !important; }
@@ -1427,7 +1427,7 @@
                         if (socket.readyState === WebSocket.OPEN) {
                             socket.send(JSON.stringify({ 
                                 type: 'text_input', 
-                                text: "SYSTEM INSTRUCTION: Start the conversation by warmly saying EXACTLY this specific phrase and absolutely nothing else: '[en-IN] Namaste! How can we assist you today? Let's start with your beautiful name, what is your name?'", 
+                                text: "SYSTEM INSTRUCTION: Start the conversation by warmly saying EXACTLY this specific phrase and absolutely nothing else: 'Namaste! How can we assist you today? Let's start with your beautiful name, what is your name?'", 
                                 history: [],
                                 isVoiceMode: isVoiceMode 
                             }));
@@ -1484,14 +1484,14 @@
 
                         if (isSpeakingNow) {
                             const isForegroundVoice = speechProfile.isNearHumanSpeech && 
-                                                      humanVolume > 90 &&  
-                                                      speechProfile.rms > 0.5 &&  
-                                                      speechProfile.coreVsNoise > 3.0 && 
-                                                      speechProfile.speechRatio > 0.90;
+                                                      humanVolume > 15 && 
+                                                      speechProfile.rms > 0.01 &&
+                                                      speechProfile.coreVsNoise > 1.5 &&
+                                                      speechProfile.speechRatio > 0.60;
                                                       
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
-                                if (consecutiveInterruptFrames > 99999) { 
+                                if (consecutiveInterruptFrames > 25) {
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
@@ -1550,9 +1550,8 @@
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
-                                }, 400); 
+                                }, 800); 
 
-                                // ⚡ FIX: Extremely fast 800ms silence timeout for Instant Live Response 
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -1569,7 +1568,7 @@
                                         const interimBox = document.getElementById('usd-interim-text');
                                         if (interimBox) interimBox.innerText = "Answering...";
                                     }
-                                }, 800); 
+                                }, 2500); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
@@ -1604,6 +1603,7 @@
                         if (data.type === 'error') console.error("Backend Error:", data.error);
                         liveUserText = ""; finalTranscript = ""; 
                         
+                        // CLEAR ANSWERING STATE ON ERROR TO UNFREEZE UX
                         isReplyComplete = false;
                         audioChunkQueue = [];
 
@@ -1621,12 +1621,10 @@
                                 addUserHistoryIfNew(cleanUserText);
                             }
                             liveUserText = ""; finalTranscript = ""; 
-                            if (currentAgentState === 'thinking') {
-                                const interimBox = document.getElementById('usd-interim-text');
-                                if (interimBox) {
-                                    interimBox.innerText = "Answering...";
-                                    interimBox.style.color = "#ffffff";
-                                }
+                            const interimBox = document.getElementById('usd-interim-text');
+                            if (interimBox && interimBox.innerText.includes("You:")) {
+                                interimBox.innerText = "Answering...";
+                                interimBox.style.color = "#ffffff";
                             }
                         }
                     }
@@ -1899,6 +1897,7 @@
         return msgDiv;
     }
 
+    // Attach to window so HTML inline events can access them
     window.openChat = openChat;
     window.closeChat = closeChat;
     window.confirmEndChat = confirmEndChat;
