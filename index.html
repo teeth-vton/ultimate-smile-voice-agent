@@ -7,7 +7,7 @@
     <style>
         /**
          * ============================================================================
-         * ULTIMATE SMILE DESIGN - GLOBAL STYLES
+         * ULTIMATE SMILE DESIGN - GLOBAL STYLES & RESET
          * ============================================================================
          * The following CSS variables and reset properties define the core aesthetic.
          * By separating properties line-by-line, we ensure maximum readability and
@@ -20,15 +20,42 @@
             --usd-gold-dark: #aa803c;
             --usd-bg-dark: #000000;
             --usd-bg-panel: #111111;
+            --usd-text-light: #ffffff;
+            --usd-text-muted: #e0e0e0;
+            --usd-border-radius: 16px;
+            --usd-shadow-glow: 0px 0px 25px 0px rgba(0, 0, 0, 0.9);
+            --usd-transition-speed: 0.3s;
+        }
+
+        html, body, div, span, applet, object, iframe,
+        h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+        a, abbr, acronym, address, big, cite, code,
+        del, dfn, em, img, ins, kbd, q, s, samp,
+        small, strike, strong, sub, sup, tt, var,
+        b, u, i, center,
+        dl, dt, dd, ol, ul, li,
+        fieldset, form, label, legend,
+        table, caption, tbody, tfoot, thead, tr, th, td,
+        article, aside, canvas, details, embed, 
+        figure, figcaption, footer, header, hgroup, 
+        menu, nav, output, ruby, section, summary,
+        time, mark, audio, video {
+            margin: 0;
+            padding: 0;
+            border: 0;
+            font-size: 100%;
+            font: inherit;
+            vertical-align: baseline;
         }
 
         body {
             background-color: var(--usd-bg-dark);
-            color: #ffffff;
+            color: var(--usd-text-light);
             margin: 0;
             font-family: var(--font-Glida-Display);
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            overflow-x: hidden;
         }
 
         /**
@@ -55,14 +82,16 @@
          * ============================================================================
          * DESKTOP CHAT CONTAINER SIZING & ANIMATION
          * ============================================================================
+         * Strictly sets to 344px width as per Figma design specifications.
+         * Scales and translates dynamically on entry and exit.
          */
         .voice_chat_bot_container {
             width: 344px;
             height: 520px;
             background-color: var(--usd-bg-dark);
-            box-shadow: 0px 0px 25px 0px rgba(0, 0, 0, 0.9);
+            box-shadow: var(--usd-shadow-glow);
             border: 1px solid rgba(212, 175, 55, 0.15);
-            border-radius: 16px;
+            border-radius: var(--usd-border-radius);
             position: absolute;
             bottom: 90px;
             right: 0;
@@ -70,7 +99,7 @@
             visibility: hidden;
             transform: scale(0.8) translateY(20px);
             transform-origin: bottom right;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition: all var(--usd-transition-speed) cubic-bezier(0.25, 0.8, 0.25, 1);
             overflow: hidden;
             pointer-events: none;
             display: flex;
@@ -88,6 +117,7 @@
          * ============================================================================
          * CHAT BACKGROUND GLOW EFFECT
          * ============================================================================
+         * Creates a dynamic ambient light effect behind the header orb.
          */
         .glow_icon_in_chat_box {
             width: 230px;
@@ -106,13 +136,13 @@
             border-radius: 14px;
             background: linear-gradient(
                 270deg,
-                #be9644,
+                var(--usd-gold-dark),
                 #aa803c,
-                #f3dc87,
+                var(--usd-gold-light),
                 #fbefac,
-                #f3dc87,
+                var(--usd-gold-light),
                 #aa803c,
-                #c49d47
+                var(--usd-gold-primary)
             );
             filter: blur(140px);
             opacity: 0.5;
@@ -186,6 +216,7 @@
          * ============================================================================
          * CHAT LOG AREA
          * ============================================================================
+         * Allows flex-grow layout to take remaining vertical space cleanly.
          */
         .chat_main_container {
             width: 100%;
@@ -251,7 +282,7 @@
         .user_message {
             align-self: flex-end;
             text-align: right;
-            color: #e0e0e0;
+            color: var(--usd-text-muted);
             font-size: 13px;
             margin-bottom: 16px;
             max-width: 85%;
@@ -296,6 +327,17 @@
             background: var(--usd-gold-primary);
             color: #111111;
             transform: translateY(-2px);
+        }
+
+        #usd-interim-text { 
+            color: var(--usd-gold-primary); 
+            text-align: center; 
+            font-style: italic; 
+            font-size: 13px; 
+            font-weight: bold; 
+            min-height: 18px; 
+            margin-bottom: 5px; 
+            transition: color 0.2s; 
         }
 
         /**
@@ -434,7 +476,7 @@
             transform: scale(1);
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             pointer-events: auto;
-            box-shadow: 0px 0px 16.7px 0px rgba(255, 255, 255, 0.25);
+            box-shadow: var(--usd-shadow-glow);
         }
 
         .voice_chat_bot_icon_container.hidden {
@@ -699,7 +741,7 @@
             <!-- State classes are dynamically toggled on usd-chat-inner-wrap to trigger organic voice morph animations -->
             <div id="usd-chat-inner-wrap" style="height: 100%; display: flex; flex-direction: column; position: relative; z-index: 10;">
                 
-                <!-- ⚡ FIXED HEADER WITH TEXT MODE CONTROLS ⚡ -->
+                <!-- ⚡ FIXED HEADER WITH NEW TEXT MODE CONTROLS ⚡ -->
                 <div class="voice_icon_title_and_close_icon_main">
                     
                     <!-- Text Mode Only: Back to Voice Mic Icon (Left) -->
@@ -1167,6 +1209,7 @@
             const last = chatHistory[chatHistory.length - 1];
             if (last && last.role === 'user' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
             chatHistory.push({ role: "user", parts: [{ text: clean }] });
+            // Always strictly keep 6 slices to preserve API tokens
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
             saveHistory();
         }
@@ -1486,7 +1529,7 @@
                                 window.resetSilenceTimer();
                             }
 
-                            const volumeIsGood = humanVolume > 10; 
+                            const volumeIsGood = humanVolume > 15; 
                             const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
 
                             if (canStartRecording) {
@@ -1570,7 +1613,7 @@
                         isReplyComplete = false;
                         nextPlayTime = 0;
                         
-                        liveUserText = ""; activeBotMessageDiv = null; activeBotTextSpan = null; 
+                        liveUserText = ""; activeBotMessageDiv = null; activeBotTextSpan = null;
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
                         
@@ -1581,6 +1624,7 @@
                         if (data.type === 'error') console.error("Backend Error:", data.error);
                         liveUserText = ""; 
                         
+                        // CLEAR ANSWERING STATE ON ERROR TO UNFREEZE UX
                         isReplyComplete = false;
                         audioChunkQueue = [];
 
@@ -1870,6 +1914,7 @@
         return msgDiv;
     }
 
+    // Attach to window so HTML inline events can access them
     window.openChat = openChat;
     window.closeChat = closeChat;
     window.confirmEndChat = confirmEndChat;
