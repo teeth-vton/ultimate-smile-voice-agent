@@ -7,7 +7,7 @@
     <style>
         /**
          * ============================================================================
-         * ULTIMATE SMILE DESIGN - GLOBAL STYLES & RESET
+         * ULTIMATE SMILE DESIGN - GLOBAL STYLES
          * ============================================================================
          * The following CSS variables and reset properties define the core aesthetic.
          * By separating properties line-by-line, we ensure maximum readability and
@@ -20,42 +20,15 @@
             --usd-gold-dark: #aa803c;
             --usd-bg-dark: #000000;
             --usd-bg-panel: #111111;
-            --usd-text-light: #ffffff;
-            --usd-text-muted: #e0e0e0;
-            --usd-border-radius: 16px;
-            --usd-shadow-glow: 0px 0px 25px 0px rgba(0, 0, 0, 0.9);
-            --usd-transition-speed: 0.3s;
-        }
-
-        html, body, div, span, applet, object, iframe,
-        h1, h2, h3, h4, h5, h6, p, blockquote, pre,
-        a, abbr, acronym, address, big, cite, code,
-        del, dfn, em, img, ins, kbd, q, s, samp,
-        small, strike, strong, sub, sup, tt, var,
-        b, u, i, center,
-        dl, dt, dd, ol, ul, li,
-        fieldset, form, label, legend,
-        table, caption, tbody, tfoot, thead, tr, th, td,
-        article, aside, canvas, details, embed, 
-        figure, figcaption, footer, header, hgroup, 
-        menu, nav, output, ruby, section, summary,
-        time, mark, audio, video {
-            margin: 0;
-            padding: 0;
-            border: 0;
-            font-size: 100%;
-            font: inherit;
-            vertical-align: baseline;
         }
 
         body {
             background-color: var(--usd-bg-dark);
-            color: var(--usd-text-light);
+            color: #ffffff;
             margin: 0;
             font-family: var(--font-Glida-Display);
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
-            overflow-x: hidden;
         }
 
         /**
@@ -82,16 +55,14 @@
          * ============================================================================
          * DESKTOP CHAT CONTAINER SIZING & ANIMATION
          * ============================================================================
-         * Strictly sets to 344px width as per Figma design specifications.
-         * Scales and translates dynamically on entry and exit.
          */
         .voice_chat_bot_container {
             width: 344px;
             height: 520px;
             background-color: var(--usd-bg-dark);
-            box-shadow: var(--usd-shadow-glow);
+            box-shadow: 0px 0px 25px 0px rgba(0, 0, 0, 0.9);
             border: 1px solid rgba(212, 175, 55, 0.15);
-            border-radius: var(--usd-border-radius);
+            border-radius: 16px;
             position: absolute;
             bottom: 90px;
             right: 0;
@@ -99,7 +70,7 @@
             visibility: hidden;
             transform: scale(0.8) translateY(20px);
             transform-origin: bottom right;
-            transition: all var(--usd-transition-speed) cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             overflow: hidden;
             pointer-events: none;
             display: flex;
@@ -117,7 +88,6 @@
          * ============================================================================
          * CHAT BACKGROUND GLOW EFFECT
          * ============================================================================
-         * Creates a dynamic ambient light effect behind the header orb.
          */
         .glow_icon_in_chat_box {
             width: 230px;
@@ -136,13 +106,13 @@
             border-radius: 14px;
             background: linear-gradient(
                 270deg,
-                var(--usd-gold-dark),
+                #be9644,
                 #aa803c,
-                var(--usd-gold-light),
+                #f3dc87,
                 #fbefac,
-                var(--usd-gold-light),
+                #f3dc87,
                 #aa803c,
-                var(--usd-gold-primary)
+                #c49d47
             );
             filter: blur(140px);
             opacity: 0.5;
@@ -216,7 +186,6 @@
          * ============================================================================
          * CHAT LOG AREA
          * ============================================================================
-         * Allows flex-grow layout to take remaining vertical space cleanly.
          */
         .chat_main_container {
             width: 100%;
@@ -282,7 +251,7 @@
         .user_message {
             align-self: flex-end;
             text-align: right;
-            color: var(--usd-text-muted);
+            color: #e0e0e0;
             font-size: 13px;
             margin-bottom: 16px;
             max-width: 85%;
@@ -327,17 +296,6 @@
             background: var(--usd-gold-primary);
             color: #111111;
             transform: translateY(-2px);
-        }
-
-        #usd-interim-text { 
-            color: var(--usd-gold-primary); 
-            text-align: center; 
-            font-style: italic; 
-            font-size: 13px; 
-            font-weight: bold; 
-            min-height: 18px; 
-            margin-bottom: 5px; 
-            transition: color 0.2s; 
         }
 
         /**
@@ -476,7 +434,7 @@
             transform: scale(1);
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             pointer-events: auto;
-            box-shadow: var(--usd-shadow-glow);
+            box-shadow: 0px 0px 16.7px 0px rgba(255, 255, 255, 0.25);
         }
 
         .voice_chat_bot_icon_container.hidden {
@@ -906,7 +864,7 @@
             </div>
         </div>
         
-        <!-- FLOATING BUBBLE BUTTON -->
+      <!-- FLOATING BUBBLE BUTTON -->
         <div id="usd-bubble" class="voice_chat_bot_icon_container" onclick="openChat(false)">
             <!-- ⚡ Premium Glassy Siri Orb (Matched to your image) ⚡ -->
             <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="home_screen_bot_icon">
@@ -983,9 +941,14 @@
         let lastBotMessageDiv = null;
         let isMicSoftwareMuted = true; 
         let interruptRestartHoldUntil = 0;
-        
+        let liveTranscriptHideTimer = null;
+        let currentLiveAssistantText = "";
+        let currentLiveAssistantTag = null;
+        let lastAssistantStreamingText = "";
+
         // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION COMPLETELY REMOVED TO STOP BEEP ⚡
         let liveUserText = "";
+        let finalTranscript = ""; 
 
         /**
          * ============================================================================
@@ -1105,8 +1068,13 @@
                 isMicSoftwareMuted = false;
                 if (window.resetSilenceTimer) window.resetSilenceTimer();
                 if (interimBox) {
-                    interimBox.innerText = "Listening...";
-                    interimBox.style.color = "#D4AF37";
+                    if (liveUserText) {
+                        interimBox.innerText = "You: " + liveUserText;
+                        interimBox.style.color = "#D4AF37";
+                    } else if (!interimBox.innerText.includes("You:")) {
+                        interimBox.innerText = "Listening...";
+                        interimBox.style.color = "#D4AF37";
+                    }
                 }
             } else if (newState === 'speaking' && isVoiceMode) {
                 isMicSoftwareMuted = false;
@@ -1118,8 +1086,13 @@
 
             if (newState === 'thinking') {
                 if (interimBox) {
-                    interimBox.innerText = "Answering...";
-                    interimBox.style.color = "#ffffff";
+                    if (liveUserText) {
+                        interimBox.innerText = "You: " + liveUserText + " ...";
+                        interimBox.style.color = "#ffffff";
+                    } else {
+                        interimBox.innerText = "Answering...";
+                        interimBox.style.color = "#ffffff";
+                    }
                 }
             }
 
@@ -1206,10 +1179,13 @@
         function addUserHistoryIfNew(text) {
             const clean = cleanDisplayText(text);
             if (!clean) return;
+            
             const last = chatHistory[chatHistory.length - 1];
             if (last && last.role === 'user' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
+            
             chatHistory.push({ role: "user", parts: [{ text: clean }] });
-            // Always strictly keep 6 slices to preserve API tokens
+            
+            // Limit to exact 6 slices per user request to save tokens
             if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
             saveHistory();
         }
@@ -1297,6 +1273,7 @@
             interruptRestartHoldUntil = performance.now() + 500; 
             
             liveUserText = "";
+            finalTranscript = "";
 
             if (window.activeAudioSourceNode) {
                 try { window.activeAudioSourceNode.stop(); window.activeAudioSourceNode.disconnect(); } catch(e) {}
@@ -1307,6 +1284,7 @@
             
             activeBotMessageDiv = null;
             activeBotTextSpan = null;
+            lastAssistantStreamingText = "";
             updateState('listening');
         }
 
@@ -1542,6 +1520,7 @@
                                 if (!isRecording) {
                                     isRecording = true;
                                     liveUserText = ""; 
+                                    finalTranscript = ""; 
                                     updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
@@ -1557,7 +1536,7 @@
                                                     type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode, nativeTranscript: liveUserText 
                                                 }));
                                             }
-                                            liveUserText = ""; 
+                                            liveUserText = ""; finalTranscript = "";
                                             const interimBox = document.getElementById('usd-interim-text');
                                             if (interimBox) interimBox.innerText = "Answering...";
                                         }
@@ -1585,7 +1564,7 @@
                                             }));
                                         }
                                         
-                                        liveUserText = ""; 
+                                        liveUserText = ""; finalTranscript = "";
                                         const interimBox = document.getElementById('usd-interim-text');
                                         if (interimBox) interimBox.innerText = "Answering...";
                                     }
@@ -1613,7 +1592,7 @@
                         isReplyComplete = false;
                         nextPlayTime = 0;
                         
-                        liveUserText = ""; activeBotMessageDiv = null; activeBotTextSpan = null;
+                        liveUserText = ""; finalTranscript = ""; activeBotMessageDiv = null; activeBotTextSpan = null; lastAssistantStreamingText = "";
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
                         
@@ -1622,7 +1601,7 @@
                     }
                     else if (data.type === 'idle' || data.type === 'error') {
                         if (data.type === 'error') console.error("Backend Error:", data.error);
-                        liveUserText = ""; 
+                        liveUserText = ""; finalTranscript = ""; 
                         
                         // CLEAR ANSWERING STATE ON ERROR TO UNFREEZE UX
                         isReplyComplete = false;
@@ -1641,7 +1620,7 @@
                                 logMessage('user', cleanUserText);
                                 addUserHistoryIfNew(cleanUserText);
                             }
-                            liveUserText = ""; 
+                            liveUserText = ""; finalTranscript = ""; 
                             const interimBox = document.getElementById('usd-interim-text');
                             if (interimBox && interimBox.innerText.includes("You:")) {
                                 interimBox.innerText = "Answering...";
@@ -1659,6 +1638,8 @@
                     else if (data.type === 'text_stream') {
                         const streamedText = cleanDisplayText(data.text || "");
                         if (!streamedText) return; 
+
+                        lastAssistantStreamingText = streamedText;
 
                         if (!activeBotMessageDiv) {
                             activeBotMessageDiv = logMessage('bot', streamedText);
@@ -1685,7 +1666,7 @@
                     }
                     else if (data.type === 'reply_complete') {
                         isReplyComplete = true; 
-                        liveUserText = ""; 
+                        liveUserText = ""; finalTranscript = "";
                         const interimBox = document.getElementById('usd-interim-text');
                         if (interimBox) { interimBox.innerText = ""; }
 
@@ -1714,6 +1695,8 @@
                             botTarget.remove();
                         }
 
+                        lastAssistantStreamingText = "";
+                        currentLiveAssistantText = "";
                         activeTag = finalTag;
                         
                         const finalBotTarget = botTarget || lastBotMessageDiv;
