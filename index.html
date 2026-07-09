@@ -631,7 +631,7 @@
         .usd-thinking .orb-core { animation: pulseGlow 1.8s ease-in-out infinite !important; }
 
         .usd-listening .fluid-ribbon.r1 { animation: rotateCW 5s linear infinite !important; }
-        .usd-listening .fluid-ribbon.r2 { animation: rotateCCW 6.5s linear infinite !important; }
+        .usd-listening .fluid-ribbon.r2 { rotateCCW 6.5s linear infinite !important; }
         .usd-listening .fluid-ribbon.r3 { animation: rotateCW 5.8s ease-in-out infinite !important; }
         .usd-listening .fluid-ribbon.r4 { animation: rotateCCW 7.2s ease-in-out infinite !important; }
         .usd-listening .orb-core { animation: pulseGlow 2.5s ease-in-out infinite !important; }
@@ -1427,7 +1427,6 @@
                         if (socket.readyState === WebSocket.OPEN) {
                             socket.send(JSON.stringify({ 
                                 type: 'text_input', 
-                                // ⚡ FIX: Added [en-IN] exactly into the setup prompt so Gemini doesn't falsely translate English into Devanagari script!
                                 text: "SYSTEM INSTRUCTION: Start the conversation by warmly saying EXACTLY this specific phrase and absolutely nothing else: '[en-IN] Namaste! How can we assist you today? Let's start with your beautiful name, what is your name?'", 
                                 history: [],
                                 isVoiceMode: isVoiceMode 
@@ -1485,14 +1484,14 @@
 
                         if (isSpeakingNow) {
                             const isForegroundVoice = speechProfile.isNearHumanSpeech && 
-                                                      humanVolume > 90 &&  // High threshold to prevent accidental barge-in
+                                                      humanVolume > 90 &&  
                                                       speechProfile.rms > 0.5 &&  
                                                       speechProfile.coreVsNoise > 3.0 && 
                                                       speechProfile.speechRatio > 0.90;
                                                       
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
-                                if (consecutiveInterruptFrames > 99999) { // Practically disables interrupts during speech
+                                if (consecutiveInterruptFrames > 99999) { 
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
@@ -1547,14 +1546,13 @@
                                 clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
                                 
-                                // ⚡ FIX: REDUCED TIMERS FOR INSTANT HUMAN-LIKE REPLY
                                 shortPauseTimer = setTimeout(() => {
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
-                                }, 500); 
+                                }, 400); 
 
-                                // ⚡ FIX: REDUCED FROM 2500ms to 1000ms. Bot replies instantly now!
+                                // ⚡ FIX: Extremely fast 800ms silence timeout for Instant Live Response 
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -1571,7 +1569,7 @@
                                         const interimBox = document.getElementById('usd-interim-text');
                                         if (interimBox) interimBox.innerText = "Answering...";
                                     }
-                                }, 1000); 
+                                }, 800); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
@@ -1606,7 +1604,6 @@
                         if (data.type === 'error') console.error("Backend Error:", data.error);
                         liveUserText = ""; finalTranscript = ""; 
                         
-                        // CLEAR ANSWERING STATE ON ERROR TO UNFREEZE UX
                         isReplyComplete = false;
                         audioChunkQueue = [];
 
@@ -1624,7 +1621,6 @@
                                 addUserHistoryIfNew(cleanUserText);
                             }
                             liveUserText = ""; finalTranscript = ""; 
-                            // Only set "Answering..." if we are currently in thinking state so it doesn't interrupt a reset.
                             if (currentAgentState === 'thinking') {
                                 const interimBox = document.getElementById('usd-interim-text');
                                 if (interimBox) {
@@ -1903,7 +1899,6 @@
         return msgDiv;
     }
 
-    // Attach to window so HTML inline events can access them
     window.openChat = openChat;
     window.closeChat = closeChat;
     window.confirmEndChat = confirmEndChat;
