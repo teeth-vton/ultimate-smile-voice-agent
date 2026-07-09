@@ -941,6 +941,43 @@
 
         /**
          * ============================================================================
+         * SCREEN WAKE LOCK ENGINE (KEEPS SCREEN AWAKE)
+         * ============================================================================
+         */
+        let wakeLock = null;
+
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Screen Wake Lock is active 🌞');
+                    
+                    wakeLock.addEventListener('release', () => {
+                        console.log('Screen Wake Lock was released');
+                    });
+                } catch (err) {
+                    console.error(`Wake Lock error: ${err.name}, ${err.message}`);
+                }
+            }
+        }
+
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release().then(() => {
+                    wakeLock = null;
+                });
+            }
+        }
+
+        // Re-acquire lock if user switches tabs and comes back while chat is active
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible' && currentAgentState !== 'off') {
+                await requestWakeLock();
+            }
+        });
+
+        /**
+         * ============================================================================
          * 10-SECOND SILENCE TIMEOUT ENGINE
          * ============================================================================
          */
@@ -1316,8 +1353,13 @@
             }
             sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
         }
-
-        async function openChat(isRestore = false) {
+        
+            async function openChat(isRestore = false) {
+            initAudio();
+            requestWakeLock(); // ⚡ ADD THIS LINE HERE
+            interruptRestartHoldUntil = 0;
+            // ... rest of the code
+                
             initAudio();
             interruptRestartHoldUntil = 0;
             const container = document.getElementById('usd-chat-container');
@@ -1750,10 +1792,13 @@
         }
     }
 
-    function closeChat(showRating = false) {
-        updateState('off');
-        interruptBot();
-        if (socket) socket.close();
+  function closeChat(showRating = false) {
+            updateState('off');
+            interruptBot();
+            hideLiveTranscript(0);
+            releaseWakeLock(); // ⚡ ADD THIS LINE HERE
+            if (socket) socket.close();
+            // ... rest of the code
         if (globalStream) globalStream.getTracks().forEach(track => track.stop());
         
         sessionStorage.removeItem('usd_chat_active');
