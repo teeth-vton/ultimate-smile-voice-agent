@@ -1427,7 +1427,8 @@
                         if (socket.readyState === WebSocket.OPEN) {
                             socket.send(JSON.stringify({ 
                                 type: 'text_input', 
-                                text: "SYSTEM INSTRUCTION: Start the conversation by warmly saying EXACTLY this specific phrase and absolutely nothing else: 'Namaste! How can we assist you today? Let's start with your beautiful name, what is your name?'", 
+                                // ⚡ FIX: Added [en-IN] exactly into the setup prompt so Gemini doesn't falsely translate English into Devanagari script!
+                                text: "SYSTEM INSTRUCTION: Start the conversation by warmly saying EXACTLY this specific phrase and absolutely nothing else: '[en-IN] Namaste! How can we assist you today? Let's start with your beautiful name, what is your name?'", 
                                 history: [],
                                 isVoiceMode: isVoiceMode 
                             }));
@@ -1482,12 +1483,25 @@
                             dataArray, timeDataArray, streamCtx.sampleRate || 16000, analyser.fftSize || 512
                         );
 
-                       // ⚡ INTERRUPTION COMPLETELY DISABLED ⚡
-if (isSpeakingNow) {
-    // Ignore all mic input while the bot is speaking
-    requestAnimationFrame(detectVoice);
-    return;
-}
+                        if (isSpeakingNow) {
+                            const isForegroundVoice = speechProfile.isNearHumanSpeech && 
+                                                      humanVolume > 15 && 
+                                                      speechProfile.rms > 0.01 &&
+                                                      speechProfile.coreVsNoise > 1.5 &&
+                                                      speechProfile.speechRatio > 0.60;
+                                                      
+                            if (isForegroundVoice) {
+                                consecutiveInterruptFrames++;
+                                if (consecutiveInterruptFrames > 25) {
+                                    interruptBot();
+                                    consecutiveInterruptFrames = 0;
+                                }
+                            } else {
+                                consecutiveInterruptFrames = Math.max(0, consecutiveInterruptFrames - 1);
+                            }
+                            requestAnimationFrame(detectVoice);
+                            return;
+                        }
 
                         if (currentAgentState === 'listening' && isVoiceMode) {
                             if (humanVolume > 10 && window.resetSilenceTimer) {
@@ -1608,10 +1622,13 @@ if (isSpeakingNow) {
                                 addUserHistoryIfNew(cleanUserText);
                             }
                             liveUserText = ""; finalTranscript = ""; 
-                            const interimBox = document.getElementById('usd-interim-text');
-                            if (interimBox && interimBox.innerText.includes("You:")) {
-                                interimBox.innerText = "Answering...";
-                                interimBox.style.color = "#ffffff";
+                            // Only set "Answering..." if we are currently in thinking state so it doesn't interrupt a reset.
+                            if (currentAgentState === 'thinking') {
+                                const interimBox = document.getElementById('usd-interim-text');
+                                if (interimBox) {
+                                    interimBox.innerText = "Answering...";
+                                    interimBox.style.color = "#ffffff";
+                                }
                             }
                         }
                     }
