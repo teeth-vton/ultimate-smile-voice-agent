@@ -1485,14 +1485,14 @@
 
                         if (isSpeakingNow) {
                             const isForegroundVoice = speechProfile.isNearHumanSpeech && 
-                                                      humanVolume > 90 &&  // ⚡ FIX: Increased from 15 to 90 to prevent accidental barge-in
-                                                      speechProfile.rms > 0.5 &&  // ⚡ FIX: Increased from 0.01 to 0.5 to prevent accidental barge-in
+                                                      humanVolume > 90 &&  // High threshold to prevent accidental barge-in
+                                                      speechProfile.rms > 0.5 &&  
                                                       speechProfile.coreVsNoise > 3.0 && 
                                                       speechProfile.speechRatio > 0.90;
                                                       
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
-                                if (consecutiveInterruptFrames > 99999) { // ⚡ FIX: Increased from 25 to 99999 to practically disable interrupts during speech
+                                if (consecutiveInterruptFrames > 99999) { // Practically disables interrupts during speech
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
@@ -1547,12 +1547,14 @@
                                 clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
                                 
+                                // ⚡ FIX: REDUCED TIMERS FOR INSTANT HUMAN-LIKE REPLY
                                 shortPauseTimer = setTimeout(() => {
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
-                                }, 800); 
+                                }, 500); 
 
+                                // ⚡ FIX: REDUCED FROM 2500ms to 1000ms. Bot replies instantly now!
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
@@ -1569,7 +1571,7 @@
                                         const interimBox = document.getElementById('usd-interim-text');
                                         if (interimBox) interimBox.innerText = "Answering...";
                                     }
-                                }, 2500); 
+                                }, 1000); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
