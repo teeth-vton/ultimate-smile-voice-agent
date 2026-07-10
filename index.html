@@ -674,7 +674,7 @@
                 speechAvg > 15 &&         
                 coreAvg > 18 &&
                 speechRatio > 0.70 &&     
-                coreVsNoise > 1.30;       
+                coreVsNoise > 1.30;        
 
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
@@ -939,7 +939,8 @@
                 tooltip.style.opacity = '0'; 
                 tooltip.style.pointerEvents = 'none';
                 
-                document.getElementById('usd-input-container').style.display = 'flex';
+                // ⚡ FIX: Only show input container if in Text Mode ⚡
+                document.getElementById('usd-input-container').style.display = isVoiceMode ? 'none' : 'flex';
                 document.getElementById('usd-inline-rating').style.display = 'none';
                 document.getElementById('usd-mode-toggle').style.display = 'block';
                 hideLiveTranscript(0);
@@ -1087,6 +1088,45 @@
                             requestAnimationFrame(detectVoice);
                             return;
                         }
+
+                        if (currentAgentState === 'listening' && isVoiceMode) {
+                            const inRestartHold = performance.now() < interruptRestartHoldUntil;
+
+                            const canStartRecording = inRestartHold
+                                ? (
+                                    speechProfile.isNearHumanSpeech &&
+                                    humanVolume > 40 &&
+                                    speechProfile.speechRatio > 0.65
+                                )
+                                : (speechProfile.isNearHumanSpeech && humanVolume > 10); 
+
+                            if (canStartRecording) { 
+                                if (!isRecording) {
+                                    isRecording = true;
+                                    liveUserText = ""; // ⚡ WIPE OLD TRANSCRIPT ON NEW SPEECH ⚡
+                                    if (recognition) {
+                                        try { 
+                                            recognition.abort(); 
+                                            setTimeout(() => recognition.start(), 50); 
+                                        } catch(e) {}
+                                    }
+                                    updateState('listening'); 
+                                    
+                                    if (socket.readyState === WebSocket.OPEN) {
+                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
+                                    }
+                                    
+                                    maxRecordingTimer = setTimeout(() => {
+                                        if (isRecording) {
+                                            isRecording = false;
+                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
+                                            updateState('thinking');
+                                            if (socket.readyState === WebSocket.OPEN) {
+                                                socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
+                                            }
+                                        }
+                                    }, 14000); 
+                                }
                                 
                                 clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
@@ -1395,6 +1435,17 @@
 
             return msgDiv;
         }
+
+        // ⚡ FIX: Attach to window so HTML inline events can access them ⚡
+        window.openChat = openChat;
+        window.closeChat = closeChat;
+        window.confirmEndChat = confirmEndChat;
+        window.toggleChatMode = toggleChatMode;
+        window.closeChatBtnClicked = closeChatBtnClicked;
+        window.submitTextMessage = submitTextMessage;
+        window.submitRating = submitRating;
+        window.handleKeyPress = handleKeyPress;
+        window.handleLinkClick = handleLinkClick;
     </script>
 </body>
 </html>
