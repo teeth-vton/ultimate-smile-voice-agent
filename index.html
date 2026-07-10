@@ -1512,7 +1512,7 @@
                                                       
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
-                                if (consecutiveInterruptFrames > 25) {
+                                if (consecutiveInterruptFrames > 9999) {
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
