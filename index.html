@@ -3,164 +3,317 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ultimate Smile Design - Live Agent</title>
+    <title>Ultimate Smile Design - Ultimate Ai</title>
     <style>
-        body {
-            background-color: #000000;
-            color: #ffffff;
-            margin: 0;
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        /**
+         * ============================================================================
+         * ULTIMATE SMILE DESIGN - GLOBAL STYLES & RESET
+         * ============================================================================
+         * The following CSS variables and reset properties define the core aesthetic.
+         * By separating properties line-by-line, we ensure maximum readability and
+         * easier debugging for future UI enhancements.
+         */
+        :root {
+            --font-Glida-Display: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            --usd-gold-primary: #D4AF37;
+            --usd-gold-light: #fbefac;
+            --usd-gold-dark: #aa803c;
+            --usd-bg-dark: #000000;
+            --usd-bg-panel: #111111;
+            --usd-text-light: #ffffff;
+            --usd-text-muted: #e0e0e0;
+            --usd-border-radius: 16px;
+            --usd-shadow-glow: 0px 0px 25px 0px rgba(0, 0, 0, 0.9);
+            --usd-transition-speed: 0.3s;
         }
-        #usd-voice-widget {
+
+        html, body, div, span, applet, object, iframe,
+        h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+        a, abbr, acronym, address, big, cite, code,
+        del, dfn, em, img, ins, kbd, q, s, samp,
+        small, strike, strong, sub, sup, tt, var,
+        b, u, i, center,
+        dl, dt, dd, ol, ul, li,
+        fieldset, form, label, legend,
+        table, caption, tbody, tfoot, thead, tr, th, td,
+        article, aside, canvas, details, embed, 
+        figure, figcaption, footer, header, hgroup, 
+        menu, nav, output, ruby, section, summary,
+        time, mark, audio, video {
+            margin: 0;
+            padding: 0;
+            border: 0;
+            font-size: 100%;
+            font: inherit;
+            vertical-align: baseline;
+        }
+
+        body {
+            background-color: var(--usd-bg-dark);
+            color: var(--usd-text-light);
+            margin: 0;
+            font-family: var(--font-Glida-Display);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow-x: hidden;
+        }
+
+        /**
+         * ============================================================================
+         * VOICE WIDGET CONTAINER
+         * ============================================================================
+         * The parent container that pins the entire chat experience to the bottom right.
+         * We use flex-end to ensure that child elements scale properly against the
+         * right edge of the viewport.
+         */
+        .voice_agent_main {
+            height: auto;
+            width: auto;
             position: fixed;
-            bottom: 30px;
-            right: 30px;
+            bottom: 40px;
+            right: 40px;
             z-index: 99999;
             display: flex;
             flex-direction: column;
             align-items: flex-end;
         }
-        #usd-tooltip {
-            background: #D4AF37;
-            color: #111;
-            padding: 10px 15px;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            animation: bounce 2s infinite;
-            position: relative;
-            cursor: pointer;
-            display: block; 
-            transition: opacity 0.3s ease-in-out;
-            opacity: 1;
-        }
-        #usd-tooltip::after {
-            content: '';
+
+        /**
+         * ============================================================================
+         * DESKTOP CHAT CONTAINER SIZING & ANIMATION
+         * ============================================================================
+         * Strictly sets to 344px width as per Figma design specifications.
+         * Scales and translates dynamically on entry and exit.
+         */
+        .voice_chat_bot_container {
+            width: 344px;
+            height: 520px;
+            background-color: var(--usd-bg-dark);
+            box-shadow: var(--usd-shadow-glow);
+            border: 1px solid rgba(212, 175, 55, 0.15);
+            border-radius: var(--usd-border-radius);
             position: absolute;
-            bottom: -8px;
-            right: 30px;
-            border-width: 8px 8px 0;
-            border-style: solid;
-            border-color: #D4AF37 transparent transparent transparent;
-        }
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
-        }
-        @keyframes floatContainer {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-8px); }
-            100% { transform: translateY(0px); }
-        }
-        #usd-chat-container {
-            width: 320px;
-            max-height: 380px;
-            background-color: #111111;
-            border: 1px solid #333333; 
-            border-radius: 15px;
-            padding: 15px;
-            margin-bottom: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            display: none;
+            bottom: 90px;
+            right: 0;
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(0.8) translateY(20px);
+            transform-origin: bottom right;
+            transition: all var(--usd-transition-speed) cubic-bezier(0.25, 0.8, 0.25, 1);
+            overflow: hidden;
+            pointer-events: none;
+            display: flex;
             flex-direction: column;
-            position: relative; 
-            animation: floatContainer 4s ease-in-out infinite;
-            transform: translateZ(0);
-            backface-visibility: hidden;
         }
-        #usd-chat-header {
+
+        .voice_chat_bot_container.active {
+            opacity: 1;
+            visibility: visible;
+            transform: scale(1) translateY(0);
+            pointer-events: auto;
+        }
+
+        /**
+         * ============================================================================
+         * CHAT BACKGROUND GLOW EFFECT
+         * ============================================================================
+         * Creates a dynamic ambient light effect behind the header orb.
+         */
+        .glow_icon_in_chat_box {
+            width: 230px;
+            height: 230px;
+            position: absolute;
+            top: -50px;
+            left: -40px;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .glow_icon_in_chat_box::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 14px;
+            background: linear-gradient(
+                270deg,
+                var(--usd-gold-dark),
+                #aa803c,
+                var(--usd-gold-light),
+                #fbefac,
+                var(--usd-gold-light),
+                #aa803c,
+                var(--usd-gold-primary)
+            );
+            filter: blur(140px);
+            opacity: 0.5;
+        }
+
+        /**
+         * ============================================================================
+         * HEADER STYLES
+         * ============================================================================
+         */
+        .voice_icon_title_and_close_icon_main {
+            width: 100%;
+            height: 40px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding-bottom: 10px;
-            margin-bottom: 10px;
+            justify-content: center;
+            padding: 0 16px;
+            box-sizing: border-box;
+            margin-top: 15px;
+            position: relative;
         }
-        #usd-header-left {
+
+        .header_title {
+            width: 100%;
             display: flex;
             align-items: center;
-            gap: 10px;
+            justify-content: center;
+            flex-direction: column;
         }
+
+        .chat_bot_label {
+            font-size: 20px;
+            letter-spacing: 1.5px;
+            font-family: var(--font-Glida-Display);
+            font-weight: 600;
+            color: var(--usd-gold-primary);
+        }
+
         #usd-status-box {
-            color: #D4AF37;
-            font-size: 13px;
+            color: #ffffff;
+            font-size: 10px;
             font-weight: bold;
+            margin-top: 3px;
+            opacity: 0.6;
         }
-        #usd-header-right {
+
+        /**
+         * ============================================================================
+         * TOP ORB CONTAINER (INSIDE CHAT)
+         * ============================================================================
+         */
+        .chat_box_icon_inside_main {
+            width: 100%;
             display: flex;
             align-items: center;
-            gap: 10px;
+            justify-content: center;
+            margin-top: 10px;
         }
-        #usd-mode-toggle {
-            background: #222;
-            color: #D4AF37;
-            border: 1px solid #D4AF37;
-            border-radius: 20px;
-            padding: 4px 10px;
-            font-size: 11px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s;
+
+        .chat_box_icon_inside {
+            width: 96px;
+            height: 96px;
         }
-        #usd-mode-toggle:hover { background: #D4AF37; color: #111; }
-        #usd-visualizer {
-            display: flex;
-            gap: 3px;
-            align-items: center;
-            height: 20px;
+
+        .chat_box_inside_bot_icon {
+            width: 96px;
+            height: 96px;
         }
-        .usd-bar {
-            width: 3px;
-            background: #D4AF37;
-            border-radius: 3px;
-            height: 4px; 
-            transition: height 0.2s ease;
-        }
-        #usd-visualizer.active .usd-bar { animation: usd-sound 0.4s ease-in-out infinite alternate; }
-        #usd-visualizer.active .usd-bar:nth-child(1) { animation-delay: 0.0s; }
-        #usd-visualizer.active .usd-bar:nth-child(2) { animation-delay: 0.2s; }
-        #usd-visualizer.active .usd-bar:nth-child(3) { animation-delay: 0.1s; }
-        #usd-visualizer.active .usd-bar:nth-child(4) { animation-delay: 0.3s; }
-        #usd-visualizer.active .usd-bar:nth-child(5) { animation-delay: 0.1s; }
-        @keyframes usd-sound { 0% { height: 4px; } 100% { height: 18px; } }
-        #usd-close-btn {
-            background: none;
-            border: none;
-            color: #888;
-            font-size: 18px;
-            cursor: pointer;
-            padding: 0;
-            transition: color 0.2s;
-        }
-        #usd-close-btn:hover { color: #ff4444; }
-        #usd-chat-log {
+
+        /**
+         * ============================================================================
+         * CHAT LOG AREA
+         * ============================================================================
+         * Allows flex-grow layout to take remaining vertical space cleanly.
+         */
+        .chat_main_container {
+            width: 100%;
+            height: 240px;
+            margin-top: 10px;
+            padding: 16px 16px 8px 16px;
             overflow-y: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
             flex-grow: 1;
-            margin-bottom: 10px;
-            max-height: 210px;
-            padding-right: 5px;
         }
-        #usd-chat-log::-webkit-scrollbar { width: 4px; }
-        #usd-chat-log::-webkit-scrollbar-thumb { background: #D4AF37; border-radius: 10px; }
-        .msg { margin-bottom: 8px; font-size: 13px; line-height: 1.4; }
-        .msg-user { color: #ffffff; text-align: right; }
-        .msg-bot { color: #D4AF37; text-align: left; }
-        .msg-error { color: #ff4444; text-align: left; font-size: 11px; background: rgba(255,68,68,0.1); padding: 6px; border-radius: 5px; margin-top: 5px; }
-        .usd-msg-text {
+
+        .chat_main_container::-webkit-scrollbar {
+            display: none;
+        }
+
+        /**
+         * ============================================================================
+         * MESSAGE BUBBLES
+         * ============================================================================
+         */
+        .bot_message {
+            position: relative;
+            background-color: #080808;
+            border: 1px solid rgba(212, 175, 55, 0.25);
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            max-width: 85%;
+            color: #ffffff;
+            font-size: 13px;
+            line-height: 1.5;
+            align-self: flex-start;
+            margin-left: 8px;
+            font-family: inherit;
+            letter-spacing: 0.3px;
+            box-sizing: border-box;
+        }
+
+        .bot_message > p {
+            margin: 0;
             white-space: pre-wrap;
             word-break: break-word;
-            display: inline-block;
         }
+
+        .bot_message::before {
+            content: "";
+            position: absolute;
+            left: -6.5px;
+            bottom: 25%;
+            width: 11px;
+            height: 11px;
+            background-color: #080808;
+            border-left: 1px solid rgba(212, 175, 55, 0.25);
+            border-top: 1px solid rgba(212, 175, 55, 0.25);
+            transform: rotate(-45deg);
+            border-top-left-radius: 2px;
+        }
+
+        .user_message {
+            align-self: flex-end;
+            text-align: right;
+            color: var(--usd-text-muted);
+            font-size: 13px;
+            margin-bottom: 16px;
+            max-width: 85%;
+            line-height: 1.5;
+            font-family: inherit;
+            letter-spacing: 0.3px;
+            box-sizing: border-box;
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+
+        .user_message > p {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /**
+         * ============================================================================
+         * ACTION LINK CARDS
+         * ============================================================================
+         */
         .usd-link-card {
             display: block;
             width: 100%;
             margin-top: 8px;
             padding: 10px;
             background: linear-gradient(135deg, #111111, #222222);
-            border: 1px solid #D4AF37;
-            color: #D4AF37;
+            border: 1px solid var(--usd-gold-primary);
+            color: var(--usd-gold-primary);
             border-radius: 8px;
             font-size: 12px;
             font-weight: bold;
@@ -169,136 +322,229 @@
             box-sizing: border-box;
             transition: all 0.2s;
         }
+
         .usd-link-card:hover {
-            background: #D4AF37;
+            background: var(--usd-gold-primary);
             color: #111111;
             transform: translateY(-2px);
         }
-        #usd-interim-text {
-            color: #888;
-            text-align: right;
-            font-style: italic;
-            font-size: 12px;
-            min-height: 16px;
-            margin-bottom: 5px;
+
+        #usd-interim-text { 
+            color: var(--usd-gold-primary); 
+            text-align: center; 
+            font-style: italic; 
+            font-size: 13px; 
+            font-weight: bold; 
+            min-height: 18px; 
+            margin-bottom: 5px; 
+            transition: color 0.2s; 
         }
 
-        /* LIVE TRANSCRIPT POPUP */
-        #usd-live-transcript-popup {
-            display: none;
-            margin-bottom: 10px;
-            padding: 10px 12px;
-            border-radius: 10px;
-            background: rgba(212, 175, 55, 0.10);
-            border: 1px solid rgba(212, 175, 55, 0.35);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-            position: relative;
-            z-index: 5;
-        }
-        #usd-live-transcript-label {
-            color: #D4AF37;
-            font-size: 11px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            margin-bottom: 4px;
-        }
-        #usd-live-transcript-text {
-            color: #ffffff;
-            font-size: 13px;
-            line-height: 1.45;
-            white-space: pre-wrap;
-            word-break: break-word;
-            max-height: 70px;
-            overflow-y: auto;
-        }
-        #usd-live-transcript-link-wrap {
-            display: none;
-            margin-top: 8px;
-        }
-        #usd-live-transcript-link-wrap .usd-link-card {
-            margin-top: 0;
-            font-size: 11px;
-            padding: 9px 10px;
+        /**
+         * ============================================================================
+         * CONTROLS FOOTER (VOICE MODE ACTIVE)
+         * ============================================================================
+         */
+        .chat_icon_and_voice_and_close_icon_container_main {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 24px;
+            box-sizing: border-box;
         }
 
-        #usd-input-container {
-            display: none; 
-            border-top: 1px solid rgba(255,255,255,0.1);
-            padding-top: 10px;
-        }
-        #usd-text-input {
-            flex-grow: 1;
-            background: #222;
-            border: 1px solid #444;
-            color: #fff;
-            border-radius: 4px;
-            padding: 6px 10px;
-            font-size: 13px;
-            outline: none;
-        }
-        #usd-text-input:focus { border-color: #D4AF37; }
-        #usd-send-btn {
-            background: #D4AF37;
-            color: #111;
-            border: none;
-            border-radius: 4px;
-            padding: 6px 12px;
-            margin-left: 6px;
+        .chat_icon_main {
+            width: 24px;
+            height: 24px;
             cursor: pointer;
-            font-weight: bold;
-            font-size: 13px;
-        }
-        #usd-send-btn:hover { background: #FFF8DC; }
-        
-        #usd-bubble {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #FFD700, #B8860B);
-            border-radius: 50%;
-            cursor: pointer;
-            --pulse-max: 20px; 
-            box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7);
-            animation: usd-pulse 2s infinite;
+            transition: transform 0.2s;
+            opacity: 0.8;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 3px solid #111111;
-            transition: transform 0.2s ease-in-out;
-            user-select: none;
         }
-        #usd-bubble:hover { transform: scale(1.05); }
-        #usd-bubble:active { transform: scale(0.95); }
-        @keyframes usd-pulse {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 var(--pulse-max) rgba(212, 175, 55, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
+
+        .chat_icon_main:hover {
+            transform: scale(1.15);
+            opacity: 1;
         }
+
+        .voice_icon_main {
+            width: 90px;
+            height: 90px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .voice_animation_icon {
+            width: 90px;
+            height: 90px;
+            overflow: visible;
+        }
+
+        .close_icon_main {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            opacity: 0.8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .close_icon_main:hover {
+            transform: scale(1.15);
+            opacity: 1;
+        }
+
+        /**
+         * ============================================================================
+         * TEXT INPUT PANEL (TEXT MODE ACTIVE)
+         * ============================================================================
+         */
+        .massge_input_main {
+            width: 100%;
+            height: 50px;
+            padding: 0px 16px;
+            margin-top: 10px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+
+        .input_box_and_icon_main {
+            width: 100%;
+            height: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.03);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            box-sizing: border-box;
+        }
+
+        .chat_input_box {
+            width: 85%;
+            height: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #ffffff;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .chat_input_box::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 14px;
+        }
+
+        .send_button_icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .send_button_icon:hover {
+            transform: scale(1.1);
+        }
+
+        /**
+         * ============================================================================
+         * MAIN FLOATING BUBBLE
+         * ============================================================================
+         */
+        .voice_chat_bot_icon_container {
+            width: 76px;
+            height: 76px;
+            border-radius: 50%;
+            cursor: pointer;
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            opacity: 1;
+            visibility: visible;
+            transform: scale(1);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            pointer-events: auto;
+            box-shadow: 0px 0px 16.7px 0px rgba(255, 255, 255, 0.25);
+        }
+
+        .voice_chat_bot_icon_container.hidden {
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(0.5);
+            pointer-events: none;
+        }
+
+        .home_screen_bot_icon {
+            width: 76px;
+            height: 76px;
+        }
+
+        /**
+         * ============================================================================
+         * RATING & DIALOG CONFIRM OVERLAYS
+         * ============================================================================
+         */
         #usd-inline-rating {
             display: none;
             border-top: 1px solid rgba(255,255,255,0.1);
-            padding-top: 15px;
+            padding: 12px;
             text-align: center;
+            margin-top: auto;
         }
-        #usd-rating-title { color: #fff; font-size: 15px; margin-bottom: 12px; font-weight: bold; letter-spacing: 0.5px;}
-        .usd-stars { display: flex; justify-content: center; gap: 12px; cursor: pointer; }
+
+        #usd-rating-title { 
+            color: #fff; 
+            font-size: 14px; 
+            margin-bottom: 10px; 
+            font-weight: bold; 
+            letter-spacing: 0.5px;
+        }
+
+        .usd-stars { 
+            display: flex; 
+            justify-content: center; 
+            gap: 10px; 
+            cursor: pointer; 
+        }
+
         .usd-star { 
-            font-size: 28px; 
+            font-size: 24px; 
             color: #333333; 
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
             transition: transform 0.2s, color 0.2s, text-shadow 0.2s; 
         }
+
         .usd-star:hover, .usd-star.active { 
-            color: #FFD700; 
+            color: var(--usd-gold-primary); 
             transform: scale(1.2);
             text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
         }
-        #usd-rating-thanks { display: none; color: #D4AF37; font-size: 13px; margin-top: 12px; font-weight: bold; }
+
+        #usd-rating-thanks { 
+            display: none; 
+            color: var(--usd-gold-primary); 
+            font-size: 12px; 
+            margin-top: 10px; 
+            font-weight: bold; 
+        }
+
         #usd-end-confirm-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(10, 10, 10, 0.95);
-            border-radius: 15px;
+            border-radius: 14px;
             display: none;
             flex-direction: column;
             align-items: center;
@@ -307,35 +553,183 @@
             text-align: center;
             padding: 20px;
         }
-        .usd-confirm-title { color: #fff; font-size: 16px; margin-bottom: 20px; font-weight: bold; }
-        .usd-confirm-btns { display: flex; gap: 15px; }
-        .usd-btn-yes { background: #ff4444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .usd-btn-no { background: #444; color: #fff; border: none; padding: 8px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
 
+        .usd-confirm-title { 
+            color: #fff; 
+            font-size: 15px; 
+            margin-bottom: 18px; 
+            font-weight: bold; 
+        }
+
+        .usd-confirm-btns { 
+            display: flex; 
+            gap: 15px; 
+        }
+
+        .usd-btn-yes { 
+            background: #ff4444; 
+            color: #fff; 
+            border: none; 
+            padding: 8px 18px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-weight: bold; 
+        }
+
+        .usd-btn-no { 
+            background: #444; 
+            color: #fff; 
+            border: none; 
+            padding: 8px 18px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-weight: bold; 
+        }
+
+        /**
+         * ============================================================================
+         * VOICE TRIGGER RIPPLE SPEAKING ANIMATIONS
+         * ============================================================================
+         */
+        @keyframes rippleSpeak1 {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.15); opacity: 0.45; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+        @keyframes rippleSpeak2 {
+            0% { transform: scale(1); opacity: 0.6; }
+            50% { transform: scale(1.3); opacity: 0.25; }
+            100% { transform: scale(1); opacity: 0.6; }
+        }
+        @keyframes rippleSpeak3 {
+            0% { transform: scale(1); opacity: 0.4; }
+            50% { transform: scale(1.45); opacity: 0.1; }
+            100% { transform: scale(1); opacity: 0.4; }
+        }
+
+        .voice_icon_main svg .ripple-1,
+        .voice_icon_main svg .ripple-2,
+        .voice_icon_main svg .ripple-3 {
+            transform-origin: 45px 45px;
+            transition: transform 0.3s ease;
+        }
+
+        .voice_icon_main.is-listening svg .ripple-1,
+        .usd-speaking #usd-voice-trigger-btn svg .ripple-1 {
+            animation: rippleSpeak1 1.2s infinite ease-in-out;
+        }
+        .voice_icon_main.is-listening svg .ripple-2,
+        .usd-speaking #usd-voice-trigger-btn svg .ripple-2 {
+            animation: rippleSpeak2 1.2s infinite ease-in-out 0.2s;
+        }
+        .voice_icon_main.is-listening svg .ripple-3,
+        .usd-speaking #usd-voice-trigger-btn svg .ripple-3 {
+            animation: rippleSpeak3 1.2s infinite ease-in-out 0.4s;
+        }
+
+        /**
+         * ============================================================================
+         * PREMIUM GLASSY SIRI ORB SPECIFICATIONS
+         * ============================================================================
+         */
+        .fluid-ribbon {
+            transform-origin: 50px 50px;
+            transition: transform 0.4s ease-out;
+        }
+
+        @keyframes rotateCW {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.05); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+
+        @keyframes rotateCCW {
+            0% { transform: rotate(360deg) scale(1); }
+            50% { transform: rotate(180deg) scale(0.95); }
+            100% { transform: rotate(0deg) scale(1); }
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { transform: scale(1); opacity: 0.75; }
+            50% { transform: scale(1.15); opacity: 1; }
+        }
+
+        .fluid-ribbon.r1 { animation: rotateCW 12s linear infinite; }
+        .fluid-ribbon.r2 { animation: rotateCCW 16s linear infinite; }
+        .fluid-ribbon.r3 { animation: rotateCW 14s ease-in-out infinite; }
+        .fluid-ribbon.r4 { animation: rotateCCW 18s ease-in-out infinite; }
+        .orb-core { animation: pulseGlow 4s ease-in-out infinite; transform-origin: 50px 50px; }
+
+        .usd-speaking .fluid-ribbon.r1 { animation: rotateCW 2.2s linear infinite !important; }
+        .usd-speaking .fluid-ribbon.r2 { animation: rotateCCW 2.8s linear infinite !important; }
+        .usd-speaking .fluid-ribbon.r3 { animation: rotateCW 2.5s ease-in-out infinite !important; }
+        .usd-speaking .fluid-ribbon.r4 { animation: rotateCCW 3.2s ease-in-out infinite !important; }
+        .usd-speaking .orb-core { animation: pulseGlow 1s ease-in-out infinite !important; }
+
+        .usd-thinking .fluid-ribbon.r1 { animation: rotateCW 7s linear infinite !important; }
+        .usd-thinking .fluid-ribbon.r2 { animation: rotateCCW 9s linear infinite !important; }
+        .usd-thinking .fluid-ribbon.r3 { animation: rotateCW 8s ease-in-out infinite !important; }
+        .usd-thinking .fluid-ribbon.r4 { animation: rotateCCW 10s ease-in-out infinite !important; }
+        .usd-thinking .orb-core { animation: pulseGlow 1.8s ease-in-out infinite !important; }
+
+        .usd-listening .fluid-ribbon.r1 { animation: rotateCW 5s linear infinite !important; }
+        .usd-listening .fluid-ribbon.r2 { animation: rotateCCW 6.5s linear infinite !important; }
+        .usd-listening .fluid-ribbon.r3 { animation: rotateCW 5.8s ease-in-out infinite !important; }
+        .usd-listening .fluid-ribbon.r4 { animation: rotateCCW 7.2s ease-in-out infinite !important; }
+        .usd-listening .orb-core { animation: pulseGlow 2.5s ease-in-out infinite !important; }
+
+        /**
+         * ============================================================================
+         * MOBILE RESPONSIVENESS & SCALING
+         * ============================================================================
+         */
         @media (max-width: 480px) {
-            #usd-voice-widget { bottom: 15px; right: 15px; }
-            #usd-bubble { width: 50px; height: 50px; } 
-            #usd-bubble svg { width: 24px; height: 24px; }
-            #usd-chat-container { 
-                width: calc(100vw - 40px); 
-                max-height: 380px; 
-                padding: 12px; 
-                margin-bottom: 10px; 
+            .voice_agent_main { 
+                bottom: 20px; 
+                right: 20px; 
             }
-            #usd-chat-log { max-height: 160px; } 
-            #usd-tooltip { font-size: 12px; padding: 8px 12px; margin-bottom: 10px; }
-            #usd-tooltip::after { right: 20px; }
+            .voice_chat_bot_container { 
+                width: calc(100vw - 40px); 
+                height: 420px; 
+                max-height: 80vh;
+                bottom: 75px; 
+            }
+            .chat_main_container { 
+                padding: 12px; 
+            }
+            .home_screen_bot_icon { 
+                width: 65px; 
+                height: 65px; 
+            }
+            .voice_chat_bot_icon_container { 
+                width: 65px; 
+                height: 65px; 
+            }
+            .chat_box_icon_inside { 
+                width: 75px; 
+                height: 75px; 
+            }
+            .chat_box_inside_bot_icon { 
+                width: 75px; 
+                height: 75px; 
+            }
+            .voice_icon_main {
+                width: 75px;
+                height: 75px;
+            }
         }
     </style>
 </head>
 <body>
 
-    <div id="usd-voice-widget">
-        <div id="usd-tooltip" onclick="openChat(false)">
-            Namaste! Tap here to talk about your new smile!
-        </div>
+    <div id="usd-voice-widget" class="voice_agent_main">
 
-        <div id="usd-chat-container">
+        <!-- MAIN CHAT CONTAINER -->
+        <div id="usd-chat-container" class="voice_chat_bot_container">
+            <!-- GLOWING ORB DECORATION -->
+            <div class="glow_icon_in_chat_box"></div>
+
+            <!-- CALL CANCELLATION OVERLAY -->
             <div id="usd-end-confirm-overlay">
                 <div class="usd-confirm-title">Want to end the call?</div>
                 <div class="usd-confirm-btns">
@@ -344,36 +738,160 @@
                 </div>
             </div>
 
-            <div id="usd-chat-inner-wrap" style="height: 100%; display: flex; flex-direction: column;">
-                <div id="usd-chat-header">
-                    <div id="usd-header-left">
-                        <img src="https://raw.githubusercontent.com/teeth-vton/sd-voice-backend/dab01d9f2e96be2fcda278af63db62dfef9e1559/Gemini_Generated_Image_67gd1767gd1767gd.png" alt="USD Assistant" width="24" height="24" style="object-fit: contain;">
+            <!-- State classes are dynamically toggled on usd-chat-inner-wrap to trigger organic voice morph animations -->
+            <div id="usd-chat-inner-wrap" style="height: 100%; display: flex; flex-direction: column; position: relative; z-index: 10;">
+                
+                <!-- HEADER WITH TEXT MODE CONTROLS -->
+                <div class="voice_icon_title_and_close_icon_main">
+                    
+                    <!-- Text Mode Only: Back to Voice Mic Icon (Left) -->
+                    <div id="usd-text-mic-btn" class="chat_icon_main" style="position: absolute; left: 16px; display: none;" onclick="toggleChatMode()" title="Switch to Voice Mode">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px; height:20px;">
+                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="22"></line>
+                        </svg>
+                    </div>
+
+                    <div class="header_title">
+                        <div class="chat_bot_label">Ultimate Ai</div>
                         <div id="usd-status-box">Connected 🟢</div>
                     </div>
-                    <div id="usd-header-right">
-                        <button id="usd-mode-toggle" onclick="toggleChatMode()">🎙️ Voice</button>
-                        <div id="usd-visualizer">
-                            <div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div><div class="usd-bar"></div>
-                        </div>
-                        <button id="usd-close-btn" onclick="closeChatBtnClicked()">✕</button>
+
+                    <!-- Text Mode Only: Close Chat Icon (Right) -->
+                    <div id="usd-text-close-btn" class="close_icon_main" style="position: absolute; right: 16px; display: none;" onclick="closeChatBtnClicked()" title="End Conversation">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:20px; height:20px;">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
                     </div>
                 </div>
 
-                <!-- LIVE TRANSCRIPT POPUP -->
-                <div id="usd-live-transcript-popup">
-                    <div id="usd-live-transcript-label">Assistant speaking</div>
-                    <div id="usd-live-transcript-text"></div>
-                    <div id="usd-live-transcript-link-wrap"></div>
+                <!-- TOP ANIMATED GLASSY GOLDEN ORB -->
+                <div class="chat_box_icon_inside_main">
+                    <div class="chat_box_icon_inside">
+                        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="chat_box_inside_bot_icon" id="usd-glass-orb-svg">
+                            <defs>
+                                <radialGradient id="orbBg" cx="50%" cy="50%" r="50%">
+                                    <stop offset="0%" stop-color="#111111" />
+                                    <stop offset="65%" stop-color="#1b1b1b" />
+                                    <stop offset="85%" stop-color="#101010" />
+                                    <stop offset="100%" stop-color="#05050a" />
+                                </radialGradient>
+                                
+                                <linearGradient id="goldRim" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="rgba(212, 175, 55, 0.55)" />
+                                    <stop offset="50%" stop-color="rgba(255, 248, 220, 0.75)" />
+                                    <stop offset="100%" stop-color="rgba(170, 128, 60, 0.55)" />
+                                </linearGradient>
+
+                                <linearGradient id="ribbonGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="rgba(212, 175, 55, 0.65)" />
+                                    <stop offset="100%" stop-color="rgba(170, 128, 60, 0.05)" />
+                                </linearGradient>
+                                
+                                <linearGradient id="ribbonGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" stop-color="rgba(251, 239, 172, 0.75)" />
+                                    <stop offset="100%" stop-color="rgba(196, 157, 71, 0.05)" />
+                                </linearGradient>
+                                
+                                <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+                                    <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
+                                    <stop offset="25%" stop-color="#fbefac" stop-opacity="0.8" />
+                                    <stop offset="60%" stop-color="#D4AF37" stop-opacity="0.15" />
+                                    <stop offset="100%" stop-color="#D4AF37" stop-opacity="0" />
+                                </radialGradient>
+
+                                <linearGradient id="reflectGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.12" />
+                                    <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+                                </linearGradient>
+                            </defs>
+
+                            <circle cx="50" cy="50" r="47" fill="url(#orbBg)" stroke="url(#goldRim)" stroke-width="0.8" />
+
+                            <g id="fluid-group">
+                                <path class="fluid-ribbon r1" d="M18 40 C20 22, 60 12, 80 25 C65 37, 37 37, 18 40 Z" fill="url(#ribbonGrad1)" style="mix-blend-mode: screen;" />
+                                <path class="fluid-ribbon r2" d="M15 57 C12 40, 42 45, 57 65 C37 70, 22 67, 15 57 Z" fill="url(#ribbonGrad2)" style="mix-blend-mode: screen;" />
+                                <path class="fluid-ribbon r3" d="M35 80 C55 65, 85 55, 82 37 C72 57, 52 72, 35 80 Z" fill="rgba(255,255,255,0.35)" style="mix-blend-mode: screen;" />
+                                <path class="fluid-ribbon r4" d="M30 20 C50 30, 70 50, 55 75 C45 60, 35 40, 30 20 Z" fill="url(#ribbonGrad1)" style="mix-blend-mode: screen;" />
+                            </g>
+
+                            <circle class="orb-core" cx="50" cy="50" r="22" fill="url(#coreGlow)" style="mix-blend-mode: screen;" />
+                            <circle cx="50" cy="50" r="47" fill="url(#reflectGrad)" pointer-events="none" />
+                            <path d="M20 11 A32 32 0 0 1 80 11 A37 37 0 0 0 20 11 Z" fill="rgba(255,255,255,0.06)" pointer-events="none" />
+                        </svg>
+                    </div>
                 </div>
 
-                <div id="usd-chat-log"></div>
-                <div id="usd-interim-text"></div>
+                <!-- CHAT LOG -->
+                <div id="usd-chat-log" class="chat_main_container"></div>
                 
-                <div id="usd-input-container">
-                    <input type="text" id="usd-text-input" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
-                    <button type="button" id="usd-send-btn" onclick="submitTextMessage()">Send</button>
+                <!-- INTERIM MIC TEXT -->
+                <div id="usd-interim-text" style="color: #D4AF37; text-align: center; font-style: italic; font-size: 13px; font-weight: bold; min-height: 18px; margin-bottom: 5px;"></div>
+                
+                <!-- CONTROLS FOOTER (VOICE MODE ACTIVE) -->
+                <div class="chat_icon_and_voice_and_close_icon_container_main" id="usd-voice-controls-footer">
+                    <!-- Switch to Text Mode Icon -->
+                    <div class="chat_icon_main" onclick="toggleChatMode()" title="Switch to Text Mode">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%; height:100%;">
+                            <rect x="3" y="3" width="18" height="14" rx="3" ry="3" fill="none" stroke="#FFFFFF" stroke-width="2"></rect>
+                            <path d="M7 17l-4 4v-4" fill="none" stroke="#FFFFFF" stroke-width="2"></path>
+                            <line x1="7" y1="7" x2="17" y2="7" stroke="#FFFFFF" stroke-width="2"></line>
+                            <line x1="7" y1="11" x2="13" y2="11" stroke="#FFFFFF" stroke-width="2"></line>
+                        </svg>
+                    </div>
+
+                    <!-- PREMIUM MIC ICON -->
+                    <div class="voice_icon_main is-listening" id="usd-voice-trigger-btn">
+                        <svg viewBox="0 0 90 90" xmlns="http://www.w3.org/2000/svg" class="voice_animation_icon">
+                            <defs>
+                                <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#fbefac" />
+                                    <stop offset="30%" stop-color="#D4AF37" />
+                                    <stop offset="70%" stop-color="#aa803c" />
+                                    <stop offset="100%" stop-color="#be9644" />
+                                </linearGradient>
+                                <filter id="micShadow" x="-20%" y="-20%" width="140%" height="140%">
+                                    <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.5"/>
+                                </filter>
+                            </defs>
+                            <circle cx="45" cy="45" r="41" fill="none" stroke="rgba(212, 175, 55, 0.25)" stroke-width="1" class="ripple-3" />
+                            <circle cx="45" cy="45" r="33" fill="none" stroke="rgba(212, 175, 55, 0.45)" stroke-width="1.2" class="ripple-2" />
+                            <circle cx="45" cy="45" r="25" fill="none" stroke="rgba(212, 175, 55, 0.70)" stroke-width="1.5" class="ripple-1" />
+                            <circle cx="45" cy="45" r="20" fill="url(#goldGrad)" filter="url(#micShadow)" />
+                            <g transform="translate(37, 33) scale(0.65)" fill="none" stroke="#111111" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="7" y="2" width="10" height="15" rx="5" fill="#111111" stroke="none" />
+                                <path d="M2 13 v3 a10 10 0 0 0 20 0 v-3" />
+                                <line x1="12" y1="26" x2="12" y2="32" />
+                                <line x1="6" y1="32" x2="18" y2="32" />
+                            </g>
+                        </svg>
+                    </div>
+
+                    <!-- Close Action Icon -->
+                    <div class="close_icon_main" onclick="closeChatBtnClicked()" title="End Conversation">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:100%; height:100%;">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </div>
                 </div>
 
+                <!-- TEXT INPUT PANEL (TEXT MODE ACTIVE) -->
+                <div class="massge_input_main" id="usd-input-container" style="display: none;">
+                    <div class="input_box_and_icon_main">
+                        <input type="text" id="usd-text-input" class="chat_input_box" placeholder="Message Here..." onkeypress="handleKeyPress(event)">
+                        <div class="send_button_icon" id="usd-send-btn" onclick="submitTextMessage()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%; height:100%;">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- INLINE RATING -->
                 <div id="usd-inline-rating">
                     <div id="usd-rating-title">Rate your experience</div>
                     <div class="usd-stars">
@@ -388,16 +906,61 @@
             </div>
         </div>
         
-        <div id="usd-bubble" onclick="openChat(false)">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <line x1="12" y1="19" x2="12" y2="22"></line>
+        <!-- FLOATING BUBBLE BUTTON -->
+        <div id="usd-bubble" class="voice_chat_bot_icon_container" onclick="openChat(false)">
+            <!-- ⚡ Premium Glassy Siri Orb (Matched to your image) ⚡ -->
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="home_screen_bot_icon">
+                <defs>
+                    <radialGradient id="orbBgHome" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stop-color="#111111" />
+                        <stop offset="65%" stop-color="#1b1b1b" />
+                        <stop offset="85%" stop-color="#101010" />
+                        <stop offset="100%" stop-color="#05050a" />
+                    </radialGradient>
+                    <linearGradient id="goldRimHome" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="rgba(212, 175, 55, 0.55)" />
+                        <stop offset="50%" stop-color="rgba(255, 248, 220, 0.75)" />
+                        <stop offset="100%" stop-color="rgba(170, 128, 60, 0.55)" />
+                    </linearGradient>
+                    <linearGradient id="ribbonGrad1Home" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="rgba(212, 175, 55, 0.65)" />
+                        <stop offset="100%" stop-color="rgba(170, 128, 60, 0.05)" />
+                    </linearGradient>
+                    <linearGradient id="ribbonGrad2Home" x1="100%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="rgba(251, 239, 172, 0.75)" />
+                        <stop offset="100%" stop-color="rgba(196, 157, 71, 0.05)" />
+                    </linearGradient>
+                    <radialGradient id="coreGlowHome" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
+                        <stop offset="25%" stop-color="#fbefac" stop-opacity="0.8" />
+                        <stop offset="60%" stop-color="#D4AF37" stop-opacity="0.15" />
+                        <stop offset="100%" stop-color="#D4AF37" stop-opacity="0" />
+                    </radialGradient>
+                    <linearGradient id="reflectGradHome" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.12" />
+                        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+                    </linearGradient>
+                </defs>
+                <circle cx="50" cy="50" r="47" fill="url(#orbBgHome)" stroke="url(#goldRimHome)" stroke-width="0.8" />
+                <g id="fluid-group-home">
+                    <path class="fluid-ribbon r1" d="M18 40 C20 22, 60 12, 80 25 C65 37, 37 37, 18 40 Z" fill="url(#ribbonGrad1Home)" style="mix-blend-mode: screen;" />
+                    <path class="fluid-ribbon r2" d="M15 57 C12 40, 42 45, 57 65 C37 70, 22 67, 15 57 Z" fill="url(#ribbonGrad2Home)" style="mix-blend-mode: screen;" />
+                    <path class="fluid-ribbon r3" d="M35 80 C55 65, 85 55, 82 37 C72 57, 52 72, 35 80 Z" fill="rgba(255,255,255,0.35)" style="mix-blend-mode: screen;" />
+                    <path class="fluid-ribbon r4" d="M30 20 C50 30, 70 50, 55 75 C45 60, 35 40, 30 20 Z" fill="url(#ribbonGrad1Home)" style="mix-blend-mode: screen;" />
+                </g>
+                <circle class="orb-core" cx="50" cy="50" r="22" fill="url(#coreGlowHome)" style="mix-blend-mode: screen;" />
+                <circle cx="50" cy="50" r="47" fill="url(#reflectGradHome)" pointer-events="none" />
+                <path d="M20 11 A32 32 0 0 1 80 11 A37 37 0 0 0 20 11 Z" fill="rgba(255,255,255,0.06)" pointer-events="none" />
             </svg>
         </div>
     </div>
 
     <script>
+        /**
+         * ============================================================================
+         * GLOBAL CONFIGURATION & STATE
+         * ============================================================================
+         */
         const RENDER_BACKEND_URL = "https://nikjoshi123-usd-voice-backend.hf.space";
         const WS_URL = "wss://nikjoshi123-usd-voice-backend.hf.space";
 
@@ -420,59 +983,107 @@
         let lastBotMessageDiv = null;
         let isMicSoftwareMuted = true; 
         let interruptRestartHoldUntil = 0;
-        let liveTranscriptHideTimer = null;
-        let currentLiveAssistantText = "";
-        let currentLiveAssistantTag = null;
+        
+        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION COMPLETELY REMOVED TO STOP BEEP ⚡
+        let liveUserText = "";
 
-        const usdLinks = {
-            '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page', voice: 'Now you are on our home page.' },
-            '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist', voice: 'Please allow location permission to find your nearest dentist. Add your details and we will reach out to you soon.' },
-            '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On', voice: 'Click design my smile now to know how your beautiful smile looks after treatment.' }, 
-            '[LINK_BLOGS]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '📰 Read Our Blogs', voice: 'Now you are on our blogs page.' }, 
-            '[LINK_GALLERY]': { url: 'https://ultimatesmiledesign.com/gallery/', label: '🖼️ Check Out Gallery', voice: 'Now you are on our gallery page.' },
-            '[LINK_CONSULT]': { url: 'https://ultimatesmiledesign.com/consult-with-dentist/', label: '👨‍⚕️ Consult Expert Dentist', voice: 'Please fill the answers to get a response from our expert dentist.' },
-            '[LINK_CONTACT]': { url: 'https://ultimatesmiledesign.com/contact/', label: '📞 Contact Us', voice: 'Please fill the answers to get a response from us.' },
-            '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist', voice: 'Now you are on our dentist connect page.' }
+        /**
+         * ============================================================================
+         * 10-SECOND SILENCE TIMEOUT ENGINE
+         * ============================================================================
+         */
+        window.silenceTimeout = null;
+
+        window.resetSilenceTimer = () => {
+            clearTimeout(window.silenceTimeout);
+            window.silenceTimeout = setTimeout(() => {
+                if (currentAgentState === 'listening' && isVoiceMode) {
+                    updateState('thinking');
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({
+                            type: 'text_input',
+                            text: "SYSTEM INSTRUCTION: The user has been completely silent for 10 seconds. Ask them politely: 'Are you still there? Please let me know if you have any questions.' Do not say anything else.",
+                            history: chatHistory,
+                            isVoiceMode: true
+                        }));
+                    }
+                }
+            }, 10000);
         };
 
-        window.onload = async () => {
-            if (sessionStorage.getItem('usd_chat_active') === 'true') {
-                await openChat(true);
-            }
+        window.clearSilenceTimer = () => {
+            clearTimeout(window.silenceTimeout);
         };
 
-        let lastScrollY = window.scrollY || 0;
-        let scrollTimeout = null;
+        /**
+         * ============================================================================
+         * SCREEN WAKE LOCK ENGINE
+         * ============================================================================
+         */
+        let wakeLock = null;
 
-        window.addEventListener('scroll', () => {
-            const currentScrollY = window.scrollY || document.documentElement.scrollTop;
-            const tooltip = document.getElementById('usd-tooltip');
-            const bubble = document.getElementById('usd-bubble');
-            
-            if (currentScrollY > 30) {
-                tooltip.style.opacity = '0';
-                tooltip.style.pointerEvents = 'none';
-            } else {
-                tooltip.style.opacity = '1';
-                tooltip.style.pointerEvents = 'auto';
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Screen Wake Lock is active 🌞');
+                } catch (err) { }
             }
+        }
 
-            let scrollSpeed = Math.abs(currentScrollY - lastScrollY);
-            lastScrollY = currentScrollY;
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release().then(() => { wakeLock = null; });
+            }
+        }
 
-            let dynamicPulseSize = Math.min(20 + (scrollSpeed * 1.5), 80);
-            bubble.style.setProperty('--pulse-max', `${dynamicPulseSize}px`);
-
-            clearTimeout(scrollTimeout);
-            scrollTimeout = setTimeout(() => {
-                bubble.style.setProperty('--pulse-max', '20px');
-            }, 150);
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible' && currentAgentState !== 'off') {
+                await requestWakeLock();
+            }
         });
+
+        /**
+         * ============================================================================
+         * ACTION LINKS CONFIGURATION
+         * ============================================================================
+         */
+        const usdLinks = {
+            '[LINK_HOME]': { url: 'https://ultimatesmiledesign.com/', label: '🏠 Go to Home Page' },
+            '[LINK_DENTISTS]': { url: 'https://ultimatesmiledesign.com/certified-dentists/', label: '📍 Find Nearest Dentist' },
+            '[LINK_VTRYON]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '✨ Virtual Smile Try-On' }, 
+            '[LINK_BLOGS]': { url: 'https://ultimatesmiledesign.com/virtual-smile-try-on/', label: '📰 Read Our Blogs' }, 
+            '[LINK_GALLERY]': { url: 'https://ultimatesmiledesign.com/gallery/', label: '🖼️ Check Out Gallery' },
+            '[LINK_CONSULT]': { url: 'https://ultimatesmiledesign.com/consult-with-dentist/', label: '👨‍⚕️ Consult Expert Dentist' },
+            '[LINK_CONTACT]': { url: 'https://ultimatesmiledesign.com/contact/', label: '📞 Contact Us' },
+            '[LINK_CONNECT]': { url: 'https://ultimatesmiledesign.com/dentist-connect/', label: '🤝 Become Certified Dentist' }
+        };
+
+        function cleanDisplayText(text = "") {
+            let result = String(text || "");
+            result = result.replace(new RegExp("\\[(hi|bn|ta|te|mr|gu|kn|ml|pa|or|en)-IN\\]", "gi"), "");
+            result = result.replace(new RegExp("<!--[\\s\\S]*?-->", "g"), "");
+            result = result.replace(new RegExp("\\s+", "g"), " ");
+            return result.trim();
+        }
 
         function updateState(newState, statusText = null) {
             currentAgentState = newState;
             const statusBox = document.getElementById('usd-status-box');
-            const visualizer = document.getElementById('usd-visualizer');
+            const interimBox = document.getElementById('usd-interim-text');
+            const voiceTrigger = document.getElementById('usd-voice-trigger-btn');
+            
+            const innerWrap = document.getElementById('usd-chat-inner-wrap');
+            if (innerWrap) {
+                innerWrap.classList.remove('usd-speaking', 'usd-listening', 'usd-thinking');
+                if (newState === 'speaking') {
+                    innerWrap.classList.add('usd-speaking');
+                } else if (newState === 'listening') {
+                    innerWrap.classList.add('usd-listening');
+                } else if (newState === 'thinking') {
+                    innerWrap.classList.add('usd-thinking');
+                }
+            }
 
             if (statusBox) {
                 if (newState === 'connecting' || newState === 'off') {
@@ -484,16 +1095,36 @@
                 }
             }
 
-            if (newState === 'speaking') {
-                if (isVoiceMode) visualizer.classList.add('active');
+            if (newState === 'speaking' || newState === 'listening') {
+                if (voiceTrigger) voiceTrigger.classList.add('is-listening');
             } else {
-                if (isVoiceMode) visualizer.classList.remove('active');
+                if (voiceTrigger) voiceTrigger.classList.remove('is-listening');
             }
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
+                if (window.resetSilenceTimer) window.resetSilenceTimer();
+                if (interimBox) {
+                    interimBox.innerText = "Listening...";
+                    interimBox.style.color = "#D4AF37";
+                }
+            } else if (newState === 'speaking' && isVoiceMode) {
+                isMicSoftwareMuted = false;
+                if (window.clearSilenceTimer) window.clearSilenceTimer();
             } else {
                 isMicSoftwareMuted = true;
+                if (window.clearSilenceTimer) window.clearSilenceTimer();
+            }
+
+            if (newState === 'thinking') {
+                if (interimBox) {
+                    interimBox.innerText = "Answering...";
+                    interimBox.style.color = "#ffffff";
+                }
+            }
+
+            if (!isVoiceMode && interimBox && newState !== 'thinking') {
+                interimBox.innerText = "";
             }
         }
 
@@ -506,98 +1137,21 @@
             }
         }
 
-        function syncTranscriptLabel() {
-            const label = document.getElementById('usd-live-transcript-label');
-            if (!label) return;
-            label.innerText = isVoiceMode ? 'Assistant speaking' : 'Assistant typing';
-        }
-
         function detectLocalTagFromText(input = '') {
-            const text = String(input || "").toLowerCase();
-
-            if (
-                text.includes("end chat") ||
-                text.includes("goodbye") ||
-                text.includes("bye") ||
-                text.includes("take care") ||
-                text.includes("see you")
-            ) {
-                return "[END_CHAT]";
-            }
-
-            if (
-                text.includes("virtual smile") ||
-                text.includes("try on") ||
-                text.includes("try-on") ||
-                text.includes("smile try") ||
-                text.includes("smile makeover") ||
-                text.includes("design my smile") ||
-                text.includes("see how your smile") ||
-                text.includes("before and after") ||
-                text.includes("before/after")
-            ) {
-                return "[LINK_VTRYON]";
-            }
-
-            if (
-                text.includes("certified dentist") ||
-                text.includes("nearest dentist") ||
-                text.includes("find dentist") ||
-                text.includes("find a dentist") ||
-                text.includes("nearby dentist") ||
-                text.includes("locate dentist") ||
-                text.includes("dentist near")
-            ) {
-                return "[LINK_DENTISTS]";
-            }
-
-            if (
-                text.includes("consultation") ||
-                text.includes("consult") ||
-                text.includes("schedule") ||
-                text.includes("appointment") ||
-                text.includes("book") ||
-                text.includes("visit the clinic")
-            ) {
-                return "[LINK_CONSULT]";
-            }
-
-            if (
-                text.includes("contact") ||
-                text.includes("reach out") ||
-                text.includes("get in touch") ||
-                text.includes("call us") ||
-                text.includes("phone number")
-            ) {
-                return "[LINK_CONTACT]";
-            }
-
-            if (
-                text.includes("dentist connect") ||
-                text.includes("become certified dentist") ||
-                text.includes("collaborate") ||
-                text.includes("partner") ||
-                text.includes("join our network")
-            ) {
-                return "[LINK_CONNECT]";
-            }
-
-            if (
-                text.includes("gallery") ||
-                text.includes("results") ||
-                text.includes("before and after") ||
-                text.includes("before/after")
-            ) {
-                return "[LINK_GALLERY]";
-            }
-
+            const text = cleanDisplayText(String(input || "").toLowerCase());
+            if (text.includes("end chat") || text.includes("goodbye") || text.includes("bye") || text.includes("take care")) return "[END_CHAT]";
+            if (text.includes("virtual smile") || text.includes("try on") || text.includes("try-on") || text.includes("smile try")) return "[LINK_VTRYON]";
+            if (text.includes("certified dentist") || text.includes("nearest dentist") || text.includes("find dentist")) return "[LINK_DENTISTS]";
+            if (text.includes("consultation") || text.includes("consult") || text.includes("schedule") || text.includes("appointment")) return "[LINK_CONSULT]";
+            if (text.includes("contact") || text.includes("reach out") || text.includes("get in touch") || text.includes("call us")) return "[LINK_CONTACT]";
+            if (text.includes("dentist connect") || text.includes("become certified dentist") || text.includes("collaborate")) return "[LINK_CONNECT]";
+            if (text.includes("gallery") || text.includes("results") || text.includes("before and after")) return "[LINK_GALLERY]";
             return null;
         }
 
         function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
             const binHz = sampleRate / fftSize;
             const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
-
             const speechStart = idx(90);
             const speechEnd = idx(3400);
             const coreStart = idx(180);
@@ -609,18 +1163,13 @@
 
             for (let i = 0; i < dataArray.length; i++) {
                 const v = dataArray[i];
-
                 if (i >= speechStart && i <= speechEnd) {
-                    speechSum += v;
-                    speechCount++;
+                    speechSum += v; speechCount++;
                 } else {
-                    noiseSum += v;
-                    noiseCount++;
+                    noiseSum += v; noiseCount++;
                 }
-
                 if (i >= coreStart && i <= coreEnd) {
-                    coreSum += v;
-                    coreCount++;
+                    coreSum += v; coreCount++;
                 }
             }
 
@@ -629,127 +1178,39 @@
                 const centered = (timeDomainArray[i] - 128) / 128;
                 energy += centered * centered;
             }
+            
             const rms = Math.sqrt(energy / Math.max(1, timeDomainArray.length));
-
             const speechAvg = speechSum / Math.max(1, speechCount);
             const coreAvg = coreSum / Math.max(1, coreCount);
             const noiseAvg = noiseSum / Math.max(1, noiseCount);
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            const isNearHumanSpeech =
-                rms > 0.045 &&
-                speechAvg > 28 &&
-                coreAvg > 32 &&
-                speechRatio > 0.56 &&
-                coreVsNoise > 1.14;
-
-            return {
-                rms,
-                speechAvg,
-                coreAvg,
-                noiseAvg,
-                speechRatio,
-                coreVsNoise,
-                isNearHumanSpeech
-            };
-        }
-
-        function renderPopupLink(tag) {
-            const wrap = document.getElementById('usd-live-transcript-link-wrap');
-            if (!wrap) return;
-
-            wrap.innerHTML = '';
-
-            if (!tag || !usdLinks[tag]) {
-                wrap.style.display = 'none';
-                return;
-            }
-
-            const label = document.createElement('div');
-            label.style.color = '#D4AF37';
-            label.style.fontSize = '11px';
-            label.style.fontWeight = 'bold';
-            label.style.marginBottom = '6px';
-            label.innerText = 'Suggested action';
-
-            const btn = document.createElement('button');
-            btn.className = 'usd-link-card';
-            btn.innerText = usdLinks[tag].label;
-            btn.onclick = () => handleLinkClick(tag);
-
-            wrap.appendChild(label);
-            wrap.appendChild(btn);
-            wrap.style.display = 'block';
-        }
-
-        function updateLiveTranscript(text, tag = null, force = false) {
-            const popup = document.getElementById('usd-live-transcript-popup');
-            const popupText = document.getElementById('usd-live-transcript-text');
-            if (!popup || !popupText) return;
-
-            syncTranscriptLabel();
-
-            const clean = String(text || '').trim();
-
-            if (clean) {
-                currentLiveAssistantText = clean;
-            } else if (force && currentLiveAssistantText) {
-                text = currentLiveAssistantText;
-            }
-
-            const finalText = String(text || currentLiveAssistantText || '').trim();
-            const finalTag = tag || detectLocalTagFromText(finalText) || currentLiveAssistantTag;
-
-            currentLiveAssistantTag = finalTag || null;
-            popupText.textContent = finalText;
-
-            if (finalText) {
-                popup.style.display = 'block';
-                renderPopupLink(finalTag);
-            }
-        }
-
-        function hideLiveTranscript(delay = 0) {
-            clearTimeout(liveTranscriptHideTimer);
-            liveTranscriptHideTimer = setTimeout(() => {
-                const popup = document.getElementById('usd-live-transcript-popup');
-                const popupText = document.getElementById('usd-live-transcript-text');
-                const popupLinkWrap = document.getElementById('usd-live-transcript-link-wrap');
-                if (popup) popup.style.display = 'none';
-                if (popupText) popupText.textContent = '';
-                if (popupLinkWrap) {
-                    popupLinkWrap.innerHTML = '';
-                    popupLinkWrap.style.display = 'none';
-                }
-                currentLiveAssistantText = "";
-                currentLiveAssistantTag = null;
-            }, delay);
-        }
-
-        function createMessageDiv(sender, text) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `msg msg-${sender}`;
-
-            const span = document.createElement('span');
-            span.className = 'usd-msg-text';
-
-            if (sender === 'user') span.textContent = "You: " + text;
-            else if (sender === 'bot') span.textContent = "Assistant: " + text;
-            else span.textContent = text;
-
-            msgDiv.appendChild(span);
-            return msgDiv;
+            const isNearHumanSpeech = rms > 0.008 && speechAvg > 10 && coreAvg > 12 && speechRatio > 0.55 && coreVsNoise > 1.20;       
+            return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
 
         function appendLinkButton(targetEl, tag) {
             if (!targetEl || !tag || !usdLinks[tag]) return;
-
             const btn = document.createElement('button');
             btn.className = 'usd-link-card';
             btn.innerText = usdLinks[tag].label;
             btn.onclick = () => handleLinkClick(tag);
             targetEl.appendChild(btn);
+        }
+
+        function saveHistory() {
+            sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
+        }
+
+        function addUserHistoryIfNew(text) {
+            const clean = cleanDisplayText(text);
+            if (!clean) return;
+            const last = chatHistory[chatHistory.length - 1];
+            if (last && last.role === 'user' && last.parts && last.parts[0] && clean === last.parts[0].text) return;
+            chatHistory.push({ role: "user", parts: [{ text: clean }] });
+            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+            saveHistory();
         }
 
         function checkBotFinishedSpeaking() {
@@ -768,7 +1229,6 @@
                     }, 400); 
                 }
                 activeTag = null;
-                hideLiveTranscript(2500);
             }
         }
 
@@ -796,6 +1256,7 @@
                 source.start(nextPlayTime);
                 nextPlayTime += audioBuffer.duration; 
                 
+                window.activeAudioSourceNode = source;
                 activeSources.push(source);
                 
                 source.onended = () => {
@@ -810,61 +1271,74 @@
         async function processAudioQueue() {
             if (isAudioPlaying) return;
             isAudioPlaying = true;
-            
             while (audioChunkQueue.length > 0) {
                  const chunk = audioChunkQueue.shift(); 
                  await playAudioChunk(chunk.audioBase64);
             }
-            
             isAudioPlaying = false;
             checkBotFinishedSpeaking(); 
+            setTimeout(() => {
+                if (currentAgentState === 'speaking' && activeSources.length === 0) {
+                    isReplyComplete = false;
+                    updateState('listening');
+                }
+            }, 3000);
         }
 
         function interruptBot() {
+            if (!isVoiceMode) return;
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                try { socket.send(JSON.stringify({ type: 'user_interrupt_barge_in' })); } catch (e) {}
+            }
             audioChunkQueue = [];
             isReplyComplete = false; 
             nextPlayTime = 0; 
+            interruptRestartHoldUntil = performance.now() + 500; 
             
-            // short hold to stop mobile speaker echo/self-voice loops
-            interruptRestartHoldUntil = performance.now() + 180;
+            liveUserText = "";
 
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                try {
-                    socket.send(JSON.stringify({ type: 'interrupt' }));
-                } catch (e) {}
+            if (window.activeAudioSourceNode) {
+                try { window.activeAudioSourceNode.stop(); window.activeAudioSourceNode.disconnect(); } catch(e) {}
             }
 
-            activeSources.forEach(s => {
-                try { s.stop(); } catch(e) {}
-            });
+            activeSources.forEach(s => { try { s.stop(); s.disconnect(); } catch(e) {} });
             activeSources = [];
-            hideLiveTranscript(0);
+            
+            activeBotMessageDiv = null;
+            activeBotTextSpan = null;
+            updateState('listening');
         }
 
         function toggleChatMode() {
             isVoiceMode = !isVoiceMode;
-            const toggleBtn = document.getElementById('usd-mode-toggle');
-            const visualizer = document.getElementById('usd-visualizer');
+            
             const textControls = document.getElementById('usd-input-container');
+            const voiceFooter = document.getElementById('usd-voice-controls-footer');
             const micText = document.getElementById('usd-interim-text');
-            const liveTranscript = document.getElementById('usd-live-transcript-popup');
+            const inputInner = document.querySelector('.input_box_and_icon_main');
+            
+            const textMicBtn = document.getElementById('usd-text-mic-btn');
+            const textCloseBtn = document.getElementById('usd-text-close-btn');
             
             if (isVoiceMode) {
-                toggleBtn.innerText = "💬 Text";
-                visualizer.style.display = "flex";
-                textControls.style.display = "none";
-                micText.style.display = "block";
-                if (liveTranscript) liveTranscript.style.display = "none";
-                syncTranscriptLabel();
+                if (textControls) textControls.style.display = "none";
+                if (voiceFooter) voiceFooter.style.display = "flex";
+                if (micText) micText.style.display = "block";
+                
+                if (textMicBtn) textMicBtn.style.display = "none";
+                if (textCloseBtn) textCloseBtn.style.display = "none";
+                
                 updateState('listening');
             } else {
-                toggleBtn.innerText = "🎙️ Voice";
-                visualizer.style.display = "none";
-                textControls.style.display = "flex";
-                micText.style.display = "none";
-                if (liveTranscript) liveTranscript.style.display = "none";
+                if (textControls) textControls.style.display = "block";
+                if (inputInner) inputInner.style.display = "flex";
+                if (voiceFooter) voiceFooter.style.display = "none";
+                if (micText) micText.style.display = "none";
+                
+                if (textMicBtn) textMicBtn.style.display = "flex";
+                if (textCloseBtn) textCloseBtn.style.display = "flex";
+                
                 interruptBot();
-                syncTranscriptLabel();
                 updateState('listening');
             }
             sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
@@ -872,50 +1346,60 @@
 
         async function openChat(isRestore = false) {
             initAudio();
+            requestWakeLock();
             interruptRestartHoldUntil = 0;
             const container = document.getElementById('usd-chat-container');
-            const tooltip = document.getElementById('usd-tooltip');
             const bubble = document.getElementById('usd-bubble');
             
             if (currentAgentState === 'off' || isRestore) {
-                bubble.style.display = 'none'; 
-                container.style.display = 'flex';
-                tooltip.style.opacity = '0'; 
-                tooltip.style.pointerEvents = 'none';
+                if (bubble) {
+                    bubble.style.display = 'none'; 
+                    bubble.classList.add('hidden');
+                }
+                if (container) {
+                    container.style.display = 'flex';
+                    container.classList.add('active');
+                }
                 
-                document.getElementById('usd-input-container').style.display = 'flex';
+                document.getElementById('usd-input-container').style.display = 'none';
+                document.getElementById('usd-voice-controls-footer').style.display = 'flex';
                 document.getElementById('usd-inline-rating').style.display = 'none';
-                document.getElementById('usd-mode-toggle').style.display = 'block';
-                hideLiveTranscript(0);
-                syncTranscriptLabel();
                 
                 if (isRestore) {
                     chatHistory = JSON.parse(sessionStorage.getItem('usd_chat_history') || '[]');
                     isVoiceMode = sessionStorage.getItem('usd_is_voice_mode') !== 'false';
                     
-                    const toggleBtn = document.getElementById('usd-mode-toggle');
-                    toggleBtn.innerText = isVoiceMode ? "🎙️ Voice" : "💬 Text";
-                    if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
-                    else document.getElementById('usd-visualizer').style.display = 'none';
-                    syncTranscriptLabel();
+                    const textControls = document.getElementById('usd-input-container');
+                    const voiceFooter = document.getElementById('usd-voice-controls-footer');
+                    const inputInner = document.querySelector('.input_box_and_icon_main');
+                    const textMicBtn = document.getElementById('usd-text-mic-btn');
+                    const textCloseBtn = document.getElementById('usd-text-close-btn');
+
+                    if (isVoiceMode) {
+                        if (textControls) textControls.style.display = 'none';
+                        if (voiceFooter) voiceFooter.style.display = 'flex';
+                        if (textMicBtn) textMicBtn.style.display = "none";
+                        if (textCloseBtn) textCloseBtn.style.display = "none";
+                    } else {
+                        if (textControls) textControls.style.display = 'block';
+                        if (inputInner) inputInner.style.display = 'flex';
+                        if (voiceFooter) voiceFooter.style.display = 'none';
+                        if (textMicBtn) textMicBtn.style.display = "flex";
+                        if (textCloseBtn) textCloseBtn.style.display = "flex";
+                    }
                     
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory.forEach(turn => {
                         const sender = turn.role === 'model' ? 'bot' : 'user';
-                        let cleanText = turn.parts[0].text.replace(/\[.*?\]/g, '').trim();
+                        let cleanText = cleanDisplayText(turn.parts[0].text);
                         let foundTag = null;
-                        if (turn.role === 'model') {
-                            for (const tag in usdLinks) {
-                                if (turn.parts[0].text.includes(tag)) { foundTag = tag; break; }
-                            }
-                        }
+                        if (turn.role === 'model') { foundTag = detectLocalTagFromText(cleanText); }
                         logMessage(sender, cleanText, foundTag);
                     });
 
                     updateState('thinking');
                     await startWebSocket();
                 } else {
-                    if(isVoiceMode) document.getElementById('usd-visualizer').style.display = 'flex';
                     document.getElementById('usd-chat-log').innerHTML = ""; 
                     chatHistory = [];
                     activeBotMessageDiv = null;
@@ -923,29 +1407,10 @@
                     lastBotMessageDiv = null;
                     
                     updateState('connecting', "Calling assistant... 🟡");
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await new Promise(resolve => setTimeout(resolve, 1200));
                     
                     updateState('connecting', "Connected 🟢");
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    const greeting = "Namaste! How can we assist you today?";
-                    logMessage('bot', greeting);
-                    
-                    if (isVoiceMode) {
-                        try {
-                            const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ text: greeting, lang: 'en-IN' })
-                            });
-                            const data = await response.json();
-                            
-                            isReplyComplete = true; 
-                            audioChunkQueue.push(data);
-                            processAudioQueue();
-                            
-                        } catch(e) {}
-                    }
+                    await new Promise(resolve => setTimeout(resolve, 600));
                     
                     sessionStorage.setItem('usd_chat_active', 'true');
                     await startWebSocket();
@@ -959,7 +1424,7 @@
 
                 socket.onopen = async () => {
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false }
+                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
                     });
 
                     const streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
@@ -967,19 +1432,37 @@
                     
                     const bufferSize = 4096;
                     const processor = streamCtx.createScriptProcessor(bufferSize, 1, 1);
-                    
                     const analyser = streamCtx.createAnalyser();
                     analyser.fftSize = 512;
 
+                    const silenceGain = streamCtx.createGain();
+                    silenceGain.gain.value = 0;
+
                     source.connect(analyser);
                     source.connect(processor);
-                    processor.connect(streamCtx.destination); 
+                    processor.connect(silenceGain);
+                    silenceGain.connect(streamCtx.destination);
+
+                    if (chatHistory.length === 0) {
+                        updateState('thinking'); 
+                        if (socket.readyState === WebSocket.OPEN) {
+                            socket.send(JSON.stringify({ 
+                                type: 'text_input', 
+                                text: "SYSTEM INSTRUCTION: Start the conversation by warmly saying EXACTLY this specific phrase and absolutely nothing else: 'Namaste! How can we assist you today? Let's start with your beautiful name, what is your name?'", 
+                                history: [],
+                                isVoiceMode: isVoiceMode 
+                            }));
+                        }
+                    } else {
+                        updateState('listening');
+                    }
 
                     let isRecording = false;
                     let shortPauseTimer = null; 
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
-                    let consecutiveLoudFrames = 0; 
+                    let consecutiveVoiceFrames = 0; 
+                    let consecutiveInterruptFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1005,59 +1488,60 @@
 
                         const dataArray = new Uint8Array(analyser.frequencyBinCount);
                         analyser.getByteFrequencyData(dataArray);
-
                         const timeDataArray = new Uint8Array(analyser.fftSize);
                         analyser.getByteTimeDomainData(timeDataArray);
                         
-                        let voiceSum = 0; let voiceBins = 0;
-                        for (let i = 10; i < 96; i++) { voiceSum += dataArray[i]; voiceBins++; }
+                        let voiceSum = 0;
+                        let voiceBins = 0;
+                        for (let i = 10; i < 96; i++) {
+                            voiceSum += dataArray[i];
+                            voiceBins++;
+                        }
                         let humanVolume = voiceSum / Math.max(1, voiceBins);
 
                         const speechProfile = getHumanSpeechProfile(
-                            dataArray,
-                            timeDataArray,
-                            streamCtx.sampleRate || 16000,
-                            analyser.fftSize || 512
+                            dataArray, timeDataArray, streamCtx.sampleRate || 16000, analyser.fftSize || 512
                         );
 
                         if (isSpeakingNow) {
-                            if (speechProfile.isNearHumanSpeech) { 
-                                consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames >= 5) { 
-                                    consecutiveLoudFrames = 0;
-
-                                    clearTimeout(shortPauseTimer);
-                                    clearTimeout(longPauseTimer);
-                                    clearTimeout(maxRecordingTimer);
-                                    shortPauseTimer = null;
-                                    longPauseTimer = null;
-                                    maxRecordingTimer = null;
-
+                            const isForegroundVoice = speechProfile.isNearHumanSpeech && 
+                                                      humanVolume > 15 && 
+                                                      speechProfile.rms > 0.01 &&
+                                                      speechProfile.coreVsNoise > 1.5 &&
+                                                      speechProfile.speechRatio > 0.60;
+                                                      
+                            if (isForegroundVoice) {
+                                consecutiveInterruptFrames++;
+                                if (consecutiveInterruptFrames > 25) {
                                     interruptBot();
-                                    updateState('listening');
-                                    isRecording = false;
+                                    consecutiveInterruptFrames = 0;
                                 }
                             } else {
-                                consecutiveLoudFrames = 0; 
+                                consecutiveInterruptFrames = Math.max(0, consecutiveInterruptFrames - 1);
                             }
-                            requestAnimationFrame(detectVoice); return;
+                            requestAnimationFrame(detectVoice);
+                            return;
                         }
 
-                        if (currentAgentState === 'listening') {
-                            const inRestartHold = performance.now() < interruptRestartHoldUntil;
+                        if (currentAgentState === 'listening' && isVoiceMode) {
+                            if (humanVolume > 10 && window.resetSilenceTimer) {
+                                window.resetSilenceTimer();
+                            }
 
-                            const canStartRecording = inRestartHold
-                                ? (
-                                    speechProfile.isNearHumanSpeech &&
-                                    humanVolume > 66 &&
-                                    speechProfile.speechRatio > 0.60 &&
-                                    speechProfile.coreVsNoise > 1.18
-                                )
-                                : (humanVolume > 50);
+                            const volumeIsGood = humanVolume > 15; 
+                            const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
 
-                            if (canStartRecording) { 
+                            if (canStartRecording) {
+                                consecutiveVoiceFrames++;
+                            } else {
+                                consecutiveVoiceFrames = 0;
+                            }
+
+                            if (consecutiveVoiceFrames > 8) { 
                                 if (!isRecording) {
                                     isRecording = true;
+                                    liveUserText = ""; 
+                                    updateState('listening'); 
                                     
                                     if (socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'start_of_speech' }));
@@ -1067,12 +1551,16 @@
                                         if (isRecording) {
                                             isRecording = false;
                                             updateState('thinking');
-                                            document.getElementById('usd-interim-text').innerText = ""; 
                                             if (socket.readyState === WebSocket.OPEN) {
-                                                socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
+                                                socket.send(JSON.stringify({ 
+                                                    type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode, nativeTranscript: liveUserText 
+                                                }));
                                             }
+                                            liveUserText = ""; 
+                                            const interimBox = document.getElementById('usd-interim-text');
+                                            if (interimBox) interimBox.innerText = "Answering...";
                                         }
-                                    }, 14000); 
+                                    }, 20000); 
                                 }
                                 
                                 clearTimeout(shortPauseTimer);
@@ -1082,19 +1570,25 @@
                                     if (isRecording && socket.readyState === WebSocket.OPEN) {
                                         socket.send(JSON.stringify({ type: 'process_interim' }));
                                     }
-                                }, 600); 
+                                }, 800); 
 
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
                                         isRecording = false;
                                         clearTimeout(maxRecordingTimer);
                                         updateState('thinking');
-                                        document.getElementById('usd-interim-text').innerText = ""; 
+                                        
                                         if (socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
+                                            socket.send(JSON.stringify({ 
+                                                type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode, nativeTranscript: liveUserText 
+                                            }));
                                         }
+                                        
+                                        liveUserText = ""; 
+                                        const interimBox = document.getElementById('usd-interim-text');
+                                        if (interimBox) interimBox.innerText = "Answering...";
                                     }
-                                }, 800); 
+                                }, 2500); 
                             }
                         }
                         requestAnimationFrame(detectVoice);
@@ -1106,37 +1600,77 @@
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    if (data.type === 'idle') {
-                        document.getElementById('usd-interim-text').innerText = "";
-                        hideLiveTranscript(0);
+                    if (data.type === 'bot_interrupted') {
+                        audioChunkQueue = [];
+                        if (window.activeAudioSourceNode) {
+                            try { window.activeAudioSourceNode.stop(); window.activeAudioSourceNode.disconnect(); } catch (e) {}
+                            window.activeAudioSourceNode = null;
+                        }
+                        activeSources.forEach(s => { try { s.stop(); s.disconnect(); } catch(e) {} });
+                        activeSources = [];
+                        isAudioPlaying = false;
+                        isReplyComplete = false;
+                        nextPlayTime = 0;
+                        
+                        liveUserText = ""; activeBotMessageDiv = null; activeBotTextSpan = null; 
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
+                        
+                        updateState('listening');
+                        return; 
+                    }
+                    else if (data.type === 'idle' || data.type === 'error') {
+                        if (data.type === 'error') console.error("Backend Error:", data.error);
+                        liveUserText = ""; 
+                        
+                        isReplyComplete = false;
+                        audioChunkQueue = [];
+
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) interimBox.innerText = "";
                         updateState('listening');
                     }
                     else if (data.type === 'user_spoken_text') {
-                        document.getElementById('usd-interim-text').innerText = ""; 
-                        logMessage('user', data.text);
+                        const cleanUserText = cleanDisplayText(data.text || "");
+                        if (cleanUserText) {
+                            const last = chatHistory[chatHistory.length - 1];
+                            const alreadyInHistory = last && last.role === 'user' && last.parts && last.parts[0] && cleanUserText === last.parts[0].text;
+                            if (!alreadyInHistory) {
+                                logMessage('user', cleanUserText);
+                                addUserHistoryIfNew(cleanUserText);
+                            }
+                            liveUserText = ""; 
+                            const interimBox = document.getElementById('usd-interim-text');
+                            if (interimBox && interimBox.innerText.includes("You:")) {
+                                interimBox.innerText = "Answering...";
+                                interimBox.style.color = "#ffffff";
+                            }
+                        }
                     }
                     else if (data.type === 'interim_transcript') {
-                        document.getElementById('usd-interim-text').innerText = data.text;
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox && data.text) {
+                            interimBox.innerText = "You: " + data.text + " ...";
+                            interimBox.style.color = "#D4AF37";
+                        }
                     }
                     else if (data.type === 'text_stream') {
+                        const streamedText = cleanDisplayText(data.text || "");
+                        if (!streamedText) return; 
+
                         if (!activeBotMessageDiv) {
-                            const log = document.getElementById('usd-chat-log');
-                            activeBotMessageDiv = document.createElement('div');
-                            activeBotMessageDiv.className = `msg msg-bot`;
-                            
-                            activeBotTextSpan = document.createElement('span');
-                            activeBotTextSpan.className = 'usd-msg-text';
-                            activeBotTextSpan.textContent = "Assistant: " + data.text;
-                            
-                            activeBotMessageDiv.appendChild(activeBotTextSpan);
-                            log.appendChild(activeBotMessageDiv);
-                            lastBotMessageDiv = activeBotMessageDiv;
+                            activeBotMessageDiv = logMessage('bot', streamedText);
+                            activeBotTextSpan = activeBotMessageDiv.querySelector('.usd-msg-text');
                         } else if (activeBotTextSpan) {
-                            activeBotTextSpan.textContent = "Assistant: " + data.text;
+                            activeBotTextSpan.innerText = streamedText;
                         }
 
-                        const previewTag = detectLocalTagFromText(data.text);
-                        updateLiveTranscript(data.text, previewTag);
+                        const previewTag = data.tag || detectLocalTagFromText(streamedText);
+                        if (previewTag && usdLinks[previewTag]) {
+                            if (!activeBotMessageDiv.querySelector('.usd-link-card')) {
+                                appendLinkButton(activeBotMessageDiv, previewTag);
+                            }
+                        }
 
                         const log = document.getElementById('usd-chat-log');
                         log.scrollTop = log.scrollHeight;
@@ -1148,39 +1682,46 @@
                         }
                     }
                     else if (data.type === 'reply_complete') {
-                        const botTarget = activeBotMessageDiv || lastBotMessageDiv;
+                        isReplyComplete = true; 
+                        liveUserText = ""; 
+                        const interimBox = document.getElementById('usd-interim-text');
+                        if (interimBox) { interimBox.innerText = ""; }
+
+                        const botTarget = activeBotMessageDiv; 
                         activeBotMessageDiv = null;
                         activeBotTextSpan = null;
 
-                        const finalText = String(data.botText || currentLiveAssistantText || '').trim();
+                        const finalText = cleanDisplayText(data.botText || "").trim();
                         const finalTag = data.tag || detectLocalTagFromText(finalText) || detectLocalTagFromText(data.userText || "");
 
-                        if (botTarget && finalText) {
-                            const span = botTarget.querySelector('.usd-msg-text');
-                            if (span) {
-                                span.textContent = "Assistant: " + finalText;
+                        if (finalText) {
+                            if (botTarget) {
+                                const span = botTarget.querySelector('.usd-msg-text');
+                                if (span) span.innerText = finalText;
+                            } else {
+                                lastBotMessageDiv = logMessage('bot', finalText);
                             }
-                        }
 
-                        if (!botTarget && finalText) {
-                            lastBotMessageDiv = logMessage('bot', finalText);
+                            const last = chatHistory[chatHistory.length - 1];
+                            if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
+                                chatHistory.push({ role: "model", parts: [{ text: finalText }] });
+                                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+                                saveHistory();
+                            }
+                        } else if (botTarget) {
+                            botTarget.remove();
                         }
-                        
-                        chatHistory.push({ role: "model", parts: [{ text: finalText }] });
-                        if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6); // ⚡ ADD THIS LINE ⚡
-                        sessionStorage.setItem('usd_chat_history', JSON.stringify(chatHistory));
 
                         activeTag = finalTag;
-                        isReplyComplete = true; 
                         
                         const finalBotTarget = botTarget || lastBotMessageDiv;
                         if (activeTag && usdLinks[activeTag] && finalBotTarget) {
-                            appendLinkButton(finalBotTarget, activeTag);
+                            if (!finalBotTarget.querySelector('.usd-link-card')) {
+                                appendLinkButton(finalBotTarget, activeTag);
+                            }
                             const log = document.getElementById('usd-chat-log');
                             log.scrollTop = log.scrollHeight;
                         }
-
-                        updateLiveTranscript(finalText, activeTag, true);
 
                         if (!isVoiceMode) {
                             updateState('listening');
@@ -1188,174 +1729,198 @@
                         } else {
                             checkBotFinishedSpeaking(); 
                         }
-
-                        hideLiveTranscript(3500);
-                    }
-                    else if (data.type === 'error') {
-                        document.getElementById('usd-interim-text').innerText = "";
-                        hideLiveTranscript(0);
-                        updateState('listening');
                     }
                 };
-
                 socket.onerror = () => { updateState('listening'); };
-
-            } catch (err) {
-                updateState('listening');
-            }
-        }
-
-        function closeChatBtnClicked() {
-            document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
-        }
-
-        async function confirmEndChat(isYes) {
-            document.getElementById('usd-end-confirm-overlay').style.display = 'none';
-            if (isYes) {
-                updateState('thinking');
-                interruptBot();
-                
-                const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
-                logMessage('bot', goodbyeText);
-                
-                if (isVoiceMode) {
-                    try {
-                        const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: goodbyeText, lang: 'en-IN' })
-                        });
-                        const data = await response.json();
-                        
-                        isReplyComplete = true; 
-                        audioChunkQueue.push(data);
-                        processAudioQueue();
-                        
-                        setTimeout(() => closeChat(true), 4000);
-                    } catch(e) { closeChat(true); }
-                } else {
-                    setTimeout(() => closeChat(true), 2000);
-                }
-            }
-        }
-
-        function closeChat(showRating = false) {
-            updateState('off');
-            interruptBot();
-            hideLiveTranscript(0);
-            if (socket) socket.close();
-            if (globalStream) globalStream.getTracks().forEach(track => track.stop());
-            
-            sessionStorage.removeItem('usd_chat_active');
-            sessionStorage.removeItem('usd_chat_history');
-            
-            if (showRating) {
-                document.getElementById('usd-input-container').style.display = 'none';
-                document.getElementById('usd-mode-toggle').style.display = 'none';
-                document.getElementById('usd-visualizer').style.display = 'none';
-                document.getElementById('usd-inline-rating').style.display = 'block';
-                logMessage('system', 'The chat has ended. Please rate your experience below.');
-            } else {
-                document.getElementById('usd-chat-container').style.display = 'none';
-                document.getElementById('usd-bubble').style.display = 'flex'; 
-            }
-        }
-
-        async function submitRating(stars) {
-            const starElements = document.querySelectorAll('.usd-star');
-            starElements.forEach((s, index) => {
-                s.style.color = index < stars ? '#FFD700' : '#444';
-                s.style.textShadow = index < stars ? '0 0 10px rgba(255, 215, 0, 0.6)' : '0 2px 4px rgba(0,0,0,0.5)';
-            });
-            document.getElementById('usd-rating-thanks').style.display = 'block';
-
-            try {
-                let transcript = "No chat history recorded.";
-                if (chatHistory && chatHistory.length > 0) {
-                    transcript = chatHistory.map(turn => `${turn.role === 'user' ? 'User' : 'Agent'}: ${turn.parts[0].text}`).join('\n\n');
-                }
-
-                await fetch('https://api.web3forms.com/submit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ 
-                        access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
-                        subject: `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`, 
-                        from_name: "Ultimate Smile Voice Agent", 
-                        email: "noreply@ultimatesmiledesign.com",
-                        message: `Transcript:\n\n${transcript}` 
-                    })
-                });
-            } catch(e) { }
-
-            setTimeout(() => { closeChat(false); }, 3000);
-        }
-
-        async function submitTextMessage() {
-            const inputEl = document.getElementById('usd-text-input');
-            const userText = inputEl.value.trim();
-            if (!userText || currentAgentState === 'thinking' || currentAgentState === 'connecting') return;
-
-            inputEl.value = ''; 
-            interruptBot();
-
-            updateState('thinking');
-            document.getElementById('usd-interim-text').innerText = ""; 
-            
-            logMessage('user', userText);
-            chatHistory.push({ role: "user", parts: [{ text: userText }] });
-            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6); // ⚡ ADD THIS LINE ⚡
-
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ 
-                    type: 'text_input', 
-                    text: userText, 
-                    history: chatHistory,
-                    isVoiceMode: isVoiceMode 
-                }));
-            }
-        }
-
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault(); 
-                submitTextMessage();
-            }
-        }
-
-       async function handleLinkClick(tag) {
-            const linkInfo = usdLinks[tag];
-            if (!linkInfo) return;
-            
-            logMessage('bot', "Redirecting you now...");
-            chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
-           if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6); // ⚡ ADD THIS LINE ⚡
-
-            window.open(linkInfo.url, '_blank');
-            
+        } catch (err) {
             updateState('listening');
         }
-        
-        function logMessage(sender, text, tag = null) {
-            const log = document.getElementById('usd-chat-log');
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `msg msg-${sender}`;
-            
-            if (sender === 'user') msgDiv.innerText = "You: " + text;
-            else if (sender === 'bot') msgDiv.innerText = "Assistant: " + text;
-            else msgDiv.innerText = text; 
-            
-            if (tag && usdLinks[tag]) {
-                const btn = document.createElement('button');
-                btn.className = 'usd-link-card';
-                btn.innerText = usdLinks[tag].label;
-                btn.onclick = () => handleLinkClick(tag);
-                msgDiv.appendChild(btn);
-            }
+    }
 
-            log.appendChild(msgDiv);
-            log.scrollTop = log.scrollHeight;
+    function closeChatBtnClicked() {
+        document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
+    }
+
+    async function confirmEndChat(isYes) {
+        document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+        if (isYes) {
+            updateState('thinking');
+            interruptBot();
+            
+            const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
+            logMessage('bot', goodbyeText);
+            
+            if (isVoiceMode) {
+                try {
+                    const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: goodbyeText, lang: 'en-IN' })
+                    });
+                    const data = await response.json();
+                    
+                    isReplyComplete = true; 
+                    audioChunkQueue.push(data);
+                    processAudioQueue();
+                    
+                    setTimeout(() => closeChat(true), 4000);
+                } catch(e) { closeChat(true); }
+            } else {
+                setTimeout(() => closeChat(true), 2000);
+            }
         }
+    }
+
+    function closeChat(showRating = false) {
+        updateState('off');
+        interruptBot();
+        releaseWakeLock(); 
+        if (socket) socket.close();
+        if (globalStream) globalStream.getTracks().forEach(track => track.stop());
+        
+        sessionStorage.removeItem('usd_chat_active');
+        sessionStorage.removeItem('usd_chat_history');
+        
+        const bubble = document.getElementById('usd-bubble');
+        const container = document.getElementById('usd-chat-container');
+
+        if (showRating) {
+            document.getElementById('usd-input-container').style.display = 'none';
+            document.getElementById('usd-voice-controls-footer').style.display = 'none';
+            document.getElementById('usd-inline-rating').style.display = 'block';
+            logMessage('system', 'The chat has ended. Please rate your experience below.');
+        } else {
+            if (container) {
+                container.style.display = 'none';
+                container.classList.remove('active');
+            }
+            if (bubble) {
+                bubble.style.display = 'flex'; 
+                bubble.classList.remove('hidden');
+            }
+        }
+    }
+
+    async function submitRating(stars) {
+        const starElements = document.querySelectorAll('.usd-star');
+        starElements.forEach((s, index) => {
+            s.style.color = index < stars ? '#FFD700' : '#444';
+            s.style.textShadow = index < stars ? '0 0 10px rgba(255, 215, 0, 0.6)' : '0 2px 4px rgba(0,0,0,0.5)';
+        });
+        document.getElementById('usd-rating-thanks').style.display = 'block';
+
+        try {
+            let transcript = "No chat history recorded.";
+            const allMessages = document.querySelectorAll('#usd-chat-log .usd-msg-text');
+            if (allMessages.length > 0) {
+                transcript = Array.from(allMessages).map(msg => msg.innerText).join('\n\n');
+            }
+            await fetch('https://api.web3forms.com/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ 
+                    access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
+                    subject: `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`, 
+                    from_name: "Ultimate Smile Voice Agent", 
+                    email: "noreply@ultimatesmiledesign.com",
+                    message: `Transcript:\n\n${transcript}` 
+                })
+            });
+        } catch(e) { }
+        setTimeout(() => { closeChat(false); }, 3000);
+    }
+
+    async function submitTextMessage() {
+        const inputEl = document.getElementById('usd-text-input');
+        const userText = cleanDisplayText(inputEl.value.trim());
+        if (!userText || currentAgentState === 'thinking' || currentAgentState === 'connecting') return;
+
+        inputEl.value = ''; 
+        interruptBot();
+
+        updateState('thinking');
+        
+        logMessage('user', userText);
+        addUserHistoryIfNew(userText);
+
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ 
+                type: 'text_input', 
+                text: userText, 
+                history: chatHistory,
+                isVoiceMode: isVoiceMode 
+            }));
+        }
+    }
+
+    function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault(); 
+            submitTextMessage();
+        }
+    }
+
+    async function handleLinkClick(tag) {
+        const linkInfo = usdLinks[tag];
+        if (!linkInfo) return;
+        
+        logMessage('bot', "Redirecting you now...");
+        chatHistory.push({ role: "model", parts: [{ text: "Redirecting you now..." }] });
+        if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+        saveHistory();
+
+        window.open(linkInfo.url, '_blank');
+        updateState('listening');
+    }
+    
+    function logMessage(sender, text, tag = null) {
+        const log = document.getElementById('usd-chat-log');
+        const msgDiv = document.createElement('div');
+        
+        if (sender === 'user') {
+            msgDiv.className = 'user_message';
+        } else if (sender === 'bot') {
+            msgDiv.className = 'bot_message';
+        } else {
+            msgDiv.className = 'msg msg-system';
+        }
+        
+        const p = document.createElement('p');
+        p.className = 'usd-msg-text';
+        
+        if (sender === 'user') p.innerText = text;
+        else if (sender === 'bot') p.innerText = text;
+        else p.innerText = text; 
+        
+        msgDiv.appendChild(p);
+
+        if (tag && usdLinks[tag]) {
+            const btn = document.createElement('button');
+            btn.className = 'usd-link-card';
+            btn.innerText = usdLinks[tag].label;
+            btn.onclick = () => handleLinkClick(tag);
+            msgDiv.appendChild(btn);
+        }
+
+        log.appendChild(msgDiv);
+        log.scrollTop = log.scrollHeight;
+
+        if (sender === 'bot') {
+            lastBotMessageDiv = msgDiv;
+        }
+
+        return msgDiv;
+    }
+
+    window.openChat = openChat;
+    window.closeChat = closeChat;
+    window.confirmEndChat = confirmEndChat;
+    window.toggleChatMode = toggleChatMode;
+    window.closeChatBtnClicked = closeChatBtnClicked;
+    window.submitTextMessage = submitTextMessage;
+    window.submitRating = submitRating;
+    window.handleKeyPress = handleKeyPress;
+    window.handleLinkClick = handleLinkClick;
     </script>
 </body>
 </html>
