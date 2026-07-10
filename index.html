@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1492,7 +1491,7 @@
                                                       
                             if (isForegroundVoice) {
                                 consecutiveInterruptFrames++;
-                                if (consecutiveInterruptFrames > 9999) {
+                                if (consecutiveInterruptFrames > 25) {
                                     interruptBot();
                                     consecutiveInterruptFrames = 0;
                                 }
