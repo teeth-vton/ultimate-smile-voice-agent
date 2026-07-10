@@ -1081,67 +1081,12 @@
                         );
 
                         if (isSpeakingNow) {
-                            if (speechProfile.isNearHumanSpeech && humanVolume > 35) { 
-                                consecutiveLoudFrames++;
-                                if (consecutiveLoudFrames >= 10) { 
-                                    consecutiveLoudFrames = 0;
-
-                                    clearTimeout(shortPauseTimer);
-                                    clearTimeout(longPauseTimer);
-                                    clearTimeout(maxRecordingTimer);
-                                    shortPauseTimer = null;
-                                    longPauseTimer = null;
-                                    maxRecordingTimer = null;
-
-                                    interruptBot();
-                                    updateState('listening');
-                                    isRecording = false;
-                                }
-                            } else {
-                                consecutiveLoudFrames = 0; 
-                            }
+                            // ⚡ DISABLED INTERRUPT: The bot will ignore all microphone noise 
+                            // while it is speaking and will not cut off.
+                            consecutiveLoudFrames = 0;
                             requestAnimationFrame(detectVoice);
                             return;
                         }
-
-                        if (currentAgentState === 'listening' && isVoiceMode) {
-                            const inRestartHold = performance.now() < interruptRestartHoldUntil;
-
-                            const canStartRecording = inRestartHold
-                                ? (
-                                    speechProfile.isNearHumanSpeech &&
-                                    humanVolume > 40 &&
-                                    speechProfile.speechRatio > 0.65
-                                )
-                                : (speechProfile.isNearHumanSpeech && humanVolume > 10); 
-
-                            if (canStartRecording) { 
-                                if (!isRecording) {
-                                    isRecording = true;
-                                    liveUserText = ""; // ⚡ WIPE OLD TRANSCRIPT ON NEW SPEECH ⚡
-                                    if (recognition) {
-                                        try { 
-                                            recognition.abort(); 
-                                            setTimeout(() => recognition.start(), 50); 
-                                        } catch(e) {}
-                                    }
-                                    updateState('listening'); 
-                                    
-                                    if (socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                    }
-                                    
-                                    maxRecordingTimer = setTimeout(() => {
-                                        if (isRecording) {
-                                            isRecording = false;
-                                            if (recognition) { try { recognition.stop(); } catch(e) {} }
-                                            updateState('thinking');
-                                            if (socket.readyState === WebSocket.OPEN) {
-                                                socket.send(JSON.stringify({ type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode }));
-                                            }
-                                        }
-                                    }, 14000); 
-                                }
                                 
                                 clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
