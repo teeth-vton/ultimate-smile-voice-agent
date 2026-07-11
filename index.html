@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ultimate Smile Design - Ultimate Ai</title>
+    <title>Ultimate Smile Design - Live Agent</title>
     <style>
         /**
          * ============================================================================
@@ -62,9 +62,6 @@
          * ============================================================================
          * VOICE WIDGET CONTAINER
          * ============================================================================
-         * The parent container that pins the entire chat experience to the bottom right.
-         * We use flex-end to ensure that child elements scale properly against the
-         * right edge of the viewport.
          */
         .voice_agent_main {
             height: auto;
@@ -82,8 +79,6 @@
          * ============================================================================
          * DESKTOP CHAT CONTAINER SIZING & ANIMATION
          * ============================================================================
-         * Strictly sets to 344px width as per Figma design specifications.
-         * Scales and translates dynamically on entry and exit.
          */
         .voice_chat_bot_container {
             width: 344px;
@@ -117,7 +112,6 @@
          * ============================================================================
          * CHAT BACKGROUND GLOW EFFECT
          * ============================================================================
-         * Creates a dynamic ambient light effect behind the header orb.
          */
         .glow_icon_in_chat_box {
             width: 230px;
@@ -216,7 +210,6 @@
          * ============================================================================
          * CHAT LOG AREA
          * ============================================================================
-         * Allows flex-grow layout to take remaining vertical space cleanly.
          */
         .chat_main_container {
             width: 100%;
@@ -767,7 +760,7 @@
                     </div>
                 </div>
 
-                <!-- TOP ANIMATED GLASSY GOLDEN ORB -->
+                <!-- TOP ANIMATED GLASSY GOLDEN ORB (EXACT SPECIFICATIONS OF ATTACHED IMAGE) -->
                 <div class="chat_box_icon_inside_main">
                     <div class="chat_box_icon_inside">
                         <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="chat_box_inside_bot_icon" id="usd-glass-orb-svg">
@@ -984,7 +977,6 @@
         let isMicSoftwareMuted = true; 
         let interruptRestartHoldUntil = 0;
         
-        // ⚡ NATIVE BROWSER LIVE TRANSCRIPTION COMPLETELY REMOVED TO STOP BEEP ⚡
         let liveUserText = "";
 
         /**
@@ -1109,7 +1101,7 @@
                     interimBox.style.color = "#D4AF37";
                 }
             } else if (newState === 'speaking' && isVoiceMode) {
-                isMicSoftwareMuted = false;
+                isMicSoftwareMuted = true; // ⚡ STOP ALL INTERRUPTIONS
                 if (window.clearSilenceTimer) window.clearSilenceTimer();
             } else {
                 isMicSoftwareMuted = true;
@@ -1285,30 +1277,6 @@
             }, 3000);
         }
 
-        function interruptBot() {
-            if (!isVoiceMode) return;
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                try { socket.send(JSON.stringify({ type: 'user_interrupt_barge_in' })); } catch (e) {}
-            }
-            audioChunkQueue = [];
-            isReplyComplete = false; 
-            nextPlayTime = 0; 
-            interruptRestartHoldUntil = performance.now() + 500; 
-            
-            liveUserText = "";
-
-            if (window.activeAudioSourceNode) {
-                try { window.activeAudioSourceNode.stop(); window.activeAudioSourceNode.disconnect(); } catch(e) {}
-            }
-
-            activeSources.forEach(s => { try { s.stop(); s.disconnect(); } catch(e) {} });
-            activeSources = [];
-            
-            activeBotMessageDiv = null;
-            activeBotTextSpan = null;
-            updateState('listening');
-        }
-
         function toggleChatMode() {
             isVoiceMode = !isVoiceMode;
             
@@ -1338,7 +1306,6 @@
                 if (textMicBtn) textMicBtn.style.display = "flex";
                 if (textCloseBtn) textCloseBtn.style.display = "flex";
                 
-                interruptBot();
                 updateState('listening');
             }
             sessionStorage.setItem('usd_is_voice_mode', isVoiceMode.toString());
@@ -1458,11 +1425,9 @@
                     }
 
                     let isRecording = false;
-                    let shortPauseTimer = null; 
                     let longPauseTimer = null; 
                     let maxRecordingTimer = null;
                     let consecutiveVoiceFrames = 0; 
-                    let consecutiveInterruptFrames = 0; 
 
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted) return;
@@ -1504,21 +1469,7 @@
                         );
 
                         if (isSpeakingNow) {
-                            const isForegroundVoice = speechProfile.isNearHumanSpeech && 
-                                                      humanVolume > 15 && 
-                                                      speechProfile.rms > 0.01 &&
-                                                      speechProfile.coreVsNoise > 1.5 &&
-                                                      speechProfile.speechRatio > 0.60;
-                                                      
-                            if (isForegroundVoice) {
-                                consecutiveInterruptFrames++;
-                                if (consecutiveInterruptFrames > 9999) {
-                                    interruptBot();
-                                    consecutiveInterruptFrames = 0;
-                                }
-                            } else {
-                                consecutiveInterruptFrames = Math.max(0, consecutiveInterruptFrames - 1);
-                            }
+                            // ⚡ Interrupts completely disabled ⚡
                             requestAnimationFrame(detectVoice);
                             return;
                         }
@@ -1528,7 +1479,7 @@
                                 window.resetSilenceTimer();
                             }
 
-                            const volumeIsGood = humanVolume > 15; 
+                            const volumeIsGood = humanVolume > 10; 
                             const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
 
                             if (canStartRecording) {
@@ -1553,7 +1504,7 @@
                                             updateState('thinking');
                                             if (socket.readyState === WebSocket.OPEN) {
                                                 socket.send(JSON.stringify({ 
-                                                    type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode, nativeTranscript: liveUserText 
+                                                    type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode 
                                                 }));
                                             }
                                             liveUserText = ""; 
@@ -1563,14 +1514,7 @@
                                     }, 20000); 
                                 }
                                 
-                                clearTimeout(shortPauseTimer);
                                 clearTimeout(longPauseTimer);
-                                
-                                shortPauseTimer = setTimeout(() => {
-                                    if (isRecording && socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'process_interim' }));
-                                    }
-                                }, 800); 
 
                                 longPauseTimer = setTimeout(() => {
                                     if (isRecording) {
@@ -1580,7 +1524,7 @@
                                         
                                         if (socket.readyState === WebSocket.OPEN) {
                                             socket.send(JSON.stringify({ 
-                                                type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode, nativeTranscript: liveUserText 
+                                                type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode 
                                             }));
                                         }
                                         
@@ -1600,26 +1544,7 @@
                 socket.onmessage = async (event) => {
                     const data = JSON.parse(event.data);
                     
-                    if (data.type === 'bot_interrupted') {
-                        audioChunkQueue = [];
-                        if (window.activeAudioSourceNode) {
-                            try { window.activeAudioSourceNode.stop(); window.activeAudioSourceNode.disconnect(); } catch (e) {}
-                            window.activeAudioSourceNode = null;
-                        }
-                        activeSources.forEach(s => { try { s.stop(); s.disconnect(); } catch(e) {} });
-                        activeSources = [];
-                        isAudioPlaying = false;
-                        isReplyComplete = false;
-                        nextPlayTime = 0;
-                        
-                        liveUserText = ""; activeBotMessageDiv = null; activeBotTextSpan = null; 
-                        const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
-                        
-                        updateState('listening');
-                        return; 
-                    }
-                    else if (data.type === 'idle' || data.type === 'error') {
+                    if (data.type === 'idle' || data.type === 'error') {
                         if (data.type === 'error') console.error("Backend Error:", data.error);
                         liveUserText = ""; 
                         
@@ -1645,13 +1570,6 @@
                                 interimBox.innerText = "Answering...";
                                 interimBox.style.color = "#ffffff";
                             }
-                        }
-                    }
-                    else if (data.type === 'interim_transcript') {
-                        const interimBox = document.getElementById('usd-interim-text');
-                        if (interimBox && data.text) {
-                            interimBox.innerText = "You: " + data.text + " ...";
-                            interimBox.style.color = "#D4AF37";
                         }
                     }
                     else if (data.type === 'text_stream') {
@@ -1745,7 +1663,6 @@
         document.getElementById('usd-end-confirm-overlay').style.display = 'none';
         if (isYes) {
             updateState('thinking');
-            interruptBot();
             
             const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
             logMessage('bot', goodbyeText);
@@ -1773,7 +1690,6 @@
 
     function closeChat(showRating = false) {
         updateState('off');
-        interruptBot();
         releaseWakeLock(); 
         if (socket) socket.close();
         if (globalStream) globalStream.getTracks().forEach(track => track.stop());
@@ -1836,7 +1752,6 @@
         if (!userText || currentAgentState === 'thinking' || currentAgentState === 'connecting') return;
 
         inputEl.value = ''; 
-        interruptBot();
 
         updateState('thinking');
         
@@ -1912,6 +1827,7 @@
         return msgDiv;
     }
 
+    // Attach to window so HTML inline events can access them
     window.openChat = openChat;
     window.closeChat = closeChat;
     window.confirmEndChat = confirmEndChat;
