@@ -1673,11 +1673,14 @@
                                 lastBotMessageDiv = logMessage('bot', finalText);
                             }
 
-                            const last = chatHistory[chatHistory.length - 1];
-                            if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
-                                chatHistory.push({ role: "model", parts: [{ text: finalText }] });
-                                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-                                saveHistory();
+                            // Don't save the "..." loading state to history, wait for the actual text event
+                            if (finalText !== "...") {
+                                const last = chatHistory[chatHistory.length - 1];
+                                if (!(last && last.role === 'model' && last.parts && last.parts[0] && last.parts[0].text === finalText)) {
+                                    chatHistory.push({ role: "model", parts: [{ text: finalText }] });
+                                    if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+                                    saveHistory();
+                                }
                             }
                         } else if (botTarget) {
                             botTarget.remove();
@@ -1686,7 +1689,7 @@
                         activeTag = finalTag;
                         
                         const finalBotTarget = botTarget || lastBotMessageDiv;
-                        if (activeTag && usdLinks[activeTag] && finalBotTarget) {
+                        if (activeTag && usdLinks[activeTag] && finalBotTarget && finalText !== "...") {
                             if (!finalBotTarget.querySelector('.usd-link-card')) {
                                 appendLinkButton(finalBotTarget, activeTag);
                             }
@@ -1803,15 +1806,21 @@
             formData.append("email", "noreply@ultimatesmiledesign.com");
             formData.append("message", `Transcript:\n\n${transcript}`);
 
-            if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
-                // Using standard .webm, widely supported by Web3Forms
-                formData.append("attachment", window.recordedAudioBlob, "voice-recording.webm");
-            }
+         if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
+                const formData = new FormData();
+                formData.append("access_key", "c1a373a7-407e-47f4-8403-be692c2f3eff");
+                formData.append("subject", `🎙️ USD Voice Audio Recording: ${stars}/5 Stars`);
+                formData.append("from_name", "Ultimate Smile Voice Agent");
+                formData.append("message", "Attached is the audio recording of the session.");
+                
+                // ⚡ Rename to .mp3 to bypass Web3Forms strict free-tier attachment blocks
+                formData.append("attachment", window.recordedAudioBlob, "voice-recording.mp3");
 
-            await fetch('https://api.web3forms.com/submit', {
-                method: 'POST',
-                body: formData
-            }).catch(e => console.error("Email send failed:", e));
+                await fetch('https://api.web3forms.com/submit', {
+                    method: 'POST',
+                    body: formData
+                }).catch(e => console.error("Audio email failed:", e));
+            }
 
         } catch(e) { console.error("Rating submission error:", e); }
         
