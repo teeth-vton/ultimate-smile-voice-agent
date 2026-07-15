@@ -1744,6 +1744,41 @@
             }
         }
 
+        function confirmEndChat(isYes) {
+            document.getElementById('usd-end-confirm-overlay').style.display = 'none';
+            if (isYes) {
+                updateState('thinking');
+                
+                // ⚡ INSTANT STOP: Kills any previous audio the bot is currently playing immediately!
+                audioChunkQueue = [];
+                activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
+                activeSources = [];
+                isAudioPlaying = false;
+                
+                const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
+                logMessage('bot', goodbyeText);
+                
+                // ⚡ ZERO-DELAY BACKGROUND FETCH: Gets the voice instantly while the UI moves on!
+                if (isVoiceMode) {
+                    fetch(`${RENDER_BACKEND_URL}/api/tts`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: goodbyeText, lang: 'en-IN' })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        isReplyComplete = true; 
+                        audioChunkQueue.push(data);
+                        processAudioQueue(); // Starts playing the goodbye message as soon as it arrives
+                    })
+                    .catch(e => console.error("TTS Error:", e));
+                }
+
+                // ⚡ INSTANT RATING SCREEN: Shows up instantly without waiting for the audio to fetch!
+                closeChat(true);
+            }
+        }
+
         function closeChat(showRating = false) {
             updateState('off');
             releaseWakeLock(); 
@@ -1754,12 +1789,8 @@
                 mediaRecorder.stop();
             }
 
-            // ⚡ Instantly kill audio if the chat is being closed completely
-            if (!showRating) {
-                audioChunkQueue = [];
-                activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
-                activeSources = [];
-            }
+            // ⚡ We REMOVED the "kill audio" logic here. 
+            // Now, when the widget minimizes after rating, the bot is allowed to finish saying goodbye in the background!
 
             sessionStorage.removeItem('usd_chat_active');
             
@@ -1782,7 +1813,6 @@
                 }
             }
         }
-
         async function submitRating(stars) {
             const starElements = document.querySelectorAll('.usd-star');
             starElements.forEach((s, index) => {
