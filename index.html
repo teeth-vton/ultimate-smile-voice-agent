@@ -1764,27 +1764,34 @@
                 transcript = Array.from(allMessages).map(msg => msg.innerText).join('\n\n');
             }
 
-            // ⚡ FIX 2: USE FORMDATA TO ALLOW FILE ATTACHMENTS
-            const formData = new FormData();
-            formData.append("access_key", "c1a373a7-407e-47f4-8403-be692c2f3eff");
-            formData.append("subject", `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`);
-            formData.append("from_name", "Ultimate Smile Voice Agent");
-            formData.append("email", "noreply@ultimatesmiledesign.com");
-            formData.append("message", `Transcript:\n\n${transcript}`);
-
-            if (window.recordedAudioBlob) {
-                // Attach the recorded audio!
-                let ext = 'webm';
-                if (window.recordedAudioBlob.type.includes('mp4')) ext = 'mp4';
-                formData.append("attachment", window.recordedAudioBlob, `conversation-recording.${ext}`);
-            }
-
+            // ⚡ EMAIL 1: TEXT TRANSCRIPT (100% Guaranteed to send via JSON)
             await fetch('https://api.web3forms.com/submit', {
                 method: 'POST',
-                headers: { 'Accept': 'application/json' }, // We remove Content-Type so browser sets boundary automatically
-                body: formData
-            });
-        } catch(e) { console.error(e); }
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ 
+                    access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
+                    subject: `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`, 
+                    from_name: "Ultimate Smile Voice Agent", 
+                    email: "noreply@ultimatesmiledesign.com",
+                    message: `Transcript:\n\n${transcript}` 
+                })
+            }).catch(e => console.error("Text email failed:", e));
+
+            // ⚡ EMAIL 2: AUDIO RECORDING (If available, sent via FormData)
+            if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
+                const formData = new FormData();
+                formData.append("access_key", "c1a373a7-407e-47f4-8403-be692c2f3eff");
+                formData.append("subject", `🎙️ USD Voice Audio Recording: ${stars}/5 Stars`);
+                formData.append("from_name", "Ultimate Smile Voice Agent");
+                formData.append("message", "Attached is the audio recording of the session.");
+                formData.append("file", window.recordedAudioBlob, "voice-recording.webm");
+
+                await fetch('https://api.web3forms.com/submit', {
+                    method: 'POST',
+                    body: formData
+                }).catch(e => console.error("Audio email failed:", e));
+            }
+        } catch(e) { console.error("Rating submission error:", e); }
         
         setTimeout(() => { closeChat(false); }, 3000);
     }
