@@ -947,6 +947,17 @@
             </svg>
         </div>
     </div>
+    
+    let activeTag = null; 
+        let activeBotMessageDiv = null; 
+        // ... existing variables ...
+        let liveUserText = "";
+
+        // ⚡ FIX 2: AUDIO RECORDING VARIABLES
+        let mediaRecorder = null;
+        let recordedAudioChunks = [];
+        window.recordedAudioBlob = null;
+        window.recordDest = null;
 
     <script>
         /**
