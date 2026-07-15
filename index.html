@@ -1248,9 +1248,15 @@
                 
                 const audioBuffer = await audioCtx.decodeAudioData(bytes.buffer);
                 const source = audioCtx.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(audioCtx.destination);
-                source.playbackRate.value = 1.0; 
+               source.buffer = audioBuffer;
+                source.connect(audioCtx.destination); // Play on speaker
+                
+                // ⚡ FIX 2: ALSO SEND BOT AUDIO TO RECORDER
+                if (window.recordDest) {
+                    source.connect(window.recordDest);
+                }
+
+                source.playbackRate.value = 1.0;
                 
                 if (nextPlayTime < audioCtx.currentTime) {
                     nextPlayTime = audioCtx.currentTime + 0.05; 
@@ -1404,6 +1410,23 @@
                     globalStream = await navigator.mediaDevices.getUserMedia({ 
                         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
                     });
+
+                    // ⚡ FIX 2: START RECORDING THE CONVERSATION
+                    await initAudio(); // ensure global audioCtx is active
+                    window.recordDest = audioCtx.createMediaStreamDestination();
+                    const micToRecorder = audioCtx.createMediaStreamSource(globalStream);
+                    micToRecorder.connect(window.recordDest);
+
+                    recordedAudioChunks = [];
+                    try {
+                        mediaRecorder = new MediaRecorder(window.recordDest.stream);
+                        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedAudioChunks.push(e.data); };
+                        mediaRecorder.onstop = () => {
+                            const mimeType = mediaRecorder.mimeType || 'audio/webm';
+                            window.recordedAudioBlob = new Blob(recordedAudioChunks, { type: mimeType });
+                        };
+                        mediaRecorder.start(1000);
+                    } catch(e) { console.error("Recorder failed:", e); }
 
                     const streamCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
                     const source = streamCtx.createMediaStreamSource(globalStream);
@@ -1702,11 +1725,15 @@
     function closeChat(showRating = false) {
         updateState('off');
         releaseWakeLock(); 
-        if (socket) socket.close();
+     if (socket) socket.close();
         if (globalStream) globalStream.getTracks().forEach(track => track.stop());
         
+        // ⚡ FIX 2: STOP RECORDING
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+
         sessionStorage.removeItem('usd_chat_active');
-        sessionStorage.removeItem('usd_chat_history');
         
         const bubble = document.getElementById('usd-bubble');
         const container = document.getElementById('usd-chat-container');
@@ -1736,26 +1763,34 @@
         });
         document.getElementById('usd-rating-thanks').style.display = 'block';
 
-        try {
+      try {
             let transcript = "No chat history recorded.";
             const allMessages = document.querySelectorAll('#usd-chat-log .usd-msg-text');
             if (allMessages.length > 0) {
                 transcript = Array.from(allMessages).map(msg => msg.innerText).join('\n\n');
             }
+
+            // ⚡ FIX 2: USE FORMDATA TO ALLOW FILE ATTACHMENTS
+            const formData = new FormData();
+            formData.append("access_key", "c1a373a7-407e-47f4-8403-be692c2f3eff");
+            formData.append("subject", `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`);
+            formData.append("from_name", "Ultimate Smile Voice Agent");
+            formData.append("email", "noreply@ultimatesmiledesign.com");
+            formData.append("message", `Transcript:\n\n${transcript}`);
+
+            if (window.recordedAudioBlob) {
+                // Attach the recorded audio!
+                let ext = 'webm';
+                if (window.recordedAudioBlob.type.includes('mp4')) ext = 'mp4';
+                formData.append("attachment", window.recordedAudioBlob, `conversation-recording.${ext}`);
+            }
+
             await fetch('https://api.web3forms.com/submit', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                body: JSON.stringify({ 
-                    access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
-                    subject: `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`, 
-                    from_name: "Ultimate Smile Voice Agent", 
-                    email: "noreply@ultimatesmiledesign.com",
-                    message: `Transcript:\n\n${transcript}` 
-                })
+                headers: { 'Accept': 'application/json' }, // We remove Content-Type so browser sets boundary automatically
+                body: formData
             });
-        } catch(e) { }
-        setTimeout(() => { closeChat(false); }, 3000);
-    }
+        } catch(e) { console.error(e); }
 
     async function submitTextMessage() {
         const inputEl = document.getElementById('usd-text-input');
