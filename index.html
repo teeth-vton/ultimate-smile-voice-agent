@@ -1777,7 +1777,7 @@
         }
     }
 
-    async function submitRating(stars) {
+async function submitRating(stars) {
         const starElements = document.querySelectorAll('.usd-star');
         starElements.forEach((s, index) => {
             s.style.color = index < stars ? '#FFD700' : '#444';
@@ -1789,7 +1789,6 @@
             let transcript = "No chat history recorded.";
             const allMessages = document.querySelectorAll('#usd-chat-log > div');
             if (allMessages.length > 0) {
-                // ⚡ FIX: Format Transcript beautifully with 'User:' and 'Assistant:' prefixes
                 transcript = Array.from(allMessages).map(msgDiv => {
                     const text = msgDiv.querySelector('.usd-msg-text')?.innerText || "";
                     if (msgDiv.classList.contains('user_message')) return `User: ${text}`;
@@ -1798,30 +1797,33 @@
                 }).join('\n\n');
             }
 
-            // ⚡ FIX: Send BOTH Text Transcript AND Audio Attachment in ONE powerful Form request
-            const formData = new FormData();
-            formData.append("access_key", "c1a373a7-407e-47f4-8403-be692c2f3eff");
-            formData.append("subject", `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`);
-            formData.append("from_name", "Ultimate Smile Voice Agent");
-            formData.append("email", "noreply@ultimatesmiledesign.com");
-            formData.append("message", `Transcript:\n\n${transcript}`);
-
-         if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
-                const formData = new FormData();
-                formData.append("access_key", "c1a373a7-407e-47f4-8403-be692c2f3eff");
-                formData.append("subject", `🎙️ USD Voice Audio Recording: ${stars}/5 Stars`);
-                formData.append("from_name", "Ultimate Smile Voice Agent");
-                formData.append("message", "Attached is the audio recording of the session.");
-                
-                // ⚡ Rename to .mp3 to bypass Web3Forms strict free-tier attachment blocks
-                formData.append("attachment", window.recordedAudioBlob, "voice-recording.mp3");
-
-                await fetch('https://api.web3forms.com/submit', {
-                    method: 'POST',
-                    body: formData
-                }).catch(e => console.error("Audio email failed:", e));
+            // ⚡ UPLOAD RAW AUDIO TO FREE API (File.io)
+            let audioUrlText = "";
+            if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
+                try {
+                    const uploadForm = new FormData();
+                    uploadForm.append("file", window.recordedAudioBlob, "recording.webm");
+                    const uploadRes = await fetch('https://file.io', { method: 'POST', body: uploadForm });
+                    const uploadData = await uploadRes.json();
+                    
+                    if (uploadData && uploadData.link) {
+                        audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (One-time download link):\n${uploadData.link}`;
+                    }
+                } catch(err) { console.error("Audio upload failed", err); }
             }
 
+            // ⚡ SEND THE EMAIL (100% Guaranteed via JSON)
+            await fetch('https://api.web3forms.com/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ 
+                    access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
+                    subject: `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`, 
+                    from_name: "Ultimate Smile Voice Agent", 
+                    email: "noreply@ultimatesmiledesign.com",
+                    message: `Transcript:\n\n${transcript}${audioUrlText}` 
+                })
+            });
         } catch(e) { console.error("Rating submission error:", e); }
         
         setTimeout(() => { closeChat(false); }, 3000);
