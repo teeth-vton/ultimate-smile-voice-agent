@@ -1715,80 +1715,59 @@
         document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
     }
 
- async function confirmEndChat(isYes) {
-        document.getElementById('usd-end-confirm-overlay').style.display = 'none';
-        if (isYes) {
-            updateState('thinking');
-            
-            // ⚡ INSTANT STOP: Immediately kill any audio currently playing!
-            audioChunkQueue = [];
-            activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
-            activeSources = [];
-            isAudioPlaying = false;
-            
-            const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
-            logMessage('bot', goodbyeText);
-            
-            // ⚡ INSTANT RATING SCREEN: Show the rating overlay immediately!
-            closeChat(true);
-            
-            if (isVoiceMode) {
+async function submitRating(stars) {
+        const starElements = document.querySelectorAll('.usd-star');
+        starElements.forEach((s, index) => {
+            s.style.color = index < stars ? '#FFD700' : '#444';
+            s.style.textShadow = index < stars ? '0 0 10px rgba(255, 215, 0, 0.6)' : '0 2px 4px rgba(0,0,0,0.5)';
+        });
+        document.getElementById('usd-rating-thanks').style.display = 'block';
+
+        // ⚡ INSTANT CLOSE: Hide the widget just 400ms after clicking a star!
+        setTimeout(() => { closeChat(false); }, 400);
+
+        try {
+            let transcript = "No chat history recorded.";
+            const allMessages = document.querySelectorAll('#usd-chat-log > div');
+            if (allMessages.length > 0) {
+                transcript = Array.from(allMessages).map(msgDiv => {
+                    const text = msgDiv.querySelector('.usd-msg-text')?.innerText || "";
+                    if (msgDiv.classList.contains('user_message')) return `User: ${text}`;
+                    if (msgDiv.classList.contains('bot_message')) return `Assistant: ${text}`;
+                    return `System: ${text}`;
+                }).join('\n\n');
+            }
+
+            let audioUrlText = "";
+            if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
                 try {
-                    const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: goodbyeText, lang: 'en-IN' })
-                    });
-                    const data = await response.json();
+                    const uploadForm = new FormData();
+                    uploadForm.append("file", window.recordedAudioBlob, "recording.mp3");
+                    const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: uploadForm });
+                    const uploadData = await uploadRes.json();
                     
-                    isReplyComplete = true; 
-                    audioChunkQueue.push(data);
-                    processAudioQueue(); // Plays the goodbye message while rating screen is open
-                } catch(e) {}
+                    if (uploadData && uploadData.data && uploadData.data.url) {
+                        const directUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+                        audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${directUrl}`;
+                    }
+                } catch(err) { console.error("Audio upload failed", err); }
             }
-        }
+
+            await fetch('https://api.web3forms.com/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ 
+                    access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
+                    subject: `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`, 
+                    from_name: "Ultimate Smile Voice Agent", 
+                    email: "noreply@ultimatesmiledesign.com",
+                    message: `Transcript:\n\n${transcript}${audioUrlText}` 
+                })
+            });
+        } catch(e) { console.error("Rating submission error:", e); }
     }
 
-    function closeChat(showRating = false) {
-        updateState('off');
-        releaseWakeLock(); 
-        if (socket) socket.close();
-        if (globalStream) globalStream.getTracks().forEach(track => track.stop());
-        
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-            mediaRecorder.stop();
-        }
-
-        // ⚡ Kill the goodbye audio if they completely close the widget
-        if (!showRating) {
-            audioChunkQueue = [];
-            activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
-            activeSources = [];
-        }
-
-        sessionStorage.removeItem('usd_chat_active');
-        
-        const bubble = document.getElementById('usd-bubble');
-        const container = document.getElementById('usd-chat-container');
-
-        if (showRating) {
-            document.getElementById('usd-input-container').style.display = 'none';
-            document.getElementById('usd-voice-controls-footer').style.display = 'none';
-            document.getElementById('usd-inline-rating').style.display = 'block';
-            logMessage('system', 'The chat has ended. Please rate your experience below.');
-        } else {
-            if (container) {
-                container.style.display = 'none';
-                container.classList.remove('active');
-            }
-            if (bubble) {
-                bubble.style.display = 'flex'; 
-                bubble.classList.remove('hidden');
-            }
-        }
-    }
-
-    async function submitRating(stars) {
+    async function submitTextMessage() {
         const starElements = document.querySelectorAll('.usd-star');
         starElements.forEach((s, index) => {
             s.style.color = index < stars ? '#FFD700' : '#444';
