@@ -1183,9 +1183,7 @@
             const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
             const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
 
-            // ⚡ NOISE CANCELLATION: Drastically raised thresholds for volume (rms), pitch clarity (speechAvg), and SNR (coreVsNoise).
-            // Background voices will no longer trigger this.
-            const isNearHumanSpeech = rms > 0.015 && speechAvg > 20 && coreAvg > 20 && speechRatio > 0.70 && coreVsNoise > 1.40;       
+            const isNearHumanSpeech = rms > 0.008 && speechAvg > 10 && coreAvg > 12 && speechRatio > 0.55 && coreVsNoise > 1.20;       
             return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
 
@@ -1503,14 +1501,12 @@
                             return;
                         }
 
-                     if (currentAgentState === 'listening' && isVoiceMode) {
-                            // ⚡ Raised from 10 to 20 to ignore quiet background chatter
-                            if (humanVolume > 20 && window.resetSilenceTimer) {
+                        if (currentAgentState === 'listening' && isVoiceMode) {
+                            if (humanVolume > 10 && window.resetSilenceTimer) {
                                 window.resetSilenceTimer();
                             }
 
-                            // ⚡ Forces the user to speak clearly to keep the recording active
-                            const volumeIsGood = humanVolume > 20; 
+                            const volumeIsGood = humanVolume > 10; 
                             const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
 
                             if (canStartRecording) {
