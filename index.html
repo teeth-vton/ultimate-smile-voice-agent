@@ -1797,17 +1797,23 @@ async function submitRating(stars) {
                 }).join('\n\n');
             }
 
-            // ⚡ UPLOAD RAW AUDIO TO FREE API (File.io)
+            // ⚡ UPLOAD RAW AUDIO TO A MULTI-CLICK SAFE API (tmpfiles.org)
             let audioUrlText = "";
             if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
                 try {
                     const uploadForm = new FormData();
-                    uploadForm.append("file", window.recordedAudioBlob, "recording.webm");
-                    const uploadRes = await fetch('https://file.io', { method: 'POST', body: uploadForm });
+                    uploadForm.append("file", window.recordedAudioBlob, "recording.mp3");
+                    
+                    const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { 
+                        method: 'POST', 
+                        body: uploadForm 
+                    });
                     const uploadData = await uploadRes.json();
                     
-                    if (uploadData && uploadData.link) {
-                        audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (One-time download link):\n${uploadData.link}`;
+                    if (uploadData && uploadData.data && uploadData.data.url) {
+                        // Change /tmpfiles.org/ to /tmpfiles.org/dl/ to make it a direct download link!
+                        const directUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+                        audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${directUrl}`;
                     }
                 } catch(err) { console.error("Audio upload failed", err); }
             }
