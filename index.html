@@ -1607,7 +1607,32 @@
                         if (!activeBotMessageDiv) {
                             activeBotMessageDiv = logMessage('bot', streamedText);
                             activeBotTextSpan = activeBotMessageDiv.querySelector('.usd-msg-text');
-                        } else if (activeBotTextSpan) {
+                        } 
+                        else if (data.type === 'bot_spoken_text') {
+                        // ⚡ Silently updates the "..." bubble with the actual transcribed text while bot is talking
+                        const finalText = cleanDisplayText(data.text);
+                        if (finalText && lastBotMessageDiv) {
+                            const span = lastBotMessageDiv.querySelector('.usd-msg-text');
+                            if (span) span.innerText = finalText;
+                            
+                            // Log properly for the Email Transcript
+                            chatHistory.push({ role: "model", parts: [{ text: finalText }] });
+                            if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
+                            saveHistory();
+
+                            // Inject UI Link buttons if matched
+                            if (data.tag && usdLinks[data.tag]) {
+                                if (!lastBotMessageDiv.querySelector('.usd-link-card')) {
+                                    appendLinkButton(lastBotMessageDiv, data.tag);
+                                }
+                                activeTag = data.tag;
+                            }
+                            
+                            const log = document.getElementById('usd-chat-log');
+                            log.scrollTop = log.scrollHeight;
+                        }
+                    }
+                        else if (activeBotTextSpan) {
                             activeBotTextSpan.innerText = streamedText;
                         }
 
