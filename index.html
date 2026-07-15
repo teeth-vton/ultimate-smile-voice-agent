@@ -949,16 +949,7 @@
     </div>
    
     <script>
-        let activeTag = null; 
-        let activeBotMessageDiv = null; 
-        // ... existing variables ...
-        let liveUserText = "";
-
-        // ⚡ FIX 2: AUDIO RECORDING VARIABLES
-        let mediaRecorder = null;
-        let recordedAudioChunks = [];
-        window.recordedAudioBlob = null;
-        window.recordDest = null;
+      <script>
         /**
          * ============================================================================
          * GLOBAL CONFIGURATION & STATE
@@ -986,8 +977,13 @@
         let lastBotMessageDiv = null;
         let isMicSoftwareMuted = true; 
         let interruptRestartHoldUntil = 0;
-        
         let liveUserText = "";
+
+        // ⚡ FIX 2: AUDIO RECORDING VARIABLES
+        let mediaRecorder = null;
+        let recordedAudioChunks = [];
+        window.recordedAudioBlob = null;
+        window.recordDest = null;
 
         /**
          * ============================================================================
@@ -1762,7 +1758,7 @@
         });
         document.getElementById('usd-rating-thanks').style.display = 'block';
 
-      try {
+        try {
             let transcript = "No chat history recorded.";
             const allMessages = document.querySelectorAll('#usd-chat-log .usd-msg-text');
             if (allMessages.length > 0) {
@@ -1790,6 +1786,9 @@
                 body: formData
             });
         } catch(e) { console.error(e); }
+        
+        setTimeout(() => { closeChat(false); }, 3000);
+    }
 
     async function submitTextMessage() {
         const inputEl = document.getElementById('usd-text-input');
