@@ -1715,13 +1715,22 @@
         document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
     }
 
-    async function confirmEndChat(isYes) {
+   async function confirmEndChat(isYes) {
         document.getElementById('usd-end-confirm-overlay').style.display = 'none';
         if (isYes) {
             updateState('thinking');
             
+            // ⚡ INSTANT STOP: Immediately kill any audio currently playing!
+            audioChunkQueue = [];
+            activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
+            activeSources = [];
+            isAudioPlaying = false;
+            
             const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
             logMessage('bot', goodbyeText);
+            
+            // ⚡ INSTANT RATING SCREEN: Show the rating overlay immediately!
+            closeChat(true);
             
             if (isVoiceMode) {
                 try {
@@ -1734,12 +1743,8 @@
                     
                     isReplyComplete = true; 
                     audioChunkQueue.push(data);
-                    processAudioQueue();
-                    
-                    setTimeout(() => closeChat(true), 4000);
-                } catch(e) { closeChat(true); }
-            } else {
-                setTimeout(() => closeChat(true), 2000);
+                    processAudioQueue(); // Plays the goodbye message while rating screen is open
+                } catch(e) {}
             }
         }
     }
@@ -1747,12 +1752,18 @@
     function closeChat(showRating = false) {
         updateState('off');
         releaseWakeLock(); 
-     if (socket) socket.close();
+        if (socket) socket.close();
         if (globalStream) globalStream.getTracks().forEach(track => track.stop());
         
-        // ⚡ FIX 2: STOP RECORDING
         if (mediaRecorder && mediaRecorder.state !== 'inactive') {
             mediaRecorder.stop();
+        }
+
+        // ⚡ Kill the goodbye audio if they completely close the widget
+        if (!showRating) {
+            audioChunkQueue = [];
+            activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
+            activeSources = [];
         }
 
         sessionStorage.removeItem('usd_chat_active');
@@ -1777,13 +1788,16 @@
         }
     }
 
-async function submitRating(stars) {
+    async function submitRating(stars) {
         const starElements = document.querySelectorAll('.usd-star');
         starElements.forEach((s, index) => {
             s.style.color = index < stars ? '#FFD700' : '#444';
             s.style.textShadow = index < stars ? '0 0 10px rgba(255, 215, 0, 0.6)' : '0 2px 4px rgba(0,0,0,0.5)';
         });
         document.getElementById('usd-rating-thanks').style.display = 'block';
+
+        // ⚡ INSTANT CLOSE: Hide the widget just 400ms after clicking a star!
+        setTimeout(() => { closeChat(false); }, 400);
 
         try {
             let transcript = "No chat history recorded.";
@@ -1797,28 +1811,21 @@ async function submitRating(stars) {
                 }).join('\n\n');
             }
 
-            // ⚡ UPLOAD RAW AUDIO TO A MULTI-CLICK SAFE API (tmpfiles.org)
             let audioUrlText = "";
             if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
                 try {
                     const uploadForm = new FormData();
                     uploadForm.append("file", window.recordedAudioBlob, "recording.mp3");
-                    
-                    const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { 
-                        method: 'POST', 
-                        body: uploadForm 
-                    });
+                    const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: uploadForm });
                     const uploadData = await uploadRes.json();
                     
                     if (uploadData && uploadData.data && uploadData.data.url) {
-                        // Change /tmpfiles.org/ to /tmpfiles.org/dl/ to make it a direct download link!
                         const directUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
                         audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${directUrl}`;
                     }
                 } catch(err) { console.error("Audio upload failed", err); }
             }
 
-            // ⚡ SEND THE EMAIL (100% Guaranteed via JSON)
             await fetch('https://api.web3forms.com/submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -1831,6 +1838,7 @@ async function submitRating(stars) {
                 })
             });
         } catch(e) { console.error("Rating submission error:", e); }
+    }
         
         setTimeout(() => { closeChat(false); }, 3000);
     }
