@@ -1774,23 +1774,22 @@
                     }).join('\n\n');
                 }
 
-                let audioUrlText = "";
+               let audioUrlText = "";
                 if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
                     try {
                         const uploadForm = new FormData();
-                        uploadForm.append("reqType", "fileupload");
-                        uploadForm.append("time", "24h"); // ⚡ Explicitly sets the retention to exactly 24 hours
-                        uploadForm.append("fileToUpload", window.recordedAudioBlob, "recording.mp3");
+                        // ⚡ REVERTED TO TMPFILES.ORG (The one that works flawlessly!)
+                        uploadForm.append("file", window.recordedAudioBlob, "recording.mp3");
                         
-                        // ⚡ Using Litterbox API (Multi-click safe, 24h retention)
-                        const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { 
+                        const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { 
                             method: 'POST', 
                             body: uploadForm 
                         });
+                        const uploadData = await uploadRes.json();
                         
-                        if (uploadRes.ok) {
-                            const directUrl = await uploadRes.text(); // Litterbox returns a direct plain-text URL
-                            audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 24 Hours):\n${directUrl}`;
+                        if (uploadData && uploadData.data && uploadData.data.url) {
+                            const directUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+                            audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${directUrl}`;
                         }
                     } catch(err) { console.error("Audio upload failed", err); }
                 }
