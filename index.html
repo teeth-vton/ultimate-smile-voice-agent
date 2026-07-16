@@ -1478,13 +1478,15 @@
                         }
                     };
 
-                    // ⚡ HIGH-END SILERO VAD INTEGRATION
+                   // ⚡ HIGH-END SILERO VAD INTEGRATION
                     try {
                         window.myvad = await vad.MicVAD.new({
                             stream: globalStream,
-                            positiveSpeechThreshold: 0.75, // Triggers easily on human voice, ignores noise
-                            minSpeechFrames: 4,            // Ignores quick taps/noises/dog barks
-                            redemptionFrames: 40,          // ✨ PATIENCE: Waits 1.2 seconds of silence before cutting off!
+                            positiveSpeechThreshold: 0.4,  // 🔥 LOWERED: Triggers instantly on soft voices/names
+                            negativeSpeechThreshold: 0.3,
+                            minSpeechFrames: 3,            
+                            preSpeechPadFrames: 10,        // 🔥 MAGIC FIX: Saves the audio right BEFORE you speak so first syllables aren't cut!
+                            redemptionFrames: 45,          // ✨ PATIENCE: Waits ~1.3 seconds of silence before cutting off!
                             onSpeechStart: () => {
                                 if (isMicSoftwareMuted) return; // Ignore if bot is talking
                                 isRecording = true;
@@ -1660,40 +1662,6 @@
             document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
         }
 
-        async function confirmEndChat(isYes) {
-            document.getElementById('usd-end-confirm-overlay').style.display = 'none';
-            if (isYes) {
-                updateState('thinking');
-                
-                // ⚡ INSTANT STOP: Kills any audio the bot is currently playing immediately!
-                audioChunkQueue = [];
-                activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
-                activeSources = [];
-                isAudioPlaying = false;
-                
-                const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
-                logMessage('bot', goodbyeText);
-                
-                // ⚡ INSTANT RATING SCREEN
-                closeChat(true);
-                
-                if (isVoiceMode) {
-                    try {
-                        const response = await fetch(`${RENDER_BACKEND_URL}/api/tts`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: goodbyeText, lang: 'en-IN' })
-                        });
-                        const data = await response.json();
-                        
-                        isReplyComplete = true; 
-                        audioChunkQueue.push(data);
-                        processAudioQueue(); // Starts playing the goodbye message immediately
-                    } catch(e) {}
-                }
-            }
-        }
-
         function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
@@ -1719,7 +1687,7 @@
                     .then(data => {
                         isReplyComplete = true; 
                         audioChunkQueue.push(data);
-                        processAudioQueue(); // Starts playing the goodbye message as soon as it arrives
+                        processAudioQueue(); // Starts playing the goodbye message gracefully
                     })
                     .catch(e => console.error("TTS Error:", e));
                 }
