@@ -1111,8 +1111,8 @@
                 if (window.resetSilenceTimer) window.resetSilenceTimer();
                 if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
             } else if (newState === 'speaking' && isVoiceMode) {
-                isMicSoftwareMuted = true;
-                if (window.myvad) window.myvad.pause(); // 🔥 Turn VAD OFF (bot speaks)
+                isMicSoftwareMuted = false; // 🔥 KEEP MIC ON FOR BARGE-IN
+                if (window.myvad) window.myvad.start(); // 🔥 KEEP VAD LISTENING
                 if (window.clearSilenceTimer) window.clearSilenceTimer();
             } else {
                 isMicSoftwareMuted = true;
@@ -1488,7 +1488,20 @@
                             preSpeechPadFrames: 10,        // 🔥 MAGIC FIX: Saves the audio right BEFORE you speak so first syllables aren't cut!
                             redemptionFrames: 45,          // ✨ PATIENCE: Waits ~1.3 seconds of silence before cutting off!
                             onSpeechStart: () => {
-                                if (isMicSoftwareMuted) return; // Ignore if bot is talking
+                                // ⚡ BARGE-IN DETECTION: If the bot is talking, instantly kill the audio!
+                                if (currentAgentState === 'speaking' || isAudioPlaying) {
+                                    console.log("🎙️ Barge-in detected! Stopping bot audio.");
+                                    audioChunkQueue = [];
+                                    activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
+                                    activeSources = [];
+                                    isAudioPlaying = false;
+                                    
+                                    if (socket && socket.readyState === WebSocket.OPEN) {
+                                        socket.send(JSON.stringify({ type: 'user_interrupt_barge_in' }));
+                                    }
+                                }
+
+                                if (isMicSoftwareMuted) return; 
                                 isRecording = true;
                                 updateState('listening');
                                 if (socket && socket.readyState === WebSocket.OPEN) {
