@@ -712,6 +712,10 @@
             }
         }
     </style>
+    <!-- ⚡ HIGH-END SILERO VAD & ONNX RUNTIME -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.14.0/dist/ort.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.7/dist/bundle.min.js"></script>
+</head>
 </head>
 <body>
 
@@ -982,7 +986,10 @@
         let mediaRecorder = null;
         let recordedAudioChunks = [];
         window.recordedAudioBlob = null;
-        window.recordDest = null;
+       window.recordDest = null;
+      
+      window.recordDest = null;
+        window.myvad = null; // ⚡ SILERO VAD INSTANCE
 
         /**
          * ============================================================================
@@ -1100,16 +1107,16 @@
 
             if (newState === 'listening' && isVoiceMode) {
                 isMicSoftwareMuted = false;
+                if (window.myvad) window.myvad.start(); // 🔥 Turn VAD ON
                 if (window.resetSilenceTimer) window.resetSilenceTimer();
-                if (interimBox) {
-                    interimBox.innerText = "Listening...";
-                    interimBox.style.color = "#D4AF37";
-                }
+                if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
             } else if (newState === 'speaking' && isVoiceMode) {
-                isMicSoftwareMuted = true; // ⚡ STOP ALL INTERRUPTIONS
+                isMicSoftwareMuted = true;
+                if (window.myvad) window.myvad.pause(); // 🔥 Turn VAD OFF (bot speaks)
                 if (window.clearSilenceTimer) window.clearSilenceTimer();
             } else {
                 isMicSoftwareMuted = true;
+                if (window.myvad) window.myvad.pause(); // 🔥 Turn VAD OFF
                 if (window.clearSilenceTimer) window.clearSilenceTimer();
             }
 
@@ -1454,13 +1461,11 @@
                         updateState('listening');
                     }
 
-                    let isRecording = false;
-                    let longPauseTimer = null; 
-                    let maxRecordingTimer = null;
-                    let consecutiveVoiceFrames = 0; 
+                   let isRecording = false;
 
+                    // ⚡ PCM STREAMER: Streams constantly to backend only when VAD permits it
                     processor.onaudioprocess = (e) => {
-                        if (isMicSoftwareMuted) return;
+                        if (isMicSoftwareMuted || !isRecording) return;
                         
                         const inputData = e.inputBuffer.getChannelData(0);
                         const pcm16 = new Int16Array(inputData.length);
@@ -1473,103 +1478,44 @@
                         }
                     };
 
-                    function detectVoice() {
-                        const isSpeakingNow = currentAgentState === 'speaking';
-
-                        if (isMicSoftwareMuted && !isSpeakingNow) {
-                            requestAnimationFrame(detectVoice);
-                            return;
-                        }
-
-                        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-                        analyser.getByteFrequencyData(dataArray);
-                        const timeDataArray = new Uint8Array(analyser.fftSize);
-                        analyser.getByteTimeDomainData(timeDataArray);
-                        
-                        let voiceSum = 0;
-                        let voiceBins = 0;
-                        for (let i = 10; i < 96; i++) {
-                            voiceSum += dataArray[i];
-                            voiceBins++;
-                        }
-                        let humanVolume = voiceSum / Math.max(1, voiceBins);
-
-                        const speechProfile = getHumanSpeechProfile(
-                            dataArray, timeDataArray, streamCtx.sampleRate || 16000, analyser.fftSize || 512
-                        );
-
-                        if (isSpeakingNow) {
-                            requestAnimationFrame(detectVoice);
-                            return;
-                        }
-
-                     if (currentAgentState === 'listening' && isVoiceMode) {
-                            // ⚡ Raised from 10 to 20 to ignore quiet background chatter
-                            if (humanVolume > 20 && window.resetSilenceTimer) {
-                                window.resetSilenceTimer();
-                            }
-
-                            // ⚡ Forces the user to speak clearly to keep the recording active
-                            const volumeIsGood = humanVolume > 20; 
-                            const canStartRecording = speechProfile.isNearHumanSpeech && volumeIsGood; 
-
-                            if (canStartRecording) {
-                                consecutiveVoiceFrames++;
-                            } else {
-                                consecutiveVoiceFrames = 0;
-                            }
-
-                            if (consecutiveVoiceFrames > 8) { 
-                                if (!isRecording) {
-                                    isRecording = true;
-                                    liveUserText = ""; 
-                                    updateState('listening'); 
-                                    
-                                    if (socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                    }
-                                    
-                                    maxRecordingTimer = setTimeout(() => {
-                                        if (isRecording) {
-                                            isRecording = false;
-                                            updateState('thinking');
-                                            if (socket.readyState === WebSocket.OPEN) {
-                                                socket.send(JSON.stringify({ 
-                                                    type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode 
-                                                }));
-                                            }
-                                            liveUserText = ""; 
-                                            const interimBox = document.getElementById('usd-interim-text');
-                                            if (interimBox) interimBox.innerText = "Answering...";
-                                        }
-                                    }, 20000); 
+                    // ⚡ HIGH-END SILERO VAD INTEGRATION
+                    try {
+                        window.myvad = await vad.MicVAD.new({
+                            stream: globalStream,
+                            positiveSpeechThreshold: 0.75, // Triggers easily on human voice, ignores noise
+                            minSpeechFrames: 4,            // Ignores quick taps/noises/dog barks
+                            redemptionFrames: 40,          // ✨ PATIENCE: Waits 1.2 seconds of silence before cutting off!
+                            onSpeechStart: () => {
+                                if (isMicSoftwareMuted) return; // Ignore if bot is talking
+                                isRecording = true;
+                                updateState('listening');
+                                if (socket && socket.readyState === WebSocket.OPEN) {
+                                    socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                 }
-                                
-                                clearTimeout(longPauseTimer);
-
-                                longPauseTimer = setTimeout(() => {
-                                    if (isRecording) {
-                                        isRecording = false;
-                                        clearTimeout(maxRecordingTimer);
-                                        updateState('thinking');
-                                        
-                                        if (socket.readyState === WebSocket.OPEN) {
-                                            socket.send(JSON.stringify({ 
-                                                type: 'process_final', history: chatHistory, isVoiceMode: isVoiceMode 
-                                            }));
-                                        }
-                                        
-                                        liveUserText = ""; 
-                                        const interimBox = document.getElementById('usd-interim-text');
-                                        if (interimBox) interimBox.innerText = "Answering...";
-                                    }
-                                }, 2500); 
+                            },
+                            onSpeechEnd: (audio) => {
+                                if (isMicSoftwareMuted || !isRecording) return;
+                                isRecording = false;
+                                updateState('thinking');
+                                if (socket && socket.readyState === WebSocket.OPEN) {
+                                    socket.send(JSON.stringify({ 
+                                        type: 'process_final', 
+                                        history: chatHistory, 
+                                        isVoiceMode: isVoiceMode 
+                                    }));
+                                }
+                            },
+                            onVADMisfire: () => {
+                                if (isRecording) {
+                                    isRecording = false;
+                                    updateState('listening');
+                                }
                             }
-                        }
-                        requestAnimationFrame(detectVoice);
+                        });
+                        window.myvad.start();
+                    } catch (e) {
+                        console.error("Silero VAD Initialization Failed:", e);
                     }
-                    
-                    detectVoice();
                 };
 
                 socket.onmessage = async (event) => {
@@ -1783,8 +1729,14 @@
             }
         }
 
-        function closeChat(showRating = false) {
+     function closeChat(showRating = false) {
             updateState('off');
+            
+            // ⚡ DESTROY VAD INSTANCE
+            if (window.myvad) {
+                window.myvad.pause();
+                window.myvad = null;
+            }
             releaseWakeLock(); 
             if (socket) socket.close();
             if (globalStream) globalStream.getTracks().forEach(track => track.stop());
