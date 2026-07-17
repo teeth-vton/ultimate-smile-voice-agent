@@ -1432,7 +1432,7 @@
                     }
 
                    let isRecording = false;
-
+                    
                 // ⚡ PCM STREAMER: Streams constantly to backend only when VAD permits it
                     processor.onaudioprocess = (e) => {
                         if (isMicSoftwareMuted || !isRecording) return;
@@ -1440,7 +1440,7 @@
                         const inputData = e.inputBuffer.getChannelData(0);
                         const pcm16 = new Int16Array(inputData.length);
                         for (let i = 0; i < inputData.length; i++) {
-                            // ⚡ MAGIC VOLUME BOOST: Multiplies your mic volume by 3.0 so Gemini hears you perfectly!
+                            // ⚡ MAGIC VOLUME BOOST: Multiplies mic volume by 3.0 so Gemini hears every word!
                             let sample = inputData[i] * 3.0; 
                             if (sample > 1) sample = 1; else if (sample < -1) sample = -1;
                             pcm16[i] = sample * 32767;
