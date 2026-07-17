@@ -982,16 +982,18 @@
         let interruptRestartHoldUntil = 0;
         let liveUserText = "";
 
-        // ⚡ AUDIO RECORDING VARIABLES
+       // ⚡ AUDIO RECORDING VARIABLES
         let mediaRecorder = null;
         let recordedAudioChunks = [];
         window.recordedAudioBlob = null;
         window.recordDest = null;
-        window.myvad = null; // ⚡ SILERO VAD INSTANCE
+        window.myvad = null; 
+        
+        window.isUserSpeaking = false; // ⚡ FIX: Tracks if the user is currently talking!
 
         /**
          * ============================================================================
-         * 10-SECOND SILENCE TIMEOUT ENGINE
+         * SILENCE TIMEOUT ENGINE
          * ============================================================================
          */
         window.silenceTimeout = null;
@@ -999,18 +1001,19 @@
         window.resetSilenceTimer = () => {
             clearTimeout(window.silenceTimeout);
             window.silenceTimeout = setTimeout(() => {
-                if (currentAgentState === 'listening' && isVoiceMode) {
+                // ⚡ FIX: The timer will NEVER fire if the user is in the middle of speaking!
+                if (currentAgentState === 'listening' && isVoiceMode && !window.isUserSpeaking) {
                     updateState('thinking');
                     if (socket && socket.readyState === WebSocket.OPEN) {
                         socket.send(JSON.stringify({
                             type: 'text_input',
-                            text: "SYSTEM INSTRUCTION: The user has been completely silent for 10 seconds. Ask them politely: 'Are you still there? Please let me know if you have any questions.' Do not say anything else.",
+                            text: "SYSTEM INSTRUCTION: The user has been completely silent for 12 seconds. Ask them politely: 'Are you still there? Please let me know if you have any questions.' Do not say anything else.",
                             history: chatHistory,
                             isVoiceMode: true
                         }));
                     }
                 }
-            }, 10000);
+            }, 12000); // ⚡ Increased to 12 seconds to give patients more time to think
         };
 
         window.clearSilenceTimer = () => {
@@ -1458,6 +1461,7 @@
                                 // ⚡ DISABLED BARGE-IN: If bot is speaking, completely ignore the mic
                                 if (isMicSoftwareMuted || currentAgentState === 'speaking' || isAudioPlaying) return; 
                                 
+                                window.isUserSpeaking = true; // ⚡ Mutes the Silence Timer while you talk!
                                 isRecording = true;
                                 updateState('listening');
                                 if (socket && socket.readyState === WebSocket.OPEN) {
@@ -1465,6 +1469,7 @@
                                 }
                             },
                             onSpeechEnd: (audio) => {
+                                window.isUserSpeaking = false; // ⚡ Turns the Silence Timer back on
                                 if (isMicSoftwareMuted || !isRecording) return;
                                 isRecording = false;
                                 updateState('thinking');
@@ -1477,6 +1482,7 @@
                                 }
                             },
                             onVADMisfire: () => {
+                                window.isUserSpeaking = false; // ⚡ Turns the Silence Timer back on
                                 if (isRecording) {
                                     isRecording = false;
                                     updateState('listening');
