@@ -1683,6 +1683,10 @@
             }
         }
 
+      function closeChatBtnClicked() {
+            document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
+        }
+
         function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
@@ -1718,24 +1722,32 @@
             }
         }
 
-    function closeChat(showRating = false) {
+        function closeChat(showRating = false) {
             updateState('off');
             
+            // ⚡ DESTROY VAD INSTANCE
             if (window.myvad) {
                 window.myvad.pause();
                 window.myvad = null;
             }
             releaseWakeLock(); 
-            if (socket) socket.close();
-            if (globalStream) globalStream.getTracks().forEach(track => track.stop());
+            
+            // Clear socket and mic fully so it re-opens flawlessly next time
+            if (socket) {
+                socket.close();
+                socket = null;
+            }
+            if (globalStream) {
+                globalStream.getTracks().forEach(track => track.stop());
+                globalStream = null;
+            }
             
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
 
-            // ⚡ WE REMOVED THE "KILL AUDIO" LOGIC HERE!
-            // Now, when the widget minimizes after rating, the bot is allowed to finish saying goodbye in the background!
-
+            // ⚡ NOTE: We DO NOT kill the audio here! 
+            // This allows the goodbye voice to seamlessly finish playing while the chat is closing.
             sessionStorage.removeItem('usd_chat_active');
             
             const bubble = document.getElementById('usd-bubble');
@@ -1756,7 +1768,7 @@
                     bubble.classList.remove('hidden');
                 }
 
-                // ⚡ Reset rating UI and stars for the next time they open the chat
+                // Reset rating UI and stars for the next time they open the chat
                 document.getElementById('usd-inline-rating').style.display = 'none';
                 document.getElementById('usd-rating-thanks').style.display = 'none';
                 document.querySelectorAll('.usd-star').forEach(s => { 
@@ -1765,6 +1777,7 @@
                 });
             }
         }
+
         async function submitRating(stars) {
             const starElements = document.querySelectorAll('.usd-star');
             starElements.forEach((s, index) => {
@@ -1773,8 +1786,7 @@
             });
             document.getElementById('usd-rating-thanks').style.display = 'block';
 
-            // ⚡ INSTANT CLOSE: Minimizes the widget 400ms after you click a star. 
-            // The upload happens silently in the background!
+            // ⚡ DELAY CLOSE FIX: Waits 2.5 seconds so they read "Thank You" and hear the goodbye voice begin!
             setTimeout(() => { closeChat(false); }, 2500);
 
             try {
@@ -1789,17 +1801,12 @@
                     }).join('\n\n');
                 }
 
-               let audioUrlText = "";
+                let audioUrlText = "";
                 if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
                     try {
                         const uploadForm = new FormData();
-                        // ⚡ REVERTED TO TMPFILES.ORG (The one that works flawlessly!)
                         uploadForm.append("file", window.recordedAudioBlob, "recording.mp3");
-                        
-                        const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { 
-                            method: 'POST', 
-                            body: uploadForm 
-                        });
+                        const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: uploadForm });
                         const uploadData = await uploadRes.json();
                         
                         if (uploadData && uploadData.data && uploadData.data.url) {
@@ -1808,6 +1815,7 @@
                         }
                     } catch(err) { console.error("Audio upload failed", err); }
                 }
+
                 await fetch('https://api.web3forms.com/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
