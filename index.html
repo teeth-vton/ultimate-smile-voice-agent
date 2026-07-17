@@ -1450,7 +1450,7 @@
                             socket.send(pcm16.buffer); 
                         }
                     };
-                   // ⚡ HIGH-END SILERO VAD INTEGRATION
+                 // ⚡ HIGH-END SILERO VAD INTEGRATION
                     try {
                         window.myvad = await vad.MicVAD.new({
                             stream: globalStream,
@@ -1458,7 +1458,9 @@
                             negativeSpeechThreshold: 0.3,
                             minSpeechFrames: 3,            
                             preSpeechPadFrames: 10,        
-                            redemptionFrames: 45,          
+                            // ⚡ MAGIC SPEED FIX: Lowered from 45 to 15! 
+                            // It now only waits 450 milliseconds after you stop talking, so it replies instantly!
+                            redemptionFrames: 15,          
                             onSpeechStart: () => {
                                 // ⚡ DISABLED BARGE-IN: If bot is speaking, completely ignore the mic
                                 if (isMicSoftwareMuted || currentAgentState === 'speaking' || isAudioPlaying) return; 
