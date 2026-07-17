@@ -986,9 +986,7 @@
         let mediaRecorder = null;
         let recordedAudioChunks = [];
         window.recordedAudioBlob = null;
-       window.recordDest = null;
-      
-      window.recordDest = null;
+        window.recordDest = null;
         window.myvad = null; // ⚡ SILERO VAD INSTANCE
 
         /**
@@ -1110,7 +1108,7 @@
                 if (window.myvad) window.myvad.start(); // 🔥 Turn VAD ON
                 if (window.resetSilenceTimer) window.resetSilenceTimer();
                 if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
-           } else if (newState === 'speaking' && isVoiceMode) {
+            } else if (newState === 'speaking' && isVoiceMode) {
                 isMicSoftwareMuted = true; // ⚡ STOP ALL INTERRUPTIONS (Mute Mic)
                 if (window.myvad) window.myvad.pause(); // ⚡ TURN VAD OFF while bot speaks
                 if (window.clearSilenceTimer) window.clearSilenceTimer();
@@ -1151,49 +1149,6 @@
             if (text.includes("dentist connect") || text.includes("become certified dentist") || text.includes("collaborate")) return "[LINK_CONNECT]";
             if (text.includes("gallery") || text.includes("results") || text.includes("before and after")) return "[LINK_GALLERY]";
             return null;
-        }
-
-        function getHumanSpeechProfile(dataArray, timeDomainArray, sampleRate = 16000, fftSize = 512) {
-            const binHz = sampleRate / fftSize;
-            const idx = (hz) => Math.max(0, Math.min(dataArray.length - 1, Math.round(hz / binHz)));
-            const speechStart = idx(90);
-            const speechEnd = idx(3400);
-            const coreStart = idx(180);
-            const coreEnd = idx(1200);
-
-            let speechSum = 0, speechCount = 0;
-            let coreSum = 0, coreCount = 0;
-            let noiseSum = 0, noiseCount = 0;
-
-            for (let i = 0; i < dataArray.length; i++) {
-                const v = dataArray[i];
-                if (i >= speechStart && i <= speechEnd) {
-                    speechSum += v; speechCount++;
-                } else {
-                    noiseSum += v; noiseCount++;
-                }
-                if (i >= coreStart && i <= coreEnd) {
-                    coreSum += v; coreCount++;
-                }
-            }
-
-            let energy = 0;
-            for (let i = 0; i < timeDomainArray.length; i++) {
-                const centered = (timeDomainArray[i] - 128) / 128;
-                energy += centered * centered;
-            }
-            
-            const rms = Math.sqrt(energy / Math.max(1, timeDomainArray.length));
-            const speechAvg = speechSum / Math.max(1, speechCount);
-            const coreAvg = coreSum / Math.max(1, coreCount);
-            const noiseAvg = noiseSum / Math.max(1, noiseCount);
-            const speechRatio = speechSum / Math.max(1, (speechSum + noiseSum));
-            const coreVsNoise = coreAvg / Math.max(1, noiseAvg);
-
-            // ⚡ NOISE CANCELLATION: Drastically raised thresholds for volume (rms), pitch clarity (speechAvg), and SNR (coreVsNoise).
-            // Background voices will no longer trigger this.
-            const isNearHumanSpeech = rms > 0.015 && speechAvg > 20 && coreAvg > 20 && speechRatio > 0.70 && coreVsNoise > 1.40;       
-            return { rms, speechAvg, coreAvg, noiseAvg, speechRatio, coreVsNoise, isNearHumanSpeech };
         }
 
         function appendLinkButton(targetEl, tag) {
@@ -1354,7 +1309,7 @@
                     bubble.style.display = 'none'; 
                     bubble.classList.add('hidden');
                 }
-// ... rest of the function stays exactly the same
+
                 if (container) {
                     container.style.display = 'flex';
                     container.classList.add('active');
@@ -1494,23 +1449,15 @@
                     try {
                         window.myvad = await vad.MicVAD.new({
                             stream: globalStream,
-                            positiveSpeechThreshold: 0.4,  // 🔥 LOWERED: Triggers instantly on soft voices/names
+                            positiveSpeechThreshold: 0.4,  
                             negativeSpeechThreshold: 0.3,
                             minSpeechFrames: 3,            
-                            preSpeechPadFrames: 10,        // 🔥 MAGIC FIX: Saves the audio right BEFORE you speak so first syllables aren't cut!
-                            redemptionFrames: 45,          // ✨ PATIENCE: Waits ~1.3 seconds of silence before cutting off!
+                            preSpeechPadFrames: 10,        
+                            redemptionFrames: 45,          
                             onSpeechStart: () => {
                                 // ⚡ DISABLED BARGE-IN: If bot is speaking, completely ignore the mic
                                 if (isMicSoftwareMuted || currentAgentState === 'speaking' || isAudioPlaying) return; 
                                 
-                                isRecording = true;
-                                updateState('listening');
-                                if (socket && socket.readyState === WebSocket.OPEN) {
-                                    socket.send(JSON.stringify({ type: 'start_of_speech' }));
-                                }
-                            },
-
-                                if (isMicSoftwareMuted) return; 
                                 isRecording = true;
                                 updateState('listening');
                                 if (socket && socket.readyState === WebSocket.OPEN) {
@@ -1680,16 +1627,16 @@
             }
         }
 
-      function closeChatBtnClicked() {
+        function closeChatBtnClicked() {
             document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
         }
 
-        function confirmEndChat(isYes) {
+       function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
                 updateState('thinking');
                 
-                // ⚡ INSTANT STOP: Kills any audio the bot is currently playing immediately!
+                // ⚡ INSTANT STOP: Kills any previous audio the bot is currently playing immediately!
                 audioChunkQueue = [];
                 activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
                 activeSources = [];
@@ -1775,7 +1722,7 @@
             }
         }
 
-        async function submitRating(stars) {
+      async function submitRating(stars) {
             const starElements = document.querySelectorAll('.usd-star');
             starElements.forEach((s, index) => {
                 s.style.color = index < stars ? '#FFD700' : '#444';
@@ -1826,7 +1773,6 @@
                 });
             } catch(e) { console.error("Rating submission error:", e); }
         }
-
         async function submitTextMessage() {
             const inputEl = document.getElementById('usd-text-input');
             const userText = cleanDisplayText(inputEl.value.trim());
