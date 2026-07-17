@@ -1338,11 +1338,23 @@
             const container = document.getElementById('usd-chat-container');
             const bubble = document.getElementById('usd-bubble');
             
-            if (currentAgentState === 'off' || isRestore) {
+            // ⚡ REOPEN FIX: Always allow opening if the widget is hidden!
+            const isClosed = container && (container.style.display === 'none' || !container.classList.contains('active'));
+            
+            if (currentAgentState === 'off' || isRestore || isClosed) {
+                currentAgentState = 'off'; 
+                
+                // Clear audio queue from any previous session so it doesn't overlap
+                audioChunkQueue = [];
+                activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
+                activeSources = [];
+                isAudioPlaying = false;
+                
                 if (bubble) {
                     bubble.style.display = 'none'; 
                     bubble.classList.add('hidden');
                 }
+// ... rest of the function stays exactly the same
                 if (container) {
                     container.style.display = 'flex';
                     container.classList.add('active');
@@ -1671,16 +1683,12 @@
             }
         }
 
-        function closeChatBtnClicked() {
-            document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
-        }
-
         function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
                 updateState('thinking');
                 
-                // ⚡ INSTANT STOP: Kills any previous audio the bot is currently playing immediately!
+                // ⚡ INSTANT STOP: Kills any audio the bot is currently playing immediately!
                 audioChunkQueue = [];
                 activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
                 activeSources = [];
@@ -1710,10 +1718,9 @@
             }
         }
 
-     function closeChat(showRating = false) {
+    function closeChat(showRating = false) {
             updateState('off');
             
-            // ⚡ DESTROY VAD INSTANCE
             if (window.myvad) {
                 window.myvad.pause();
                 window.myvad = null;
@@ -1726,7 +1733,7 @@
                 mediaRecorder.stop();
             }
 
-            // ⚡ We REMOVED the "kill audio" logic here. 
+            // ⚡ WE REMOVED THE "KILL AUDIO" LOGIC HERE!
             // Now, when the widget minimizes after rating, the bot is allowed to finish saying goodbye in the background!
 
             sessionStorage.removeItem('usd_chat_active');
@@ -1748,6 +1755,14 @@
                     bubble.style.display = 'flex'; 
                     bubble.classList.remove('hidden');
                 }
+
+                // ⚡ Reset rating UI and stars for the next time they open the chat
+                document.getElementById('usd-inline-rating').style.display = 'none';
+                document.getElementById('usd-rating-thanks').style.display = 'none';
+                document.querySelectorAll('.usd-star').forEach(s => { 
+                    s.style.color = '#333333'; 
+                    s.style.textShadow = '0 2px 4px rgba(0,0,0,0.5)'; 
+                });
             }
         }
         async function submitRating(stars) {
@@ -1760,7 +1775,7 @@
 
             // ⚡ INSTANT CLOSE: Minimizes the widget 400ms after you click a star. 
             // The upload happens silently in the background!
-            setTimeout(() => { closeChat(false); }, 400);
+            setTimeout(() => { closeChat(false); }, 2500);
 
             try {
                 let transcript = "No chat history recorded.";
