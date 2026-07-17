@@ -1110,9 +1110,9 @@
                 if (window.myvad) window.myvad.start(); // 🔥 Turn VAD ON
                 if (window.resetSilenceTimer) window.resetSilenceTimer();
                 if (interimBox) { interimBox.innerText = "Listening..."; interimBox.style.color = "#D4AF37"; }
-            } else if (newState === 'speaking' && isVoiceMode) {
-                isMicSoftwareMuted = false; // 🔥 KEEP MIC ON FOR BARGE-IN
-                if (window.myvad) window.myvad.start(); // 🔥 KEEP VAD LISTENING
+           } else if (newState === 'speaking' && isVoiceMode) {
+                isMicSoftwareMuted = true; // ⚡ STOP ALL INTERRUPTIONS (Mute Mic)
+                if (window.myvad) window.myvad.pause(); // ⚡ TURN VAD OFF while bot speaks
                 if (window.clearSilenceTimer) window.clearSilenceTimer();
             } else {
                 isMicSoftwareMuted = true;
@@ -1500,18 +1500,15 @@
                             preSpeechPadFrames: 10,        // 🔥 MAGIC FIX: Saves the audio right BEFORE you speak so first syllables aren't cut!
                             redemptionFrames: 45,          // ✨ PATIENCE: Waits ~1.3 seconds of silence before cutting off!
                             onSpeechStart: () => {
-                                // ⚡ BARGE-IN DETECTION: If the bot is talking, instantly kill the audio!
-                                if (currentAgentState === 'speaking' || isAudioPlaying) {
-                                    console.log("🎙️ Barge-in detected! Stopping bot audio.");
-                                    audioChunkQueue = [];
-                                    activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
-                                    activeSources = [];
-                                    isAudioPlaying = false;
-                                    
-                                    if (socket && socket.readyState === WebSocket.OPEN) {
-                                        socket.send(JSON.stringify({ type: 'user_interrupt_barge_in' }));
-                                    }
+                                // ⚡ DISABLED BARGE-IN: If bot is speaking, completely ignore the mic
+                                if (isMicSoftwareMuted || currentAgentState === 'speaking' || isAudioPlaying) return; 
+                                
+                                isRecording = true;
+                                updateState('listening');
+                                if (socket && socket.readyState === WebSocket.OPEN) {
+                                    socket.send(JSON.stringify({ type: 'start_of_speech' }));
                                 }
+                            },
 
                                 if (isMicSoftwareMuted) return; 
                                 isRecording = true;
