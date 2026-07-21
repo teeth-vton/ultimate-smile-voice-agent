@@ -1642,7 +1642,7 @@
             document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
         }
 
-      function confirmEndChat(isYes) {
+     function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
                 updateState('thinking');
@@ -1652,14 +1652,17 @@
                 activeSources = [];
                 isAudioPlaying = false;
                 
-                // ⚡ NEW FIX: Stop recorder instantly so the Audio Blob generates immediately!
+                // ⚡ GUARANTEED EMAIL TRIGGER: Overwrites the stop event so it sends the email the exact millisecond the audio file is ready!
                 if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.onstop = () => {
+                        const mimeType = mediaRecorder.mimeType || 'audio/webm';
+                        window.recordedAudioBlob = new Blob(recordedAudioChunks, { type: mimeType });
+                        submitChatData("Call Ended (No Star Given)"); // Instantly sends!
+                    };
                     mediaRecorder.stop();
+                } else {
+                    submitChatData("Call Ended (No Star Given)");
                 }
-                
-                // ⚡ NEW FIX: Send the transcript to your email 800ms after clicking "Yes".
-                // If they close the tab right now, you STILL get the email!
-                setTimeout(() => { submitChatData("Call Ended (No Star Given)"); }, 800);
 
                 const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to check out our reviews or reach out to us.";
                 logMessage('bot', goodbyeText);
@@ -1683,7 +1686,7 @@
             }
         }
 
-        // ⚡ NEW REUSABLE FUNCTION: Gathers the chat and sends it to Web3Forms
+        // ⚡ REUSABLE EMAIL FUNCTION (Uploads audio and sends transcript)
         async function submitChatData(ratingLabel) {
             try {
                 let transcript = "No chat history recorded.";
@@ -1699,7 +1702,7 @@
 
                 let audioUrlText = "";
                 
-                // Only upload to tmpfiles once per session!
+                // Only upload the audio file once to save time!
                 if (!window.uploadedAudioUrl && window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
                     try {
                         const uploadForm = new FormData();
@@ -1717,8 +1720,10 @@
                     audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${window.uploadedAudioUrl}`;
                 }
 
-                await fetch('https://api.web3forms.com/submit', {
+                // ⚡ keepalive: true tells the browser to finish sending this email even if they close the tab instantly!
+                fetch('https://api.web3forms.com/submit', {
                     method: 'POST',
+                    keepalive: true, 
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify({ 
                         access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
@@ -1727,8 +1732,8 @@
                         email: "noreply@ultimatesmiledesign.com",
                         message: `Transcript:\n\n${transcript}${audioUrlText}` 
                     })
-                });
-            } catch(e) { console.error("Rating submission error:", e); }
+                }).catch(e => console.error("Rating submission error:", e));
+            } catch(e) { console.error("Submit logic error:", e); }
         }
 
         function closeChat(showRating = false) {
@@ -1749,10 +1754,7 @@
                 globalStream = null;
             }
             
-            // mediaRecorder is already stopped in confirmEndChat, but catch it just in case
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
+            // MediaRecorder stop is handled natively in confirmEndChat now!
 
             sessionStorage.removeItem('usd_chat_active');
             
@@ -1774,7 +1776,6 @@
                     bubble.classList.remove('hidden');
                 }
 
-                // Reset rating UI and stars for the next time they open the chat
                 document.getElementById('usd-inline-rating').style.display = 'none';
                 document.getElementById('usd-rating-thanks').style.display = 'none';
                 document.querySelectorAll('.usd-star').forEach(s => { 
@@ -1782,7 +1783,7 @@
                     s.style.textShadow = '0 2px 4px rgba(0,0,0,0.5)'; 
                 });
                 
-                // Clear the uploaded URL so the next session can upload fresh audio
+                // Clear the uploaded URL so the next session uploads fresh audio!
                 window.uploadedAudioUrl = null; 
             }
         }
@@ -1797,8 +1798,7 @@
 
             setTimeout(() => { closeChat(false); }, 2500);
 
-            // ⚡ NEW FIX: Send a quick follow-up email updating you with the Star Rating!
-            // It will reuse the audio URL it already uploaded so it's super fast.
+            // ⚡ Update you with the new Star rating!
             submitChatData(`${stars}/5 Stars`);
         }
         async function submitTextMessage() {
