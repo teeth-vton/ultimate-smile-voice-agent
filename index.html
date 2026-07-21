@@ -987,6 +987,7 @@
         let recordedAudioChunks = [];
         window.recordedAudioBlob = null;
         window.recordDest = null;
+      window.uploadedAudioUrl = null; // ⚡ Prevents uploading the same audio twice
         window.myvad = null; 
         
         window.isUserSpeaking = false; // ⚡ FIX: Tracks if the user is currently talking!
@@ -1641,21 +1642,28 @@
             document.getElementById('usd-end-confirm-overlay').style.display = 'flex';
         }
 
-       function confirmEndChat(isYes) {
+      function confirmEndChat(isYes) {
             document.getElementById('usd-end-confirm-overlay').style.display = 'none';
             if (isYes) {
                 updateState('thinking');
                 
-                // ⚡ INSTANT STOP: Kills any previous audio the bot is currently playing immediately!
                 audioChunkQueue = [];
                 activeSources.forEach(source => { try { source.stop(); } catch(e) {} });
                 activeSources = [];
                 isAudioPlaying = false;
                 
-                const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to reach out to us at our contact page.";
+                // ⚡ NEW FIX: Stop recorder instantly so the Audio Blob generates immediately!
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                }
+                
+                // ⚡ NEW FIX: Send the transcript to your email 800ms after clicking "Yes".
+                // If they close the tab right now, you STILL get the email!
+                setTimeout(() => { submitChatData("Call Ended (No Star Given)"); }, 800);
+
+                const goodbyeText = "Thanks for talking with Ultimate Smile Design. Please feel free to check out our reviews or reach out to us.";
                 logMessage('bot', goodbyeText);
                 
-                // ⚡ ZERO-DELAY BACKGROUND FETCH: Gets the voice instantly while the UI moves on!
                 if (isVoiceMode) {
                     fetch(`${RENDER_BACKEND_URL}/api/tts`, {
                         method: 'POST',
@@ -1666,27 +1674,72 @@
                     .then(data => {
                         isReplyComplete = true; 
                         audioChunkQueue.push(data);
-                        processAudioQueue(); // Starts playing the goodbye message gracefully
+                        processAudioQueue(); 
                     })
                     .catch(e => console.error("TTS Error:", e));
                 }
 
-                // ⚡ INSTANT RATING SCREEN: Shows up instantly without waiting for the audio to fetch!
                 closeChat(true);
             }
+        }
+
+        // ⚡ NEW REUSABLE FUNCTION: Gathers the chat and sends it to Web3Forms
+        async function submitChatData(ratingLabel) {
+            try {
+                let transcript = "No chat history recorded.";
+                const allMessages = document.querySelectorAll('#usd-chat-log > div');
+                if (allMessages.length > 0) {
+                    transcript = Array.from(allMessages).map(msgDiv => {
+                        const text = msgDiv.querySelector('.usd-msg-text')?.innerText || "";
+                        if (msgDiv.classList.contains('user_message')) return `User: ${text}`;
+                        if (msgDiv.classList.contains('bot_message')) return `Assistant: ${text}`;
+                        return `System: ${text}`;
+                    }).join('\n\n');
+                }
+
+                let audioUrlText = "";
+                
+                // Only upload to tmpfiles once per session!
+                if (!window.uploadedAudioUrl && window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
+                    try {
+                        const uploadForm = new FormData();
+                        uploadForm.append("file", window.recordedAudioBlob, "recording.mp3");
+                        const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: uploadForm });
+                        const uploadData = await uploadRes.json();
+                        
+                        if (uploadData && uploadData.data && uploadData.data.url) {
+                            window.uploadedAudioUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+                        }
+                    } catch(err) { console.error("Audio upload failed", err); }
+                }
+
+                if (window.uploadedAudioUrl) {
+                    audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${window.uploadedAudioUrl}`;
+                }
+
+                await fetch('https://api.web3forms.com/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ 
+                        access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
+                        subject: `🌟 New USD Voice Agent Rating: ${ratingLabel}`, 
+                        from_name: "Ultimate Smile Voice Agent", 
+                        email: "noreply@ultimatesmiledesign.com",
+                        message: `Transcript:\n\n${transcript}${audioUrlText}` 
+                    })
+                });
+            } catch(e) { console.error("Rating submission error:", e); }
         }
 
         function closeChat(showRating = false) {
             updateState('off');
             
-            // ⚡ DESTROY VAD INSTANCE
             if (window.myvad) {
                 window.myvad.pause();
                 window.myvad = null;
             }
             releaseWakeLock(); 
             
-            // Clear socket and mic fully so it re-opens flawlessly next time
             if (socket) {
                 socket.close();
                 socket = null;
@@ -1696,12 +1749,11 @@
                 globalStream = null;
             }
             
+            // mediaRecorder is already stopped in confirmEndChat, but catch it just in case
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
 
-            // ⚡ NOTE: We DO NOT kill the audio here! 
-            // This allows the goodbye voice to seamlessly finish playing while the chat is closing.
             sessionStorage.removeItem('usd_chat_active');
             
             const bubble = document.getElementById('usd-bubble');
@@ -1729,10 +1781,13 @@
                     s.style.color = '#333333'; 
                     s.style.textShadow = '0 2px 4px rgba(0,0,0,0.5)'; 
                 });
+                
+                // Clear the uploaded URL so the next session can upload fresh audio
+                window.uploadedAudioUrl = null; 
             }
         }
 
-      async function submitRating(stars) {
+        async function submitRating(stars) {
             const starElements = document.querySelectorAll('.usd-star');
             starElements.forEach((s, index) => {
                 s.style.color = index < stars ? '#FFD700' : '#444';
@@ -1740,48 +1795,11 @@
             });
             document.getElementById('usd-rating-thanks').style.display = 'block';
 
-            // ⚡ DELAY CLOSE FIX: Waits 2.5 seconds so they read "Thank You" and hear the goodbye voice begin!
             setTimeout(() => { closeChat(false); }, 2500);
 
-            try {
-                let transcript = "No chat history recorded.";
-                const allMessages = document.querySelectorAll('#usd-chat-log > div');
-                if (allMessages.length > 0) {
-                    transcript = Array.from(allMessages).map(msgDiv => {
-                        const text = msgDiv.querySelector('.usd-msg-text')?.innerText || "";
-                        if (msgDiv.classList.contains('user_message')) return `User: ${text}`;
-                        if (msgDiv.classList.contains('bot_message')) return `Assistant: ${text}`;
-                        return `System: ${text}`;
-                    }).join('\n\n');
-                }
-
-                let audioUrlText = "";
-                if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
-                    try {
-                        const uploadForm = new FormData();
-                        uploadForm.append("file", window.recordedAudioBlob, "recording.mp3");
-                        const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: uploadForm });
-                        const uploadData = await uploadRes.json();
-                        
-                        if (uploadData && uploadData.data && uploadData.data.url) {
-                            const directUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-                            audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${directUrl}`;
-                        }
-                    } catch(err) { console.error("Audio upload failed", err); }
-                }
-
-                await fetch('https://api.web3forms.com/submit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ 
-                        access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
-                        subject: `🌟 New USD Voice Agent Rating: ${stars}/5 Stars`, 
-                        from_name: "Ultimate Smile Voice Agent", 
-                        email: "noreply@ultimatesmiledesign.com",
-                        message: `Transcript:\n\n${transcript}${audioUrlText}` 
-                    })
-                });
-            } catch(e) { console.error("Rating submission error:", e); }
+            // ⚡ NEW FIX: Send a quick follow-up email updating you with the Star Rating!
+            // It will reuse the audio URL it already uploaded so it's super fast.
+            submitChatData(`${stars}/5 Stars`);
         }
         async function submitTextMessage() {
             const inputEl = document.getElementById('usd-text-input');
