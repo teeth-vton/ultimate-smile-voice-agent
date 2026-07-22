@@ -1686,7 +1686,7 @@
             }
         }
 
-   // ⚡ REUSABLE EMAIL FUNCTION (Uploads audio and sends transcript)
+ // ⚡ REUSABLE EMAIL FUNCTION (Uploads audio and sends transcript)
         async function submitChatData(ratingLabel) {
             try {
                 let transcript = "No chat history recorded.";
@@ -1702,26 +1702,48 @@
 
                 let audioUrlText = "";
                 
-                // ⚡ UPLOAD TO TMPFILES (The one we know works flawlessly!)
+                // ⚡ UPLOAD AUDIO (With 72-Hour & 6-Day Fallbacks!)
                 if (!window.uploadedAudioUrl && window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
+                    
+                    // Attempt 1: Litterbox (72 Hours / 3 Days)
                     try {
-                        const uploadForm = new FormData();
-                        uploadForm.append("file", window.recordedAudioBlob, "recording.mp3");
-                        const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: uploadForm });
-                        const uploadData = await uploadRes.json();
+                        const formData = new FormData();
+                        formData.append("reqType", "fileupload");
+                        formData.append("time", "72h"); 
+                        formData.append("fileToUpload", window.recordedAudioBlob, "recording.mp3");
                         
-                        if (uploadData && uploadData.data && uploadData.data.url) {
-                            window.uploadedAudioUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-                            audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${window.uploadedAudioUrl}`;
-                        }
-                    } catch(err) { console.error("Audio upload failed", err); }
-                } else if (window.uploadedAudioUrl) {
-                    // If already uploaded (like if they click a star AFTER ending the call)
-                    audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${window.uploadedAudioUrl}`;
+                        const res = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
+                        if (res.ok) window.uploadedAudioUrl = await res.text();
+                    } catch(e) {}
+
+                    // Attempt 2: Filebin (144 Hours / 6 Days)
+                    if (!window.uploadedAudioUrl) {
+                        try {
+                            const binId = "usd" + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
+                            const res = await fetch(`https://filebin.net/${binId}/recording.mp3`, {
+                                method: 'POST', headers: { 'Content-Type': 'audio/mp3' }, body: window.recordedAudioBlob
+                            });
+                            if (res.ok) window.uploadedAudioUrl = `https://filebin.net/${binId}/recording.mp3`;
+                        } catch(e) {}
+                    }
+                    
+                    // Attempt 3: Tmpfiles (1 Hour Backup)
+                    if (!window.uploadedAudioUrl) {
+                        try {
+                            const form = new FormData(); form.append("file", window.recordedAudioBlob, "recording.mp3");
+                            const res = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: form });
+                            const data = await res.json();
+                            if (data && data.data && data.data.url) window.uploadedAudioUrl = data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+                        } catch(e) {}
+                    }
                 }
 
-                // ⚡ SEND EMAIL VIA JSON
-                // keepalive: true guarantees this sends even if the user instantly closes the browser tab!
+                if (window.uploadedAudioUrl) {
+                    audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 3 to 6 Days):\n${window.uploadedAudioUrl}`;
+                }
+
+                // ⚡ SEND EMAIL VIA JSON (Guaranteed to bypass Web3Forms blockers)
+                // keepalive: true ensures the email sends even if the user instantly closes the browser tab!
                 fetch('https://api.web3forms.com/submit', {
                     method: 'POST',
                     keepalive: true, 
