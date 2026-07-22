@@ -1702,29 +1702,31 @@
 
                 let audioUrlText = "";
                 
-                // ⚡ UPLOAD AUDIO (With 72-Hour & 6-Day Fallbacks!)
+                // ⚡ UPLOAD AUDIO (With Fixed, CORS-Safe 72-Hour Providers!)
                 if (!window.uploadedAudioUrl && window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
                     
-                    // Attempt 1: Litterbox (72 Hours / 3 Days)
+                    // Attempt 1: Litterbox (Valid for 72 Hours) - FIXED URL!
                     try {
                         const formData = new FormData();
-                        formData.append("reqType", "fileupload");
+                        formData.append("reqtype", "fileupload");
                         formData.append("time", "72h"); 
                         formData.append("fileToUpload", window.recordedAudioBlob, "recording.mp3");
                         
-                        const res = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
-                        if (res.ok) window.uploadedAudioUrl = await res.text();
-                    } catch(e) {}
+                        const res = await fetch('https://litterbox.catbox.moe/api.php', { method: 'POST', body: formData });
+                        if (res.ok) window.uploadedAudioUrl = (await res.text()).trim();
+                    } catch(e) { console.log("Litterbox skipped"); }
 
-                    // Attempt 2: Filebin (144 Hours / 6 Days)
+                    // Attempt 2: Uguu.se (Valid for 48 Hours) - SUPER SAFE FRONTEND API
                     if (!window.uploadedAudioUrl) {
                         try {
-                            const binId = "usd" + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
-                            const res = await fetch(`https://filebin.net/${binId}/recording.mp3`, {
-                                method: 'POST', headers: { 'Content-Type': 'audio/mp3' }, body: window.recordedAudioBlob
-                            });
-                            if (res.ok) window.uploadedAudioUrl = `https://filebin.net/${binId}/recording.mp3`;
-                        } catch(e) {}
+                            const formData = new FormData();
+                            formData.append("files[]", window.recordedAudioBlob, "recording.mp3");
+                            const res = await fetch('https://uguu.se/upload.php', { method: 'POST', body: formData });
+                            if (res.ok) {
+                                const data = await res.json();
+                                if (data && data.success) window.uploadedAudioUrl = data.files[0].url;
+                            }
+                        } catch(e) { console.log("Uguu skipped"); }
                     }
                     
                     // Attempt 3: Tmpfiles (1 Hour Backup)
@@ -1734,16 +1736,15 @@
                             const res = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: form });
                             const data = await res.json();
                             if (data && data.data && data.data.url) window.uploadedAudioUrl = data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-                        } catch(e) {}
+                        } catch(e) { console.log("Tmpfiles failed"); }
                     }
                 }
 
                 if (window.uploadedAudioUrl) {
-                    audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 3 to 6 Days):\n${window.uploadedAudioUrl}`;
+                    audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 48 to 72 Hours):\n${window.uploadedAudioUrl}`;
                 }
 
-                // ⚡ SEND EMAIL VIA JSON (Guaranteed to bypass Web3Forms blockers)
-                // keepalive: true ensures the email sends even if the user instantly closes the browser tab!
+                // ⚡ SEND EMAIL VIA JSON
                 fetch('https://api.web3forms.com/submit', {
                     method: 'POST',
                     keepalive: true, 
@@ -1759,7 +1760,6 @@
                 
             } catch(e) { console.error("Submit logic error:", e); }
         }
-
         function closeChat(showRating = false) {
             updateState('off');
             
