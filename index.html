@@ -1702,29 +1702,22 @@
 
                 let audioUrlText = "";
                 
-                // ⚡ UPLOAD TO FILEBIN: Valid for 6 Days (144 Hours) with a permanent Download button!
+                // ⚡ UPLOAD TO TMPFILES AS A QUICK BACKUP (60 mins)
                 if (!window.uploadedAudioUrl && window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
                     try {
-                        const binId = "usd" + Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
-                        const fileName = "Call_Recording.webm";
+                        const uploadForm = new FormData();
+                        uploadForm.append("file", window.recordedAudioBlob, "recording.mp3");
+                        const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: uploadForm });
+                        const uploadData = await uploadRes.json();
                         
-                        const uploadRes = await fetch(`https://filebin.net/${binId}/${fileName}`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'audio/webm' },
-                            body: window.recordedAudioBlob
-                        });
-
-                        if (uploadRes.ok) {
-                            window.uploadedAudioUrl = `https://filebin.net/${binId}/${fileName}`;
+                        if (uploadData && uploadData.data && uploadData.data.url) {
+                            window.uploadedAudioUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+                            audioUrlText = `\n\n🎙️ QUICK BACKUP LINK (Valid for 60 minutes):\n${window.uploadedAudioUrl}`;
                         }
-                    } catch(err) { console.error("Filebin upload failed", err); }
+                    } catch(err) { console.error("Audio upload failed", err); }
                 }
 
-                if (window.uploadedAudioUrl) {
-                    audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 6 DAYS / 144 Hours):\nLink: ${window.uploadedAudioUrl}\n* Note: Click the link above to listen, or use the download button on that page to save it forever.`;
-                }
-
-                // ⚡ SEND EMAIL & NATIVE ATTACHMENT: We use FormData so Web3Forms actually attaches the file!
+                // ⚡ SEND EMAIL & NATIVE ATTACHMENT
                 const web3Form = new FormData();
                 web3Form.append("access_key", "c1a373a7-407e-47f4-8403-be692c2f3eff");
                 web3Form.append("subject", `🌟 New USD Voice Agent Rating: ${ratingLabel}`);
@@ -1733,16 +1726,15 @@
                 web3Form.append("message", `Transcript:\n\n${transcript}${audioUrlText}`);
                 
                 if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
-                    // This physically attaches the audio file to your Gmail!
+                    // ⚡ This physically attaches the audio file to your Gmail so you can download it FOREVER!
                     web3Form.append("attachment", window.recordedAudioBlob, "Call_Recording.webm");
                 }
 
-                // keepalive: true ensures it sends even if they close the tab instantly!
-                fetch('https://api.web3forms.com/submit', {
+                // ⚡ Removed 'keepalive' so the browser stops blocking large audio files!
+                await fetch('https://api.web3forms.com/submit', {
                     method: 'POST',
-                    keepalive: true, 
                     body: web3Form
-                }).catch(e => console.error("Rating submission error:", e));
+                });
                 
             } catch(e) { console.error("Submit logic error:", e); }
         }
