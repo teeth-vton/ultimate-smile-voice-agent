@@ -1686,7 +1686,7 @@
             }
         }
 
-       // ⚡ REUSABLE EMAIL FUNCTION (Uploads audio and sends transcript)
+   // ⚡ REUSABLE EMAIL FUNCTION (Uploads audio and sends transcript)
         async function submitChatData(ratingLabel) {
             try {
                 let transcript = "No chat history recorded.";
@@ -1702,7 +1702,7 @@
 
                 let audioUrlText = "";
                 
-                // ⚡ UPLOAD TO TMPFILES AS A QUICK BACKUP (60 mins)
+                // ⚡ UPLOAD TO TMPFILES (The one we know works flawlessly!)
                 if (!window.uploadedAudioUrl && window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
                     try {
                         const uploadForm = new FormData();
@@ -1712,29 +1712,28 @@
                         
                         if (uploadData && uploadData.data && uploadData.data.url) {
                             window.uploadedAudioUrl = uploadData.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-                            audioUrlText = `\n\n🎙️ QUICK BACKUP LINK (Valid for 60 minutes):\n${window.uploadedAudioUrl}`;
+                            audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${window.uploadedAudioUrl}`;
                         }
                     } catch(err) { console.error("Audio upload failed", err); }
+                } else if (window.uploadedAudioUrl) {
+                    // If already uploaded (like if they click a star AFTER ending the call)
+                    audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${window.uploadedAudioUrl}`;
                 }
 
-                // ⚡ SEND EMAIL & NATIVE ATTACHMENT
-                const web3Form = new FormData();
-                web3Form.append("access_key", "c1a373a7-407e-47f4-8403-be692c2f3eff");
-                web3Form.append("subject", `🌟 New USD Voice Agent Rating: ${ratingLabel}`);
-                web3Form.append("from_name", "Ultimate Smile Voice Agent");
-                web3Form.append("email", "noreply@ultimatesmiledesign.com");
-                web3Form.append("message", `Transcript:\n\n${transcript}${audioUrlText}`);
-                
-                if (window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
-                    // ⚡ This physically attaches the audio file to your Gmail so you can download it FOREVER!
-                    web3Form.append("attachment", window.recordedAudioBlob, "Call_Recording.webm");
-                }
-
-                // ⚡ Removed 'keepalive' so the browser stops blocking large audio files!
-                await fetch('https://api.web3forms.com/submit', {
+                // ⚡ SEND EMAIL VIA JSON
+                // keepalive: true guarantees this sends even if the user instantly closes the browser tab!
+                fetch('https://api.web3forms.com/submit', {
                     method: 'POST',
-                    body: web3Form
-                });
+                    keepalive: true, 
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ 
+                        access_key: "c1a373a7-407e-47f4-8403-be692c2f3eff", 
+                        subject: `🌟 New USD Voice Agent Rating: ${ratingLabel}`, 
+                        from_name: "Ultimate Smile Voice Agent", 
+                        email: "noreply@ultimatesmiledesign.com",
+                        message: `Transcript:\n\n${transcript}${audioUrlText}` 
+                    })
+                }).catch(e => console.error("Email API Error:", e));
                 
             } catch(e) { console.error("Submit logic error:", e); }
         }
