@@ -1685,8 +1685,7 @@
                 closeChat(true);
             }
         }
-
- // ⚡ REUSABLE EMAIL FUNCTION (Uploads audio and sends transcript)
+// ⚡ REUSABLE EMAIL FUNCTION (Uploads audio and sends transcript)
         async function submitChatData(ratingLabel) {
             try {
                 let transcript = "No chat history recorded.";
@@ -1702,31 +1701,40 @@
 
                 let audioUrlText = "";
                 
-                // ⚡ UPLOAD AUDIO (With Fixed, CORS-Safe 72-Hour Providers!)
+                // ⚡ UPLOAD AUDIO (With CORS-Safe, Long-Term Providers!)
                 if (!window.uploadedAudioUrl && window.recordedAudioBlob && window.recordedAudioBlob.size > 0) {
                     
-                    // Attempt 1: Litterbox (Valid for 72 Hours) - FIXED URL!
+                    // Attempt 1: GoFile.io (Valid for 10 Days!)
                     try {
-                        const formData = new FormData();
-                        formData.append("reqtype", "fileupload");
-                        formData.append("time", "72h"); 
-                        formData.append("fileToUpload", window.recordedAudioBlob, "recording.mp3");
-                        
-                        const res = await fetch('https://litterbox.catbox.moe/api.php', { method: 'POST', body: formData });
-                        if (res.ok) window.uploadedAudioUrl = (await res.text()).trim();
-                    } catch(e) { console.log("Litterbox skipped"); }
+                        const serverReq = await fetch('https://api.gofile.io/servers');
+                        const serverData = await serverReq.json();
+                        if (serverData.status === 'ok') {
+                            const uploadServer = serverData.data.servers[0].name;
+                            const form = new FormData();
+                            form.append("file", window.recordedAudioBlob, "recording.mp3");
+                            const uploadRes = await fetch(`https://${uploadServer}.gofile.io/contents/uploadfile`, { method: 'POST', body: form });
+                            const uploadData = await uploadRes.json();
+                            if (uploadData.status === 'ok') {
+                                window.uploadedAudioUrl = uploadData.data.downloadPage;
+                                audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 10 Days):\n${window.uploadedAudioUrl}`;
+                            }
+                        }
+                    } catch(e) { console.log("GoFile skipped"); }
 
-                    // Attempt 2: Uguu.se (Valid for 48 Hours) - SUPER SAFE FRONTEND API
+                    // Attempt 2: Pomf.la (Valid for 30 Days!)
                     if (!window.uploadedAudioUrl) {
                         try {
-                            const formData = new FormData();
-                            formData.append("files[]", window.recordedAudioBlob, "recording.mp3");
-                            const res = await fetch('https://uguu.se/upload.php', { method: 'POST', body: formData });
+                            const form = new FormData();
+                            form.append("files[]", window.recordedAudioBlob, "recording.mp3");
+                            const res = await fetch('https://pomf2.lain.la/upload.php', { method: 'POST', body: form });
                             if (res.ok) {
                                 const data = await res.json();
-                                if (data && data.success) window.uploadedAudioUrl = data.files[0].url;
+                                if (data && data.success) {
+                                    window.uploadedAudioUrl = data.files[0].url;
+                                    audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 30 Days):\n${window.uploadedAudioUrl}`;
+                                }
                             }
-                        } catch(e) { console.log("Uguu skipped"); }
+                        } catch(e) { console.log("Pomf skipped"); }
                     }
                     
                     // Attempt 3: Tmpfiles (1 Hour Backup)
@@ -1735,13 +1743,14 @@
                             const form = new FormData(); form.append("file", window.recordedAudioBlob, "recording.mp3");
                             const res = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: form });
                             const data = await res.json();
-                            if (data && data.data && data.data.url) window.uploadedAudioUrl = data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+                            if (data && data.data && data.data.url) {
+                                window.uploadedAudioUrl = data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+                                audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 60 minutes):\n${window.uploadedAudioUrl}`;
+                            }
                         } catch(e) { console.log("Tmpfiles failed"); }
                     }
-                }
-
-                if (window.uploadedAudioUrl) {
-                    audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING (Valid for 48 to 72 Hours):\n${window.uploadedAudioUrl}`;
+                } else if (window.uploadedAudioUrl) {
+                    audioUrlText = `\n\n🎙️ RAW AUDIO RECORDING:\n${window.uploadedAudioUrl}`;
                 }
 
                 // ⚡ SEND EMAIL VIA JSON
